@@ -76,6 +76,7 @@ def _fetch_weather(lat, lon):
         params={
             "latitude": lat, "longitude": lon,
             "hourly": "temperature_2m,wind_speed_10m,wind_direction_10m",
+            "models": "ecmwf_ifs025",
             "timezone": "UTC",
             "start_date": now_iso,
             "end_date": now_iso,

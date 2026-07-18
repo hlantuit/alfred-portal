@@ -157,17 +157,17 @@ function fmtWind(kmh, deg) {
 }
 
 function weatherIcon(code) {
-  if (code == null) return '🌡️';
-  if (code === 0)                       return '☀️';
-  if (code <= 2)                        return '🌤️';
-  if (code === 3)                       return '☁️';
-  if (code <= 49)                       return '🌫️';  // fog
-  if (code <= 59)                       return '🌦️';  // drizzle
-  if (code <= 69)                       return '🌧️';  // rain
-  if (code <= 79)                       return '❄️';  // snow
-  if (code <= 84)                       return '🌦️';  // showers
-  if (code <= 94)                       return '🌨️';  // snow showers
-  return '⛈️';                                        // thunderstorm
+  if (code == null) return '';
+  if (code === 0)   return '&#x2600;&#xFE0F;';   // ☀️
+  if (code <= 2)    return '&#x1F324;&#xFE0F;';  // 🌤️
+  if (code === 3)   return '&#x2601;&#xFE0F;';   // ☁️
+  if (code <= 49)   return '&#x1F32B;&#xFE0F;';  // 🌫️
+  if (code <= 59)   return '&#x1F326;&#xFE0F;';  // 🌦️
+  if (code <= 69)   return '&#x1F327;&#xFE0F;';  // 🌧️
+  if (code <= 79)   return '&#x2744;&#xFE0F;';   // ❄️
+  if (code <= 84)   return '&#x1F326;&#xFE0F;';  // 🌦️
+  if (code <= 94)   return '&#x1F328;&#xFE0F;';  // 🌨️
+  return '&#x26C8;&#xFE0F;';                      // ⛈️
 }
 
 function windArrow(deg) {

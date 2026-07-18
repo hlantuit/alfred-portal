@@ -42,8 +42,8 @@ SITES = [
 # Wind grid
 # ---------------------------------------------------------------------------
 
-GRID_BOUNDS = {"south": 67.5, "north": 72.5, "west": -158.0, "east": -130.0}
-GRID_NX, GRID_NY = 15, 15
+GRID_BOUNDS = {"south": 62.0, "north": 78.0, "west": -175.0, "east": -110.0}
+GRID_NX, GRID_NY = 20, 20
 
 # ---------------------------------------------------------------------------
 # HTTP helper
@@ -70,20 +70,31 @@ def _get(url, params=None, timeout=20, retries=2):
 # ---------------------------------------------------------------------------
 
 def _fetch_weather(lat, lon):
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     r = _get(
         "https://api.open-meteo.com/v1/forecast",
         params={
             "latitude": lat, "longitude": lon,
-            "current_weather": True,
-            "hourly": "relativehumidity_2m,pressure_msl",
+            "hourly": "temperature_2m,wind_speed_10m,wind_direction_10m",
             "timezone": "UTC",
+            "start_date": now_iso,
+            "end_date": now_iso,
         },
     )
-    cw = r.json()["current_weather"]
+    data = r.json()
+    times = data["hourly"]["time"]
+    temps = data["hourly"]["temperature_2m"]
+    speeds = data["hourly"]["wind_speed_10m"]
+    dirs = data["hourly"]["wind_direction_10m"]
+
+    # Pick the hour closest to now
+    now_h = datetime.now(timezone.utc).hour
+    idx = min(range(len(times)), key=lambda i: abs(i - now_h))
+
     return {
-        "air_temp_c":   round(cw["temperature"],  1),
-        "wind_kmh":     round(cw["windspeed"],     1),
-        "wind_dir_deg": round(cw["winddirection"], 0),
+        "air_temp_c":   round(temps[idx],  1) if temps[idx] is not None else None,
+        "wind_kmh":     round(speeds[idx], 1) if speeds[idx] is not None else None,
+        "wind_dir_deg": dirs[idx],
         "surge_m":      None,
     }
 

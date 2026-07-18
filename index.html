@@ -284,19 +284,16 @@ let particles = [];
 const GRID_LAT_S = 62.0, GRID_LAT_N = 78.0, GRID_LON_W = -175.0, GRID_LON_E = -110.0;
 
 function spawnParticle() {
-  if (windGrid) {
-    // Confine to grid bounds so particles never hit the clamped edges
-    return {
-      lat: GRID_LAT_S + Math.random() * (GRID_LAT_N - GRID_LAT_S),
-      lon: GRID_LON_W + Math.random() * (GRID_LON_E - GRID_LON_W),
-      age: Math.random() * 80
-    };
-  }
   const b = map.getBounds();
+  // Clamp spawn area to grid bounds (or full viewport if no grid yet)
+  const latS = windGrid ? Math.max(b.getSouth(), GRID_LAT_S) : b.getSouth();
+  const latN = windGrid ? Math.min(b.getNorth(), GRID_LAT_N) : b.getNorth();
+  const lonW = windGrid ? Math.max(b.getWest(),  GRID_LON_W) : b.getWest();
+  const lonE = windGrid ? Math.min(b.getEast(),  GRID_LON_E) : b.getEast();
   return {
-    lat: b.getSouth() + Math.random()*(b.getNorth()-b.getSouth()),
-    lon: b.getWest() + Math.random()*(b.getEast()-b.getWest()),
-    age: Math.random()*80
+    lat: latS + Math.random() * (latN - latS),
+    lon: lonW + Math.random() * (lonE - lonW),
+    age: Math.random() * 80
   };
 }
 function initParticles() {

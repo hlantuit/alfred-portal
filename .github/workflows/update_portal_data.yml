@@ -2,76 +2,42 @@ name: Update portal data
 
 on:
   schedule:
-    # Every 6 hours: 00:00, 06:00, 12:00, 18:00 UTC
     - cron: "0 0,6,12,18 * * *"
   workflow_dispatch:
 
 jobs:
-  update-data:
+  update:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Check out alfred-portal
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
-        run: pip install requests
+      - run: pip install requests
 
+      # Regenerate sites.json + conditions + wind grid from communities/
       - name: Generate portal data
         run: python scripts/generate_portal_data.py --out-dir data
 
-      - name: Ensure portal embed block exists in Notion
+      # Update every community's Notion dashboard (weather block + others)
+      - name: Update Notion dashboards
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-        run: |
-          python - <<'EOF'
-          import os, json, requests
-
-          TOKEN   = os.environ["NOTION_TOKEN"]
-          PAGE_ID = "3a100194631e80308b3cdfc0ffa92719"
-          URL     = "https://hlantuit.github.io/alfred-portal/"
-          HEADERS = {
-              "Authorization": f"Bearer {TOKEN}",
-              "Notion-Version": "2022-06-28",
-              "Content-Type": "application/json",
-          }
-
-          r = requests.get(
-              f"https://api.notion.com/v1/blocks/{PAGE_ID}/children?page_size=100",
-              headers=HEADERS, timeout=15
-          )
-          r.raise_for_status()
-          blocks = r.json().get("results", [])
-
-          for b in blocks:
-              if b.get("type") == "embed" and b.get("embed", {}).get("url") == URL:
-                  print("NOTION: embed block already present — nothing to do")
-                  raise SystemExit(0)
-
-          body = {"children": [{"object": "block", "type": "embed", "embed": {"url": URL}}]}
-          r2 = requests.patch(
-              f"https://api.notion.com/v1/blocks/{PAGE_ID}/children",
-              headers=HEADERS, json=body, timeout=15
-          )
-          r2.raise_for_status()
-          print("NOTION: embed block added successfully")
-          EOF
+        run: python scripts/generate_dashboards.py
 
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/conditions_latest.json data/wind_grid_latest.json
+          git add data/sites.json data/conditions_latest.json data/wind_grid_latest.json
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "chore: update portal conditions and wind grid [skip ci]"
+            git commit -m "chore: update portal data [skip ci]"
             git push
           fi

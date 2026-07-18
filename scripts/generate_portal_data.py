@@ -1,11 +1,10 @@
 """
-generate_portal_data.py — Alfred Portal live-data exporter (self-contained).
+generate_portal_data.py — reads communities/ configs, writes map JSON files.
 
-Writes two JSON files consumed by index.html:
-  data/conditions_latest.json  — per-site scalar conditions
-  data/wind_grid_latest.json   — 15x15 regional u/v grid for particle animation
-
-Depends only on: requests (pip install requests)
+Outputs (consumed by index.html):
+  data/sites.json             — site list auto-built from communities/
+  data/conditions_latest.json — per-site conditions
+  data/wind_grid_latest.json  — regional wind grid for particle animation
 """
 
 import json
@@ -23,20 +22,22 @@ except ImportError:
     sys.exit(1)
 
 # ---------------------------------------------------------------------------
-# Sites
+# Load community configs
 # ---------------------------------------------------------------------------
 
-SITES = [
-    {"id": "herschel",      "lat": 69.590,  "lon": -139.099, "has_surge": True},
-    {"id": "shingle-point", "lat": 68.994,  "lon": -137.390, "has_surge": True},
-    {"id": "tuktoyaktuk",   "lat": 69.454,  "lon": -133.037, "has_surge": True},
-    {"id": "aklavik",       "lat": 68.224,  "lon": -135.013, "has_surge": False},
-    {"id": "inuvik",        "lat": 68.361,  "lon": -133.723, "has_surge": False},
-    {"id": "trail-valley",  "lat": 68.740,  "lon": -133.500, "has_surge": False},
-    {"id": "police-cabin",  "lat": 68.749,  "lon": -136.485, "has_surge": False},
-    {"id": "barrow",        "lat": 71.291,  "lon": -156.789, "has_surge": False},
-    {"id": "prudhoe-bay",   "lat": 70.255,  "lon": -148.337, "has_surge": False},
-]
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+COMMUNITIES_DIR = os.path.join(REPO_ROOT, "communities")
+
+
+def load_communities():
+    communities = []
+    for name in sorted(os.listdir(COMMUNITIES_DIR)):
+        cfg_path = os.path.join(COMMUNITIES_DIR, name, "config.json")
+        if os.path.isfile(cfg_path):
+            with open(cfg_path) as f:
+                communities.append(json.load(f))
+    return communities
+
 
 # ---------------------------------------------------------------------------
 # Wind grid
@@ -66,7 +67,7 @@ def _get(url, params=None, timeout=20, retries=2):
 
 
 # ---------------------------------------------------------------------------
-# Weather — Open-Meteo ERA5 current analysis
+# Weather — Open-Meteo ECMWF IFS 0.25°
 # ---------------------------------------------------------------------------
 
 def _fetch_weather(lat, lon):
@@ -83,102 +84,21 @@ def _fetch_weather(lat, lon):
         },
     )
     data = r.json()
-    times = data["hourly"]["time"]
-    temps = data["hourly"]["temperature_2m"]
+    temps  = data["hourly"]["temperature_2m"]
     speeds = data["hourly"]["wind_speed_10m"]
-    dirs = data["hourly"]["wind_direction_10m"]
-    codes = data["hourly"]["weather_code"]
+    dirs   = data["hourly"]["wind_direction_10m"]
+    codes  = data["hourly"]["weather_code"]
 
-    # Pick the hour closest to now
     now_h = datetime.now(timezone.utc).hour
-    idx = min(range(len(times)), key=lambda i: abs(i - now_h))
+    idx = min(range(len(temps)), key=lambda i: abs(i - now_h))
 
     return {
-        "air_temp_c":    round(temps[idx],  1) if temps[idx] is not None else None,
-        "wind_kmh":      round(speeds[idx], 1) if speeds[idx] is not None else None,
-        "wind_dir_deg":  dirs[idx],
-        "weather_code":  codes[idx],
-        "surge_m":       None,
+        "air_temp_c":   round(temps[idx],  1) if temps[idx]  is not None else None,
+        "wind_kmh":     round(speeds[idx], 1) if speeds[idx] is not None else None,
+        "wind_dir_deg": dirs[idx],
+        "weather_code": codes[idx],
+        "surge_m":      None,
     }
-
-
-# ---------------------------------------------------------------------------
-# Surge — TOPAZ6 via THREDDS (coastal sites only)
-# ---------------------------------------------------------------------------
-
-def _fetch_surge(lat, lon):
-    """
-    Returns the nearest current total-water-level value from the TOPAZ6 model,
-    or None on any failure. Uses only requests + basic math (no xarray/netCDF4).
-    Accesses the OpenDAP ASCII endpoint so no binary libraries are needed.
-    """
-    try:
-        # TOPAZ6 polar-stereographic grid parameters (spherical, pole-centred)
-        # Confirmed against OpenDrift debug output for the same .ncml file.
-        lat_r = math.radians(lat)
-        lon_r = math.radians(lon)
-        lat_ts_r = math.radians(70.0)
-
-        # Forward polar-stereographic projection (WGS84 sphere approximation)
-        R = 6_371_000.0
-        k0 = (1 + math.sin(lat_ts_r)) / 2  # scale at lat_ts
-        rho = R * k0 * math.cos(lat_r) / (1 + math.sin(lat_r)) if lat > -89 else 0
-        x_m = rho * math.sin(lon_r)
-        y_m = -rho * math.cos(lon_r)
-
-        # Grid is stored in units of 100 km
-        UNIT = 100_000.0
-        x_tgt = x_m / UNIT
-        y_tgt = y_m / UNIT
-
-        # Fetch a small slice of the coordinate axes to find the nearest index.
-        # x runs roughly -30..+30, y roughly -35..+35.
-        # Resolution ~3 km → 0.00003 units.  Request full 1-D axes.
-        base = (
-            "https://thredds.met.no/thredds/dodsC/cmems/topaz6/"
-            "dataset-topaz6-arc-15min-3km-be.ncml"
-        )
-        # ASCII data for x axis
-        rx = _get(f"{base}.ascii?x", timeout=30)
-        x_vals = [float(v) for v in rx.text.split("\n")
-                  if v.strip() and not v.startswith("Dataset") and not v.startswith("x")]
-        # ASCII data for y axis
-        ry = _get(f"{base}.ascii?y", timeout=30)
-        y_vals = [float(v) for v in ry.text.split("\n")
-                  if v.strip() and not v.startswith("Dataset") and not v.startswith("y")]
-
-        if not x_vals or not y_vals:
-            return None
-
-        ix = min(range(len(x_vals)), key=lambda i: abs(x_vals[i] - x_tgt))
-        iy = min(range(len(y_vals)), key=lambda i: abs(y_vals[i] - y_tgt))
-
-        # Fetch a 5x5 neighbourhood around nearest point to handle masked cells
-        r = 2
-        ix0, ix1 = max(0, ix - r), min(len(x_vals) - 1, ix + r)
-        iy0, iy1 = max(0, iy - r), min(len(y_vals) - 1, iy + r)
-
-        # Latest time step: index 0 of the time dimension
-        rz = _get(
-            f"{base}.ascii?zos[0][{iy0}:{iy1}][{ix0}:{ix1}]",
-            timeout=30,
-        )
-        # Parse the ASCII response — values are comma/space-separated floats
-        values = []
-        for line in rz.text.splitlines():
-            for tok in line.replace(",", " ").split():
-                try:
-                    v = float(tok)
-                    if not math.isnan(v) and abs(v) < 100:
-                        values.append(v)
-                except ValueError:
-                    pass
-
-        if values:
-            return round(sum(values) / len(values), 2)
-    except Exception as e:
-        print(f"SURGE FETCH FAILED ({lat},{lon}): {e}")
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -188,8 +108,8 @@ def _fetch_surge(lat, lon):
 def _fetch_uv(lat, lon):
     try:
         d = _fetch_weather(lat, lon)
-        spd = d["wind_kmh"] / 3.6
-        dr = math.radians(d["wind_dir_deg"])
+        spd = (d["wind_kmh"] or 0) / 3.6
+        dr = math.radians(d["wind_dir_deg"] or 0)
         return -spd * math.sin(dr), -spd * math.cos(dr)
     except Exception as e:
         print(f"WIND GRID FETCH FAILED ({lat:.2f},{lon:.2f}): {e}")
@@ -218,8 +138,8 @@ def build_wind_grid(now_utc):
             u_grid[j][i] = round(u, 2)
             v_grid[j][i] = round(v, 2)
             done += 1
-            if done % 30 == 0:
-                print(f"WIND GRID: {done}/{total} points done")
+            if done % 50 == 0:
+                print(f"WIND GRID: {done}/{total} done")
 
     print("WIND GRID: complete")
     return {
@@ -241,55 +161,62 @@ def main():
     args = p.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
 
-    now_utc = datetime.now(timezone.utc)
+    communities = load_communities()
+    print(f"Loaded {len(communities)} communities")
+
+    now_utc   = datetime.now(timezone.utc)
     generated = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    # ---- Write sites.json (auto-built from configs) ----
+    sites = [
+        {
+            "id":        c["id"],
+            "name":      c["name"],
+            "lat":       c["lat"],
+            "lon":       c["lon"],
+            "type":      c["type"],
+            "dashboard": f"https://www.notion.so/{c['notion_page_id']}",
+        }
+        for c in communities
+    ]
+    sites_path = os.path.join(args.out_dir, "sites.json")
+    with open(sites_path, "w") as f:
+        json.dump(sites, f, indent=2)
+    print(f"WROTE: {sites_path}")
+
+    # ---- Fetch conditions in parallel ----
     conditions = {}
 
-    def fetch_site(site):
-        sid = site["id"]
+    def fetch_site(c):
+        sid = c["id"]
         try:
-            cond = _fetch_weather(site["lat"], site["lon"])
-            print(f"WEATHER [{sid}]: {cond['air_temp_c']}°C {cond['wind_kmh']}km/h {cond['wind_dir_deg']}°")
+            cond = _fetch_weather(c["lat"], c["lon"])
+            print(f"WEATHER [{sid}]: {cond['air_temp_c']}°C "
+                  f"{cond['wind_kmh']}km/h {cond['wind_dir_deg']}° code={cond['weather_code']}")
+            return sid, cond
         except Exception as e:
             print(f"WEATHER [{sid}] FAILED: {e}")
-            cond = {"air_temp_c": None, "wind_kmh": None, "wind_dir_deg": None, "surge_m": None}
-        return sid, cond
+            return sid, {"air_temp_c": None, "wind_kmh": None,
+                         "wind_dir_deg": None, "weather_code": None, "surge_m": None}
 
-    def fetch_surge_for(site):
-        sid = site["id"]
-        surge = _fetch_surge(site["lat"], site["lon"])
-        print(f"SURGE [{sid}]: {surge} m")
-        return sid, surge
-
-    coastal = [s for s in SITES if s["has_surge"]]
-
-    with ThreadPoolExecutor(max_workers=len(SITES) + len(coastal)) as ex:
-        w_futs = {ex.submit(fetch_site, s): s for s in SITES}
-        s_futs = {ex.submit(fetch_surge_for, s): s for s in coastal}
-        for fut in as_completed(list(w_futs) + list(s_futs)):
-            if fut in w_futs:
-                sid, cond = fut.result()
-                conditions[sid] = cond
-            else:
-                sid, surge = fut.result()
-                conditions.setdefault(sid, {})["surge_m"] = surge
-
-    for site in SITES:
-        conditions.setdefault(site["id"], {}).setdefault("surge_m", None)
+    with ThreadPoolExecutor(max_workers=len(communities)) as ex:
+        for sid, cond in ex.map(fetch_site, communities):
+            conditions[sid] = cond
 
     cond_path = os.path.join(args.out_dir, "conditions_latest.json")
     with open(cond_path, "w") as f:
-        json.dump({"generated_utc": generated, "sites": conditions}, f, separators=(",", ":"))
+        json.dump({"generated_utc": generated, "sites": conditions},
+                  f, separators=(",", ":"))
     print(f"WROTE: {cond_path}")
 
+    # ---- Wind grid ----
     grid = build_wind_grid(now_utc)
     grid_path = os.path.join(args.out_dir, "wind_grid_latest.json")
     with open(grid_path, "w") as f:
         json.dump(grid, f, separators=(",", ":"))
     print(f"WROTE: {grid_path}")
 
-    print(f"DONE — generated at {generated}")
+    print(f"DONE — {generated}")
 
 
 if __name__ == "__main__":

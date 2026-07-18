@@ -49,6 +49,18 @@
     background:#FFF7E8;border:1px solid #F1D9A6;border-radius:8px;
     padding:5px 10px;font-size:11px;color:#8A6A1D;font-weight:600;
   }
+  .fullscreen-btn{
+    position:absolute;bottom:54px;right:14px;z-index:1000;
+    background:var(--alfred-blue);color:#fff;border:none;border-radius:8px;
+    padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;
+    box-shadow:0 2px 8px rgba(0,140,190,0.35);
+    display:flex;align-items:center;gap:6px;text-decoration:none;
+    font-family:inherit;
+  }
+  .fullscreen-btn:hover{background:var(--alfred-blue-deep);}
+  /* Hide the button when already running full-page (not inside an iframe) */
+  .in-iframe .fullscreen-btn{display:flex;}
+  body:not(.in-iframe) .fullscreen-btn{display:none;}
 
   .legend{
     position:absolute;bottom:14px;left:14px;right:14px;z-index:1000;
@@ -95,6 +107,14 @@
 </div>
 
 <div class="badge" id="badge">Loading…</div>
+
+<a class="fullscreen-btn" href="https://hlantuit.github.io/alfred-portal/" target="_top" title="Open full screen">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+    <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+  </svg>
+  Open full screen
+</a>
 
 <div id="map"></div>
 
@@ -264,6 +284,9 @@ function makeSiteIcon(name) {
     iconAnchor: [60, 16]
   });
 }
+
+// Show "Open full screen" button only when running inside an iframe
+if (window.self !== window.top) document.body.classList.add('in-iframe');
 
 // Signal desired iframe height to parent (picked up by Notion and other embed hosts)
 function reportHeight() {

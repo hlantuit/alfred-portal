@@ -75,7 +75,7 @@ def _fetch_weather(lat, lon):
         "https://api.open-meteo.com/v1/forecast",
         params={
             "latitude": lat, "longitude": lon,
-            "hourly": "temperature_2m,wind_speed_10m,wind_direction_10m",
+            "hourly": "temperature_2m,wind_speed_10m,wind_direction_10m,weather_code",
             "models": "ecmwf_ifs025",
             "timezone": "UTC",
             "start_date": now_iso,
@@ -87,16 +87,18 @@ def _fetch_weather(lat, lon):
     temps = data["hourly"]["temperature_2m"]
     speeds = data["hourly"]["wind_speed_10m"]
     dirs = data["hourly"]["wind_direction_10m"]
+    codes = data["hourly"]["weather_code"]
 
     # Pick the hour closest to now
     now_h = datetime.now(timezone.utc).hour
     idx = min(range(len(times)), key=lambda i: abs(i - now_h))
 
     return {
-        "air_temp_c":   round(temps[idx],  1) if temps[idx] is not None else None,
-        "wind_kmh":     round(speeds[idx], 1) if speeds[idx] is not None else None,
-        "wind_dir_deg": dirs[idx],
-        "surge_m":      None,
+        "air_temp_c":    round(temps[idx],  1) if temps[idx] is not None else None,
+        "wind_kmh":      round(speeds[idx], 1) if speeds[idx] is not None else None,
+        "wind_dir_deg":  dirs[idx],
+        "weather_code":  codes[idx],
+        "surge_m":       None,
     }
 
 

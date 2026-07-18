@@ -13,14 +13,6 @@ jobs:
     steps:
       - name: Check out alfred-portal
         uses: actions/checkout@v4
-        with:
-          path: alfred-portal
-
-      - name: Check out dashboard-lib
-        uses: actions/checkout@v4
-        with:
-          repository: hlantuit/dashboard-lib
-          path: dashboard-lib
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -28,13 +20,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: |
-          pip install requests
+        run: pip install requests
 
       - name: Generate portal data
-        run: |
-          python dashboard-lib/generate_portal_data.py \
-            --out-dir alfred-portal/data
+        run: python scripts/generate_portal_data.py --out-dir data
 
       - name: Ensure portal embed block exists in Notion
         env:
@@ -52,7 +41,6 @@ jobs:
               "Content-Type": "application/json",
           }
 
-          # Fetch existing blocks on the page
           r = requests.get(
               f"https://api.notion.com/v1/blocks/{PAGE_ID}/children?page_size=100",
               headers=HEADERS, timeout=15
@@ -60,13 +48,11 @@ jobs:
           r.raise_for_status()
           blocks = r.json().get("results", [])
 
-          # Check if our embed already exists
           for b in blocks:
               if b.get("type") == "embed" and b.get("embed", {}).get("url") == URL:
                   print("NOTION: embed block already present — nothing to do")
                   raise SystemExit(0)
 
-          # Add the embed block
           body = {"children": [{"object": "block", "type": "embed", "embed": {"url": URL}}]}
           r2 = requests.patch(
               f"https://api.notion.com/v1/blocks/{PAGE_ID}/children",
@@ -77,7 +63,6 @@ jobs:
           EOF
 
       - name: Commit and push
-        working-directory: alfred-portal
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

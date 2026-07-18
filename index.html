@@ -100,7 +100,7 @@
 
 <div class="legend">
   <div><b>★ site</b> — tap for conditions &amp; dashboard link</div>
-  <div style="margin-top:6px;">Streaks show wind direction &amp; relative speed, sampled from a synthetic gridded field (stand-in for ECMWF IFS u/v output).</div>
+  <div style="margin-top:6px;">Streaks show wind direction &amp; speed from Open-Meteo ERA5, updated every 6 hours.</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
@@ -264,12 +264,17 @@ const siteIcon = L.divIcon({
 
     // Update badge
     const badge = document.getElementById('badge');
-    badge.textContent = ts
-      ? 'Last updated: ' + ts.replace('T', ' ').replace('Z', ' UTC')
-      : 'live data (timestamp unavailable)';
-    badge.style.background = '#EAF5EC';
-    badge.style.border = '1px solid #A8D5AF';
-    badge.style.color = '#2A6E37';
+    if (ts) {
+      badge.textContent = 'Updated ' + ts.replace('T', ' ').replace('Z', ' UTC');
+      badge.style.background = '#EAF5EC';
+      badge.style.border = '1px solid #A8D5AF';
+      badge.style.color = '#2A6E37';
+    } else {
+      badge.textContent = 'Conditions not yet generated — run workflow';
+      badge.style.background = '#FFF7E8';
+      badge.style.border = '1px solid #F1D9A6';
+      badge.style.color = '#8A6A1D';
+    }
 
     // Create site markers
     sitesData.forEach(s => {

@@ -36,6 +36,46 @@ jobs:
           python dashboard-lib/generate_portal_data.py \
             --out-dir alfred-portal/data
 
+      - name: Ensure portal embed block exists in Notion
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        run: |
+          python - <<'EOF'
+          import os, json, requests
+
+          TOKEN   = os.environ["NOTION_TOKEN"]
+          PAGE_ID = "3a100194631e80308b3cdfc0ffa92719"
+          URL     = "https://hlantuit.github.io/alfred-portal/"
+          HEADERS = {
+              "Authorization": f"Bearer {TOKEN}",
+              "Notion-Version": "2022-06-28",
+              "Content-Type": "application/json",
+          }
+
+          # Fetch existing blocks on the page
+          r = requests.get(
+              f"https://api.notion.com/v1/blocks/{PAGE_ID}/children?page_size=100",
+              headers=HEADERS, timeout=15
+          )
+          r.raise_for_status()
+          blocks = r.json().get("results", [])
+
+          # Check if our embed already exists
+          for b in blocks:
+              if b.get("type") == "embed" and b.get("embed", {}).get("url") == URL:
+                  print("NOTION: embed block already present — nothing to do")
+                  raise SystemExit(0)
+
+          # Add the embed block
+          body = {"children": [{"object": "block", "type": "embed", "embed": {"url": URL}}]}
+          r2 = requests.patch(
+              f"https://api.notion.com/v1/blocks/{PAGE_ID}/children",
+              headers=HEADERS, json=body, timeout=15
+          )
+          r2.raise_for_status()
+          print("NOTION: embed block added successfully")
+          EOF
+
       - name: Commit and push
         working-directory: alfred-portal
         run: |

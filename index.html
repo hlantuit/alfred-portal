@@ -252,7 +252,7 @@ setTimeout(reportHeight, 500);
           <div class="popup-row"><span>Wind</span><b>${fmtWind(c.wind_kmh, c.wind_dir_deg)}</b></div>
           <div class="popup-row"><span>Tide / surge</span><b>${fmtSurge(c.surge_m)}</b></div>
         </div>
-        <a class="popup-link" href="${s.dashboard}" target="_blank">Open full dashboard</a>
+        ${s.dashboard ? `<a class="popup-link" href="${s.dashboard}" target="_blank">Open full dashboard</a>` : '<span style="font-size:11px;color:var(--body);">Dashboard coming soon</span>'}
       `);
     });
 

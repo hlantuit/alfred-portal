@@ -280,7 +280,18 @@ resizeCanvas();
 const N_PARTICLES = 650;
 let particles = [];
 
+// Spawn particles only within the wind grid bounds (or whole viewport if no grid yet)
+const GRID_LAT_S = 67.5, GRID_LAT_N = 72.5, GRID_LON_W = -158.0, GRID_LON_E = -130.0;
+
 function spawnParticle() {
+  if (windGrid) {
+    // Confine to grid bounds so particles never hit the clamped edges
+    return {
+      lat: GRID_LAT_S + Math.random() * (GRID_LAT_N - GRID_LAT_S),
+      lon: GRID_LON_W + Math.random() * (GRID_LON_E - GRID_LON_W),
+      age: Math.random() * 80
+    };
+  }
   const b = map.getBounds();
   return {
     lat: b.getSouth() + Math.random()*(b.getNorth()-b.getSouth()),
@@ -336,7 +347,8 @@ function step() {
     ctx.lineTo(p1.x, p1.y);
     ctx.stroke();
 
-    if (p.age > 90 || p0.x < -20 || p0.x > canvas.width+20 || p0.y < -20 || p0.y > canvas.height+20) {
+    const outOfGrid = windGrid && (p.lat < GRID_LAT_S || p.lat > GRID_LAT_N || p.lon < GRID_LON_W || p.lon > GRID_LON_E);
+    if (p.age > 90 || outOfGrid || p0.x < -20 || p0.x > canvas.width+20 || p0.y < -20 || p0.y > canvas.height+20) {
       Object.assign(p, spawnParticle());
     }
   });

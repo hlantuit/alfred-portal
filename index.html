@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <title>Alfred — Environmental Dashboards</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/png" href="assets/alfred-logo.png">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
 <style>
   :root{
@@ -124,103 +125,23 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4leaflet/1.0.2/proj4leaflet.js"></script>
 <script>
-// ---------- Circumpolar projection (EPSG:3413 — NSIDC Polar Stereographic North) ----------
-// Regular Leaflet maps use Web Mercator, which can't show the Arctic Ocean as a
-// coherent circular whole. This CRS matches the projection used by NSIDC/most
-// circumpolar Arctic science maps, centered on the pole rather than the equator.
-const crs3413 = new L.Proj.CRS(
-  'EPSG:3413',
-  '+proj=stere +lat_0=90 +lat_ts=70 +lon_0=-45 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs',
-  {
-    origin: [-2.8567784109255e7, 3.2567784109255e7],
-    resolutions: [
-      238810.813354, 119405.406677, 59702.7033384999, 29851.3516692501,
-      14925.675834625, 7462.83791731252, 3731.41895865639, 1865.70947932820,
-      932.854739664100, 466.427369832048, 233.213684916024, 116.606842458012,
-      58.3034212290056
-    ]
-  }
-);
-
-// ---------- Map setup ----------
-// Centered and zoomed on the actual site cluster (Beaufort Sea / Herschel
-// Island), not the pole — the polar CRS is still active underneath (so the
-// projection is technically circumpolar), it's just framed on the work area
-// by default. Zooming out reveals the wider circumpolar shape.
+// ---------- Map setup (Web Mercator — reliable tile coverage at these latitudes) ----------
 const map = L.map('map', {
-  crs: crs3413,
-  center: [69.4, -137.6],
-  zoom: 8,
-  minZoom: 1,
-  maxZoom: 11,
+  center: [69.6, -143.0],
+  zoom: 6,
+  minZoom: 4,
+  maxZoom: 13,
   zoomControl: true,
   attributionControl: true
 });
 
-// Esri's Arctic Ocean Base — a raster basemap already published in EPSG:3413,
-// which is required: reprojecting standard Web Mercator tiles on the fly isn't
-// possible, the tile source itself has to be pre-rendered in the polar CRS.
-const baseTiles = L.tileLayer('https://server.arcgisonline.com/arcgis/rest/services/Polar/Arctic_Ocean_Base/MapServer/tile/{z}/{y}/{x}.png', {
-  maxZoom: 11,
-  maxNativeZoom: 9,
-  minZoom: 1,
-  noWrap: true,
-  attribution: '&copy; Esri, NSIDC'
+// Esri World Topo Map — reliable worldwide coverage, good Arctic detail
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom: 13,
+  attribution: '&copy; Esri, HERE, Garmin, FAO, NOAA, USGS'
 }).addTo(map);
 
-// Reference label overlay — city names baked into tiles are faint at this scale
-L.tileLayer('https://server.arcgisonline.com/arcgis/rest/services/Polar/Arctic_Ocean_Reference/MapServer/tile/{z}/{y}/{x}.png', {
-  maxZoom: 11,
-  maxNativeZoom: 9,
-  minZoom: 1,
-  noWrap: true,
-  opacity: 0.6,
-  attribution: ''
-}).addTo(map);
-
-// ---------- Place labels (cities & territories) ----------
-// Kept separate from the basemap rather than relying on tile-baked labels,
-// so we control exactly which names appear regardless of tile provider.
-const cityLabels = [
-  { name: "Inuvik", lat: 68.36, lon: -133.72 },
-  { name: "Aklavik", lat: 68.22, lon: -135.01 },
-  { name: "Tuktoyaktuk", lat: 69.45, lon: -133.03 },
-  { name: "Old Crow", lat: 67.57, lon: -139.83 }
-];
-const territoryLabels = [
-  { name: "YUKON", lat: 65.0, lon: -135.5 },
-  { name: "NORTHWEST TERRITORIES", lat: 65.8, lon: -124.5 }
-];
-
-cityLabels.forEach(c => {
-  L.marker([c.lat, c.lon], {
-    icon: L.divIcon({
-      className: '',
-      html: `<div style="display:flex;align-items:center;gap:4px;transform:translate(-2px,-2px);">
-               <div style="width:6px;height:6px;border-radius:50%;background:#5B6672;border:1px solid #fff;"></div>
-               <span style="font-size:11px;font-weight:600;color:#2A333B;
-                 text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 5px #fff;white-space:nowrap;">${c.name}</span>
-             </div>`,
-      iconSize: [0,0]
-    }),
-    interactive: false
-  }).addTo(map);
-});
-
-territoryLabels.forEach(t => {
-  L.marker([t.lat, t.lon], {
-    icon: L.divIcon({
-      className: '',
-      html: `<span style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:#7C8894;
-               text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 5px #fff;white-space:nowrap;">${t.name}</span>`,
-      iconSize: [0,0]
-    }),
-    interactive: false
-  }).addTo(map);
-});
 
 // ---------- Helpers ----------
 function degToCompass(deg) {

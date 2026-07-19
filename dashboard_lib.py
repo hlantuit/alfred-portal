@@ -2606,7 +2606,7 @@ def build_tdd_histogram(lat, lon, now_utc, temp_cache, num_years=25):
                     "timezone": "UTC",
                     "start_date": current_start.strftime("%Y-%m-%d"),
                     "end_date": current_end.strftime("%Y-%m-%d"),
-                    "past_days": 92,
+                    # past_days conflicts with start_date/end_date — omit it.
                 },
                 timeout=20, retries=1,
             )

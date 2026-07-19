@@ -2,34 +2,33 @@
   "id": "police-cabin",
   "name": "Police Cabin Lake",
   "site_display_name": "Police Cabin Lake",
-  "lat": 68.749,
-  "lon": -136.485,
+  "lat": 68.749154,
+  "lon": -136.48508,
   "tz_name": "America/Inuvik",
   "type": "lake",
   "public_notion_url": "https://snapdragon-hardboard-204.notion.site/police-cabin-lake-environmental-dashboard",
   "notion_page_id": "39f00194631e80caafded7165c158d00",
   "logo_url": "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg",
   "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
-  "hydrometric_stations": [],
+  "hydrometric_stations": [
+    {
+      "station_id": "10MC023",
+      "provterr": "NT",
+      "river_name": "Mackenzie River, Napoiak Channel above Shallow Bay",
+      "heading": "💧 Napoiak Channel Water Level — Mackenzie River above Shallow Bay"
+    },
+    {
+      "station_id": "10MC003",
+      "provterr": "NT",
+      "river_name": "Peel River Channel above Aklavik",
+      "heading": "💧 Peel River — Water Level above Aklavik"
+    }
+  ],
   "map_points": [
-    [
-      68.749,
-      -136.485,
-      "Police Cabin Lake",
-      -28
-    ],
-    [
-      68.361,
-      -133.723,
-      "Inuvik",
-      -10
-    ],
-    [
-      68.933,
-      -137.2,
-      "Shingle Point",
-      -10
-    ]
+    [68.749154, -136.48508, "Police Cabin Lake", -28],
+    [68.2237, -135.0133, "Aklavik", -10],
+    [68.360741, -133.723022, "Inuvik", -10, -90],
+    [67.437781, -134.895544, "Fort McPherson", -10]
   ],
   "map_reference_lines": [],
   "water_bodies_geojson_path": "water_bodies.geojson",
@@ -37,10 +36,17 @@
   "utm_epsg": "32608",
   "utm_center_x": 439706,
   "utm_center_y": 7599215,
+  "modis_center_x": -2326957,
+  "modis_center_y": 60327,
+  "modis_rotation_deg": 90.0,
+  "modis_bbox_3413": "-2506957,-119673,-2146957,240327",
   "blocks": [
     "weather",
     "alerts",
     "gem_forecast",
+    "snow_depth",
+    "hydrometric",
+    "modis",
     "lake_river_ice",
     "wildfire",
     "temperature",

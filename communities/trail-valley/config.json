@@ -12,18 +12,10 @@
   "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
   "hydrometric_stations": [],
   "map_points": [
-    [
-      68.74,
-      -133.5,
-      "Trail Valley Creek",
-      -28
-    ],
-    [
-      68.361,
-      -133.723,
-      "Inuvik",
-      -10
-    ]
+    [68.74, -133.5, "Trail Valley Creek", -28],
+    [68.360741, -133.723022, "Inuvik", -10, -90],
+    [68.2237, -135.0133, "Aklavik", -10],
+    [67.437781, -134.895544, "Fort McPherson", -10]
   ],
   "map_reference_lines": [],
   "water_bodies_geojson_path": "water_bodies.geojson",
@@ -31,10 +23,16 @@
   "utm_epsg": "32608",
   "utm_center_x": 560934,
   "utm_center_y": 7598220,
+  "modis_center_x": -2327966,
+  "modis_center_y": -60960,
+  "modis_rotation_deg": 90.0,
+  "modis_bbox_3413": "-2507966,-240960,-2147966,119040",
   "blocks": [
     "weather",
     "alerts",
     "gem_forecast",
+    "snow_depth",
+    "modis",
     "lake_river_ice",
     "wildfire",
     "temperature",

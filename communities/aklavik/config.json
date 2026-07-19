@@ -2,8 +2,8 @@
   "id": "aklavik",
   "name": "Aklavik",
   "site_display_name": "Aklavik",
-  "lat": 68.224,
-  "lon": -135.013,
+  "lat": 68.2237,
+  "lon": -135.0133,
   "tz_name": "America/Inuvik",
   "type": "riverine",
   "public_notion_url": "https://snapdragon-hardboard-204.notion.site/aklavik-environmental-dashboard",
@@ -13,43 +13,35 @@
   "hydrometric_stations": [
     {
       "station_id": "10MC003",
-      "river_name": "Peel Channel",
+      "river_name": "Peel River at Aklavik",
       "provterr": "NT",
-      "heading": "🌊 Peel Channel Water Level — Aklavik (ECCC)"
+      "heading": "💧 Peel River — Water Level at Aklavik"
     }
   ],
   "map_points": [
-    [
-      68.224,
-      -135.013,
-      "Aklavik",
-      -28
-    ],
-    [
-      68.361,
-      -133.723,
-      "Inuvik",
-      -10
-    ],
-    [
-      68.933,
-      -137.2,
-      "Shingle Point",
-      -10
-    ]
+    [68.2237, -135.0133, "Aklavik", -28],
+    [68.360741, -133.723022, "Inuvik", -10, 10],
+    [68.74, -133.5, "Trail Valley Creek", -10],
+    [67.437781, -134.895544, "Fort McPherson", -10]
   ],
   "map_reference_lines": [],
+  "coastline_geojson_path": "coastline_data.geojson",
   "water_bodies_geojson_path": "water_bodies.geojson",
   "utm_zone": 8,
   "utm_epsg": "32608",
   "utm_center_x": 499459,
   "utm_center_y": 7541118,
+  "modis_center_x": -2386633,
+  "modis_center_y": 554,
+  "modis_rotation_deg": 90.0,
+  "modis_bbox_3413": "-2566633,-179446,-2206633,180554",
   "blocks": [
     "weather",
     "alerts",
     "gem_forecast",
     "snow_depth",
     "hydrometric",
+    "modis",
     "lake_river_ice",
     "wildfire",
     "temperature",

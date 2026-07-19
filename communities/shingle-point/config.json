@@ -2,8 +2,8 @@
   "id": "shingle-point",
   "name": "Shingle Point / Taqpaq",
   "site_display_name": "Shingle Point",
-  "lat": 68.933,
-  "lon": -137.2,
+  "lat": 68.99360388985639,
+  "lon": -137.38969155057296,
   "tz_name": "America/Inuvik",
   "type": "coastal",
   "public_notion_url": "https://snapdragon-hardboard-204.notion.site/shingle-point",
@@ -20,46 +20,27 @@
       "station_id": "10MC023",
       "provterr": "NT",
       "river_name": "Mackenzie River, Napoiak Channel above Shallow Bay",
-      "heading": "Napoiak Channel Water Level"
+      "heading": "💧 Napoiak Channel Water Level — Mackenzie River above Shallow Bay"
     }
   ],
   "map_points": [
-    [
-      68.933,
-      -137.2,
-      "Shingle Point",
-      -28
-    ],
-    [
-      69.578,
-      -138.917,
-      "Qikiqtaruk Herschel Island",
-      -10
-    ],
-    [
-      68.224,
-      -135.013,
-      "Aklavik",
-      -10
-    ],
-    [
-      68.361,
-      -133.723,
-      "Inuvik",
-      -10,
-      -90
-    ]
+    [68.99360388985639, -137.38969155057296, "Shingle Point", -28],
+    [69.568861, -138.911754, "Qikiqtaruk Herschel Island", -10],
+    [68.226653, -135.003294, "Aklavik", -10],
+    [68.360741, -133.723022, "Inuvik", -10, -90]
   ],
   "map_reference_lines": [
-    [
-      60.0,
-      -141.0,
-      69.65,
-      -141.0,
-      "Yukon/Alaska border"
-    ]
+    [60.0, -141.0, 69.65, -141.0, "Yukon/Alaska border"]
   ],
   "coastline_geojson_path": "coastline_data.geojson",
+  "utm_zone": 8,
+  "utm_epsg": "32608",
+  "utm_center_x": 411761,
+  "utm_center_y": 7648472,
+  "modis_center_x": -2298373,
+  "modis_center_y": 95916,
+  "modis_rotation_deg": 92.0,
+  "modis_bbox_3413": "-2478373,-84084,-2118373,275916",
   "blocks": [
     "weather",
     "alerts",
@@ -75,13 +56,5 @@
     "wildfire",
     "temperature",
     "wind_chart"
-  ],
-  "modis_center_x": -2305455,
-  "modis_center_y": 88567,
-  "modis_rotation_deg": 87.8,
-  "modis_bbox_3413": "-2485455,-91433,-2125455,268567",
-  "utm_zone": 8,
-  "utm_epsg": "32608",
-  "utm_center_x": 411761,
-  "utm_center_y": 7648472
+  ]
 }

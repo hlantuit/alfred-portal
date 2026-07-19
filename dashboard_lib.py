@@ -5748,6 +5748,20 @@ def fetch_wave_forecast(lat, lon, now_utc, site_label="site"):
         periods    = data["hourly"]["wave_period"]
         directions = data["hourly"]["wave_direction"]
 
+        def _clean(v):
+            """Replace Open-Meteo fill values (9999, None) with None."""
+            if v is None:
+                return None
+            try:
+                f = float(v)
+                return None if f > 500 else f
+            except (TypeError, ValueError):
+                return None
+
+        heights    = [_clean(v) for v in heights]
+        periods    = [_clean(v) for v in periods]
+        directions = [_clean(v) for v in directions]
+
         now_str = now_utc.strftime("%Y-%m-%dT%H:00")
         idx = next((i for i, t in enumerate(times_raw) if t >= now_str), 0)
 

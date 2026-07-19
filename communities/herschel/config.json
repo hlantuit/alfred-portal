@@ -2,8 +2,8 @@
   "id": "herschel",
   "name": "Qikiqtaruk / Herschel Island",
   "site_display_name": "Qikiqtaruk Herschel Island",
-  "lat": 69.578,
-  "lon": -138.917,
+  "lat": 69.590,
+  "lon": -139.099,
   "tz_name": "America/Inuvik",
   "type": "coastal",
   "public_notion_url": "https://snapdragon-hardboard-204.notion.site/qikiqtaruk-environmental-dashboard",
@@ -16,48 +16,24 @@
   "marine_zone_name": "Yukon Coast",
   "water_level_yearly_mean": -0.2668,
   "hydrometric_stations": [],
-  "modis_center_x": -2227982,
-  "modis_center_y": 159665,
-  "modis_rotation_deg": 85.9,
-  "utm_zone": 7,
-  "utm_epsg": "32607",
-  "coastline_geojson_path": "coastline_data.geojson",
   "map_points": [
-    [
-      69.578,
-      -138.917,
-      "Qikiqtaruk Herschel Island",
-      -28
-    ],
-    [
-      68.933333,
-      -137.2,
-      "Shingle Point",
-      -10
-    ],
-    [
-      68.226653,
-      -135.003294,
-      "Aklavik",
-      -10
-    ],
-    [
-      68.360741,
-      -133.723022,
-      "Inuvik",
-      -10,
-      -90
-    ]
+    [69.568861, -138.911754, "Qikiqtaruk Herschel Island", -28],
+    [68.933333, -137.2, "Shingle Point", -10],
+    [68.226653, -135.003294, "Aklavik", -10],
+    [68.360741, -133.723022, "Inuvik", -10, -90]
   ],
   "map_reference_lines": [
-    [
-      60.0,
-      -141.0,
-      69.65,
-      -141.0,
-      "Yukon/Alaska border"
-    ]
+    [60.0, -141.0, 69.65, -141.0, "Yukon/Alaska border"]
   ],
+  "coastline_geojson_path": "coastline_data.geojson",
+  "utm_zone": 7,
+  "utm_epsg": "32607",
+  "utm_center_x": 573977,
+  "utm_center_y": 7721302,
+  "modis_center_x": -2230848,
+  "modis_center_y": 152544,
+  "modis_rotation_deg": 86.09,
+  "modis_bbox_3413": "-2410848,-27456,-2050848,332544",
   "blocks": [
     "weather",
     "alerts",
@@ -72,8 +48,5 @@
     "wildfire",
     "temperature",
     "wind_chart"
-  ],
-  "modis_bbox_3413": "-2407982,-20335,-2047982,339665",
-  "utm_center_x": 573977,
-  "utm_center_y": 7721302
+  ]
 }

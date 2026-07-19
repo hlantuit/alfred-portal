@@ -2,8 +2,8 @@
   "id": "inuvik",
   "name": "Inuvik",
   "site_display_name": "Inuvik",
-  "lat": 68.361,
-  "lon": -133.723,
+  "lat": 68.360741,
+  "lon": -133.723022,
   "tz_name": "America/Inuvik",
   "type": "riverine",
   "public_notion_url": "https://snapdragon-hardboard-204.notion.site/inuvik-environmental-dashboard",
@@ -12,31 +12,17 @@
   "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
   "hydrometric_stations": [
     {
-      "station_id": "10LC014",
+      "station_id": "10LC002",
       "provterr": "NT",
-      "river_name": "Mackenzie River at Arctic Red River",
-      "heading": "Mackenzie River Water Level at Arctic Red River"
+      "river_name": "Mackenzie River at Inuvik",
+      "heading": "💧 Mackenzie River — Water Level at Inuvik"
     }
   ],
   "map_points": [
-    [
-      68.361,
-      -133.723,
-      "Inuvik",
-      -28
-    ],
-    [
-      68.224,
-      -135.013,
-      "Aklavik",
-      -10
-    ],
-    [
-      69.454,
-      -133.037,
-      "Tuktoyaktuk",
-      -10
-    ]
+    [68.360741, -133.723022, "Inuvik", -28],
+    [68.2237, -135.0133, "Aklavik", -10],
+    [68.749154, -136.48508, "Police Cabin Lake", -10],
+    [67.437781, -134.895544, "Fort McPherson", -10]
   ],
   "map_reference_lines": [],
   "water_bodies_geojson_path": "water_bodies.geojson",
@@ -44,11 +30,17 @@
   "utm_epsg": "32608",
   "utm_center_x": 552488,
   "utm_center_y": 7556268,
+  "modis_center_x": -2370675,
+  "modis_center_y": -52845,
+  "modis_rotation_deg": 90.0,
+  "modis_bbox_3413": "-2550675,-232845,-2190675,127155",
   "blocks": [
     "weather",
     "alerts",
     "gem_forecast",
+    "snow_depth",
     "hydrometric",
+    "modis",
     "lake_river_ice",
     "wildfire",
     "temperature",

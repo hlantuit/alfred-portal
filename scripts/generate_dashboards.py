@@ -150,6 +150,8 @@ def update_community(community, now_utc):
     enabled = set(community.get("blocks", []))
 
     lib.PAGE_ID = page_id
+    lib.COMMUNITY_ID = sid
+    lib.CHARTS_SAVE_DIR = os.path.join(COMMUNITIES_DIR, sid, "charts")
 
     lat      = community["lat"]
     lon      = community["lon"]

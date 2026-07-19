@@ -38,6 +38,11 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/sites.json data/conditions_latest.json data/wind_grid_latest.json
           git add cache/ 2>/dev/null || true
+          # Chart images (served via GitHub raw URL in Notion external image blocks)
+          git add communities/*/charts/ 2>/dev/null || true
+          # Auto-fetched GeoJSON overlays (coastline, water bodies)
+          git add communities/*/coastline_data.geojson 2>/dev/null || true
+          git add communities/*/water_bodies.geojson 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else

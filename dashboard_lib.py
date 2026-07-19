@@ -39,6 +39,15 @@ PAGE_ID = os.environ.get("NOTION_PAGE_ID", "")  # overridden per-community by ge
 
 notion = Client(auth=NOTION_TOKEN)
 
+# ---- Image delivery via GitHub raw URLs ----
+# When CHARTS_SAVE_DIR is set (by generate_dashboards.py), upload_image_to_notion
+# writes the PNG to disk and returns a GitHub raw URL sentinel instead of using
+# Notion's file upload API (which has been unreliable).
+COMMUNITY_ID = None        # set per-community: lib.COMMUNITY_ID = community["id"]
+CHARTS_SAVE_DIR = None     # set per-community: lib.CHARTS_SAVE_DIR = <path>
+_GITHUB_REPO   = os.environ.get("GITHUB_REPOSITORY", "hlantuit/alfred-portal")
+_GITHUB_BRANCH = os.environ.get("GITHUB_REF_NAME", "main")
+
 
 # =========================================================
 # HISTORICAL DATA CACHE
@@ -277,11 +286,26 @@ def upload_image_to_notion(image_bytes, filename="image.png"):
     external-URL fetcher is unreliable for query-string-based image
     services (no file extension, content negotiated at request time).
 
-    Uses Notion's single-part upload flow:
+    If CHARTS_SAVE_DIR is set, writes the PNG to disk and returns a GitHub
+    raw URL sentinel (``__ext__https://...``) — the Notion upload API is
+    bypassed entirely.  image_block_from_upload() converts the sentinel to
+    an external image block automatically.
+
+    Otherwise falls back to Notion's single-part upload flow:
       1. POST /v1/file_uploads  →  {id, upload_url}
       2. PUT upload_url with raw bytes + Content-Type: image/png
-    The upload_url may be a presigned S3 URL (no Authorization header).
     """
+    if CHARTS_SAVE_DIR and COMMUNITY_ID:
+        os.makedirs(CHARTS_SAVE_DIR, exist_ok=True)
+        with open(os.path.join(CHARTS_SAVE_DIR, filename), "wb") as _f:
+            _f.write(image_bytes)
+        github_url = (
+            f"https://raw.githubusercontent.com/{_GITHUB_REPO}/{_GITHUB_BRANCH}"
+            f"/communities/{COMMUNITY_ID}/charts/{filename}"
+        )
+        return f"__ext__{github_url}"
+
+    # Notion file upload API fallback (used when running locally without git context).
     create_resp = requests.post(
         "https://api.notion.com/v1/file_uploads",
         headers={
@@ -298,7 +322,6 @@ def upload_image_to_notion(image_bytes, filename="image.png"):
     upload_url = create_json.get("upload_url")
 
     if upload_url:
-        # Presigned URL flow — PUT raw bytes directly; no Authorization needed.
         put_resp = requests.put(
             upload_url,
             headers={"Content-Type": "image/png"},
@@ -307,8 +330,7 @@ def upload_image_to_notion(image_bytes, filename="image.png"):
         )
         put_resp.raise_for_status()
     else:
-        # upload_url absent: try raw binary POST to /send, then multipart.
-        print(f"NOTION UPLOAD DEBUG: no upload_url in create response keys={list(create_json.keys())}")
+        print(f"NOTION UPLOAD DEBUG: no upload_url — create keys={list(create_json.keys())}")
         send_resp = requests.post(
             f"https://api.notion.com/v1/file_uploads/{upload_id}/send",
             headers={
@@ -319,9 +341,7 @@ def upload_image_to_notion(image_bytes, filename="image.png"):
             data=image_bytes,
             timeout=60,
         )
-        if send_resp.status_code == 400:
-            # Some integration types need multipart instead of raw binary.
-            print(f"NOTION UPLOAD DEBUG: raw binary /send → {send_resp.status_code}, trying multipart")
+        if send_resp.status_code != 200:
             send_resp = requests.post(
                 f"https://api.notion.com/v1/file_uploads/{upload_id}/send",
                 headers={
@@ -337,6 +357,8 @@ def upload_image_to_notion(image_bytes, filename="image.png"):
 
 
 def image_block_from_upload(upload_id):
+    if isinstance(upload_id, str) and upload_id.startswith("__ext__"):
+        return external_image_block(upload_id[7:])
     return {
         "object": "block",
         "type": "image",

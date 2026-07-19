@@ -280,8 +280,22 @@ setTimeout(reportHeight, 500);
         </div>
         <a class="popup-link" href="${s.dashboard}" target="_blank">Open full dashboard</a>
       `;
+      // Per-site label placement to prevent overlap.
+      // Direction and pixel offset chosen for the fixed Arctic geography.
+      const labelPlacement = {
+        'barrow':        {direction: 'right',  offset: [18,  0]},
+        'prudhoe-bay':   {direction: 'right',  offset: [18,  0]},
+        'herschel':      {direction: 'top',    offset: [0,  -18]},
+        'shingle-point': {direction: 'left',   offset: [-18, 0]},
+        'police-cabin':  {direction: 'left',   offset: [-18, 0]},
+        'aklavik':       {direction: 'left',   offset: [-18, 0]},
+        'trail-valley':  {direction: 'right',  offset: [18,  0]},
+        'inuvik':        {direction: 'bottom', offset: [0,   18]},
+        'tuktoyaktuk':   {direction: 'top',    offset: [0,  -18]},
+      };
+      const lp = labelPlacement[s.id] || {direction: 'right', offset: [18, 0]};
       marker.bindPopup(popupContent);
-      marker.bindTooltip(s.name, {permanent: true, direction: 'right', className: 'site-label'});
+      marker.bindTooltip(s.name, {permanent: true, direction: lp.direction, offset: lp.offset, className: 'site-label'});
       marker.on('mouseover', function() { this.openPopup(); });
     });
 

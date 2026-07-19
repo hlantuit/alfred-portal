@@ -35,7 +35,7 @@ import matplotlib.pyplot as plt
 # repo, the variable names stay consistent across sites).
 # =========================================================
 NOTION_TOKEN = os.environ["NOTION_TOKEN"]
-PAGE_ID = os.environ["NOTION_PAGE_ID"]
+PAGE_ID = os.environ.get("NOTION_PAGE_ID", "")  # overridden per-community by generate_dashboards.py
 
 notion = Client(auth=NOTION_TOKEN)
 

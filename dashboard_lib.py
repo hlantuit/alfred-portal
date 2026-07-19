@@ -3202,7 +3202,7 @@ def rotate_to_north_up(png_bytes, rotation_deg, final_size_px=MODIS_FINAL_SIZE_P
         return png_bytes
 
 
-def fetch_modis_image(bbox_3413, now_utc, max_days_back=5, fetch_size_px=MODIS_FETCH_SIZE_PX):
+def fetch_modis_image(bbox_3413, now_utc, max_days_back=10, fetch_size_px=MODIS_FETCH_SIZE_PX):
     for days_back in range(0, max_days_back + 1):
         date_str = (now_utc - timedelta(days=days_back)).strftime("%Y-%m-%d")
         url = build_gibs_url(date_str, bbox_3413, fetch_size_px)
@@ -4441,12 +4441,12 @@ def fetch_and_process_sentinel1_ice(lat, lon, site_label, utm_zone, utm_epsg,
     return ice_bytes, ice_caption
 
 
-def build_sea_ice_section(ice_bytes, ice_caption, site_label, title="🧊 Sea Ice — Sentinel-1 Classification"):
+def build_sea_ice_section(ice_bytes, ice_caption, site_label, title="🧊 Sea Ice — Sentinel-1 Classification", filename="sea_ice.png"):
     """Builds the Notion blocks for the sea-ice classification image."""
     heading_block = heading(title)
     if ice_bytes:
         try:
-            uid = upload_image_to_notion(ice_bytes, "sea_ice.png")
+            uid = upload_image_to_notion(ice_bytes, filename)
             img_block = image_block_from_upload(uid)
         except Exception as e:
             print("SEA ICE NOTION UPLOAD FAILED:", e)
@@ -5045,8 +5045,13 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
             mtp_raw   = list(pool.map(_fetch_mtp,   timestamps))
 
         htsgw_pairs = [(t, v) for item in htsgw_raw if item for t, v in [item]]
-        if not htsgw_pairs:
-            raise ValueError(f"No valid GDWPS data returned for {site_label}")
+        if len(htsgw_pairs) < 72:
+            # Too few steps — the discovered layer has a short horizon (e.g. 25km PT1H product).
+            # Return None so fetch_wave_forecast falls through to Open-Meteo (10-day forecast).
+            raise ValueError(
+                f"GDWPS returned only {len(htsgw_pairs)} steps for {site_label} "
+                f"(layer {htsgw_layer!r}) — need ≥72 for a useful forecast"
+            )
 
         mtp_dict = {t: v for item in mtp_raw if item for t, v in [item]}
 

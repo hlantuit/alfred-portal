@@ -634,6 +634,7 @@ def update_community(community, now_utc):
         blocks += lib.build_sea_ice_section(
             sea_ice_zoom_bytes, sea_ice_zoom_caption, site_label,
             title="🧊 Sea Ice — Sentinel-1 Classification — Zoom",
+            filename="sea_ice_zoom.png",
         )
 
     if "lake_river_ice" in enabled:

@@ -32,6 +32,7 @@ Requires:
 import json
 import os
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
@@ -445,7 +446,11 @@ def main():
 
     now_utc = datetime.now(timezone.utc)
 
-    for community in communities:
+    for i, community in enumerate(communities):
+        if i > 0:
+            # Give the Open-Meteo archive API time to reset rate limits
+            # between communities (each one may fetch 30 years of history)
+            time.sleep(45)
         try:
             update_community(community, now_utc)
         except Exception as e:

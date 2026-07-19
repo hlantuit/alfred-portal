@@ -1523,7 +1523,7 @@ def fetch_full_year_cached(lat, lon, year, temp_cache):
         return temps, False
 
 
-def prefetch_years_concurrently(lat, lon, years, temp_cache, max_workers=8):
+def prefetch_years_concurrently(lat, lon, years, temp_cache, max_workers=3):
     """
     Pre-fetches any of the given years not already in temp_cache, running
     up to max_workers requests concurrently rather than one at a time —

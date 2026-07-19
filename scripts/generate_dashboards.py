@@ -481,7 +481,7 @@ def update_community(community, now_utc):
 
     if "wildfire" in enabled:
         blocks += lib.build_wildfire_section(
-            fires, lat, lon, now_utc, tz_name, site_label,
+            fires, lat, lon, now_utc, tz_name,
             bbox_3413=community.get("modis_bbox_3413"),
             center_x=community.get("modis_center_x"),
             center_y=community.get("modis_center_y"),

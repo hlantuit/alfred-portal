@@ -276,6 +276,11 @@ def upload_image_to_notion(image_bytes, filename="image.png"):
     upload id — used instead of external image URLs because Notion's
     external-URL fetcher is unreliable for query-string-based image
     services (no file extension, content negotiated at request time).
+
+    Uses Notion's single-part upload flow:
+      1. POST /v1/file_uploads  →  {id, upload_url}
+      2. PUT upload_url with raw bytes + Content-Type: image/png
+    The upload_url may be a presigned S3 URL (no Authorization header).
     """
     create_resp = requests.post(
         "https://api.notion.com/v1/file_uploads",
@@ -288,18 +293,32 @@ def upload_image_to_notion(image_bytes, filename="image.png"):
         timeout=20,
     )
     create_resp.raise_for_status()
-    upload_id = create_resp.json()["id"]
+    create_json = create_resp.json()
+    upload_id  = create_json["id"]
+    upload_url = create_json.get("upload_url")
 
-    send_resp = requests.post(
-        f"https://api.notion.com/v1/file_uploads/{upload_id}/send",
-        headers={
-            "Authorization": f"Bearer {NOTION_TOKEN}",
-            "Notion-Version": "2022-06-28",
-        },
-        files={"file": (filename, image_bytes, "image/png")},
-        timeout=30,
-    )
-    send_resp.raise_for_status()
+    if upload_url:
+        # Presigned URL flow — PUT raw bytes directly; no Authorization needed.
+        put_resp = requests.put(
+            upload_url,
+            headers={"Content-Type": "image/png"},
+            data=image_bytes,
+            timeout=60,
+        )
+        put_resp.raise_for_status()
+    else:
+        # Fallback: multipart send endpoint.
+        send_resp = requests.post(
+            f"https://api.notion.com/v1/file_uploads/{upload_id}/send",
+            headers={
+                "Authorization": f"Bearer {NOTION_TOKEN}",
+                "Notion-Version": "2022-06-28",
+            },
+            files={"file": (filename, image_bytes, "image/png")},
+            timeout=60,
+        )
+        send_resp.raise_for_status()
+
     return upload_id
 
 
@@ -2560,6 +2579,27 @@ def build_tdd_histogram(lat, lon, now_utc, temp_cache, num_years=25):
     current_start = date(current_year, 1, 1)
     current_end = today - timedelta(days=1)
     current_temps = fetch_daily_temps(lat, lon, current_start, current_end)
+    if not current_temps:
+        # ERA5 archive has a 5-7 day lag; fall back to the forecast API for the
+        # current partial year, which has the most recent days.
+        print(f"TDD HISTOGRAM: ERA5 returned nothing for {current_year}, trying forecast API")
+        try:
+            r = get_with_retry(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": lat, "longitude": lon,
+                    "daily": "temperature_2m_mean",
+                    "timezone": "UTC",
+                    "start_date": current_start.strftime("%Y-%m-%d"),
+                    "end_date": current_end.strftime("%Y-%m-%d"),
+                    "past_days": 92,
+                },
+                timeout=20, retries=1,
+            )
+            daily = r.json().get("daily", {})
+            current_temps = dict(zip(daily.get("time", []), daily.get("temperature_2m_mean", [])))
+        except Exception as _e:
+            print(f"TDD HISTOGRAM: forecast API fallback also failed: {_e}")
     if current_temps:
         current_tdd, current_days = compute_tdd_from_temps(current_temps, current_start, current_end)
         tdd_by_year[current_year] = current_tdd
@@ -3389,8 +3429,18 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
                         for c in ring:
                             px = project_point(c[1], c[0])
                             if prev_px is not None:
-                                wb_draw.line([prev_px, px], fill=(180, 200, 210, 128), width=1)
-                                wb_segments += 1
+                                # Only draw segments where at least one endpoint is
+                                # inside (or near) the image frame — avoids
+                                # rendering long off-screen river reaches that cross
+                                # into the frame as a single overwhelming diagonal.
+                                margin = width_px * 0.15
+                                in_frame = lambda p: (
+                                    -margin <= p[0] <= width_px + margin
+                                    and -margin <= p[1] <= height_px + margin
+                                )
+                                if in_frame(px) or in_frame(prev_px):
+                                    wb_draw.line([prev_px, px], fill=(160, 195, 215, 100), width=1)
+                                    wb_segments += 1
                             prev_px = px
                 img = Image.alpha_composite(img.convert("RGBA"), wb_overlay).convert("RGB")
                 draw = ImageDraw.Draw(img)

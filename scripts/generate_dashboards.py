@@ -81,6 +81,55 @@ def ensure_coastline_geojson(community_id, bbox_latlon, out_path):
         print(f"[{community_id}] COASTLINE FETCH FAILED: {e}")
 
 
+def ensure_water_bodies_geojson(community_id, bbox_latlon, out_path):
+    """Fetch OSM natural=water and waterway=river polygons from Overpass and save as GeoJSON."""
+    import json as _json
+    import requests as _requests
+    s, w, n, e = bbox_latlon
+    query = (
+        f"[out:json][timeout:90];"
+        f"("
+        f"  way[natural=water]({s},{w},{n},{e});"
+        f"  way[waterway=river]({s},{w},{n},{e});"
+        f"  way[waterway=riverbank]({s},{w},{n},{e});"
+        f"  relation[natural=water]({s},{w},{n},{e});"
+        f");"
+        f"out geom;"
+    )
+    print(f"[{community_id}] WATER BODIES: fetching from Overpass ({s},{w},{n},{e})")
+    try:
+        r = _requests.post(
+            "https://overpass-api.de/api/interpreter",
+            data={"data": query}, timeout=120,
+        )
+        r.raise_for_status()
+        elements = r.json().get("elements", [])
+        features = []
+        for el in elements:
+            if el.get("type") == "way" and "geometry" in el:
+                coords = [[pt["lon"], pt["lat"]] for pt in el["geometry"]]
+                # Rings (closed ways) become Polygon; open ways become LineString
+                if coords and coords[0] == coords[-1] and len(coords) >= 4:
+                    features.append({
+                        "type": "Feature",
+                        "geometry": {"type": "Polygon", "coordinates": [coords]},
+                        "properties": {},
+                    })
+                else:
+                    features.append({
+                        "type": "Feature",
+                        "geometry": {"type": "LineString", "coordinates": coords},
+                        "properties": {},
+                    })
+        geojson = {"type": "FeatureCollection", "features": features}
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, "w") as f:
+            _json.dump(geojson, f)
+        print(f"[{community_id}] WATER BODIES: {len(features)} features saved to {out_path}")
+    except Exception as e:
+        print(f"[{community_id}] WATER BODIES FETCH FAILED: {e}")
+
+
 def load_communities():
     communities = []
     for name in sorted(os.listdir(COMMUNITIES_DIR)):
@@ -305,7 +354,18 @@ def update_community(community, now_utc):
             pad = 2.0
             bbox = (min(lats) - pad, min(lons) - pad, max(lats) + pad, max(lons) + pad)
             ensure_coastline_geojson(sid, bbox, coastline)
-        water_bod  = community.get("water_bodies_geojson_path")
+        _wb_rel = community.get("water_bodies_geojson_path")
+        water_bod = (
+            os.path.join(COMMUNITIES_DIR, community["id"], _wb_rel)
+            if _wb_rel else None
+        )
+        if water_bod and not os.path.exists(water_bod) and "lake_river_ice" in enabled:
+            pts = community.get("map_points", [])
+            lats = [p[0] for p in pts] + [lat]
+            lons = [p[1] for p in pts] + [lon]
+            pad = 1.5
+            bbox = (min(lats) - pad, min(lons) - pad, max(lats) + pad, max(lons) + pad)
+            ensure_water_bodies_geojson(sid, bbox, water_bod)
         map_pts    = community.get("map_points", [])
         ref_lines  = community.get("map_reference_lines", [])
         hydro_stations = community.get("hydrometric_stations", [])

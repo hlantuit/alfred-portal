@@ -5045,12 +5045,13 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
             mtp_raw   = list(pool.map(_fetch_mtp,   timestamps))
 
         htsgw_pairs = [(t, v) for item in htsgw_raw if item for t, v in [item]]
+        print(f"GDWPS: {len(htsgw_pairs)} valid steps out of {len(timestamps)} requested for {site_label}")
+        # Require ≥72 valid steps (9 days at 3-hourly); shorter means either the
+        # site is outside the GDWPS domain or only the short-range product is available.
         if len(htsgw_pairs) < 72:
-            # Too few steps — the discovered layer has a short horizon (e.g. 25km PT1H product).
-            # Return None so fetch_wave_forecast falls through to Open-Meteo (10-day forecast).
             raise ValueError(
-                f"GDWPS returned only {len(htsgw_pairs)} steps for {site_label} "
-                f"(layer {htsgw_layer!r}) — need ≥72 for a useful forecast"
+                f"GDWPS returned only {len(htsgw_pairs)} valid steps for {site_label} "
+                f"(layer {htsgw_layer!r}) — need ≥72; falling back to Open-Meteo"
             )
 
         mtp_dict = {t: v for item in mtp_raw if item for t, v in [item]}
@@ -5558,21 +5559,22 @@ def build_header_blocks(now_local, logo_url=None, logo_png_bytes=None, instituti
         except Exception as e:
             print("LOGO NOTION UPLOAD FAILED:", e)
 
-    if logo_block or logo_url:
-        logo_column = [logo_block] if logo_block else [external_image_block(logo_url)]
-        attribution_column = [paragraph(institution_text)] if institution_text else [paragraph("")]
-        blocks.append(columns(logo_column, attribution_column, width_ratios=[0.2, 0.8]))
-        blocks.append(divider())
-    elif institution_text:
-        blocks.append(paragraph(institution_text))
-        blocks.append(divider())
-
     tz_label = tz_name.split("/")[-1].replace("_", " ") if tz_name else "local"
-    blocks.append(paragraph(f"Last update: {now_local.strftime('%Y-%m-%d %H:%M %Z')}"))
-    blocks.append(paragraph(
+    header_text = ""
+    if institution_text:
+        header_text += institution_text + " "
+    header_text += (
+        f"Last update: {now_local.strftime('%Y-%m-%d %H:%M %Z')}. "
         f"All times shown on this page are {tz_label} time "
         f"(automatically adjusts for daylight saving where applicable)."
-    ))
+    )
+
+    if logo_block or logo_url:
+        logo_column = [logo_block] if logo_block else [external_image_block(logo_url)]
+        attribution_column = [paragraph(header_text)]
+        blocks.append(columns(logo_column, attribution_column, width_ratios=[0.2, 0.8]))
+    else:
+        blocks.append(paragraph(header_text))
     blocks.append(divider())
     return blocks
 

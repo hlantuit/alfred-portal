@@ -389,11 +389,12 @@ def update_community(community, now_utc):
             if _wb_rel else None
         )
         if water_bod and not os.path.exists(water_bod) and "lake_river_ice" in enabled:
-            pts = community.get("map_points", [])
-            lats = [p[0] for p in pts] + [lat]
-            lons = [p[1] for p in pts] + [lon]
-            pad = 1.5
-            bbox = (min(lats) - pad, min(lons) - pad, max(lats) + pad, max(lons) + pad)
+            # Pad must cover the full lake-ice Sentinel-1 frame (50 km half-width).
+            # At Arctic latitudes lon degrees are compressed: use 80 km to be safe.
+            import math as _math
+            lat_pad = 80_000 / 111_000          # ~0.72°
+            lon_pad = 80_000 / (111_000 * _math.cos(_math.radians(lat)))
+            bbox = (lat - lat_pad, lon - lon_pad, lat + lat_pad, lon + lon_pad)
             ensure_water_bodies_geojson(sid, bbox, water_bod)
         # Coastline GeoJSON — used by Sentinel-1 SAR/ice only, NOT by MODIS
         _coastline_rel = community.get("coastline_geojson_path")

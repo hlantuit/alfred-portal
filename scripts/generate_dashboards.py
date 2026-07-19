@@ -46,6 +46,7 @@ except ImportError as e:
     sys.exit(1)
 
 COMMUNITIES_DIR = os.path.join(REPO_ROOT, "communities")
+CACHE_DIR       = os.path.join(REPO_ROOT, "cache")
 
 
 def load_communities():
@@ -74,7 +75,11 @@ def update_community(community, now_utc):
 
     now_local = lib.to_local_time(now_utc, tz_name)
 
-    temp_cache       = {}
+    # Per-community cache so sites don't overwrite each other
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    lib.CACHE_FILE_PATH = os.path.join(CACHE_DIR, f"daily_temps_{sid}.json")
+
+    temp_cache       = lib.load_temp_cache()
     temp_cache_dirty = False
 
     # ---- Weather + wind (needed by "weather" block) ----

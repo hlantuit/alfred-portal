@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install requests pillow matplotlib numpy notion-client
+      - run: pip install requests pillow matplotlib numpy notion-client cairosvg
 
       # Regenerate sites.json + conditions + wind grid from communities/
       - name: Generate portal data
@@ -35,6 +35,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/sites.json data/conditions_latest.json data/wind_grid_latest.json
+          git add cache/ 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else

@@ -227,7 +227,7 @@ def update_community(community, now_utc):
     # ------------------------------------------------------------------ #
     wind_chart_bytes = wind_chart_caption = None
     if "wind_chart" in enabled:
-        wind_chart_bytes, wind_chart_caption = lib.build_wind_vector_chart(lat, lon, now_utc)
+        wind_chart_bytes, _, wind_chart_caption = lib.build_wind_charts_combined(lat, lon, now_utc)
 
     # ------------------------------------------------------------------ #
     # Logo                                                                 #
@@ -432,6 +432,15 @@ def update_community(community, now_utc):
             marine_text, marine_source_text, marine_zone_name, marine_zone_id,
         )
 
+    if "wildfire" in enabled:
+        blocks += lib.build_wildfire_section(
+            fires, lat, lon, now_utc, tz_name,
+            bbox_3413=community.get("modis_bbox_3413"),
+            center_x=community.get("modis_center_x"),
+            center_y=community.get("modis_center_y"),
+            rotation_deg=community.get("modis_rotation_deg", 0.0),
+        )
+
     if "wave_forecast" in enabled:
         blocks += lib.build_wave_forecast_section(wave_data)
 
@@ -478,15 +487,6 @@ def update_community(community, now_utc):
 
     if "lake_river_ice" in enabled:
         blocks += lib.build_lake_ice_section(lake_ice_bytes, lake_ice_caption, site_label)
-
-    if "wildfire" in enabled:
-        blocks += lib.build_wildfire_section(
-            fires, lat, lon, now_utc, tz_name,
-            bbox_3413=community.get("modis_bbox_3413"),
-            center_x=community.get("modis_center_x"),
-            center_y=community.get("modis_center_y"),
-            rotation_deg=community.get("modis_rotation_deg", 0.0),
-        )
 
     if "temperature" in enabled:
         blocks += lib.build_temperature_chart_section(temp_chart_bytes, temp_chart_caption)

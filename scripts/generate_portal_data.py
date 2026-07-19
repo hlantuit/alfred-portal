@@ -182,7 +182,7 @@ def main():
             "lat":       c["lat"],
             "lon":       c["lon"],
             "type":      c["type"],
-            "dashboard": f"https://www.notion.so/{c['notion_page_id']}",
+            "dashboard": c.get("public_notion_url", f"https://www.notion.so/{c['notion_page_id']}"),
         }
         for c in communities
     ]

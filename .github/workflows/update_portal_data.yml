@@ -18,7 +18,7 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install requests pillow matplotlib numpy notion-client cairosvg
+      - run: pip install requests pillow matplotlib numpy notion-client cairosvg xarray netcdf4 scipy
 
       # Regenerate sites.json + conditions + wind grid from communities/
       - name: Generate portal data
@@ -28,6 +28,8 @@ jobs:
       - name: Update Notion dashboards
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          SENTINEL_HUB_CLIENT_ID: ${{ secrets.SENTINEL_HUB_CLIENT_ID }}
+          SENTINEL_HUB_CLIENT_SECRET: ${{ secrets.SENTINEL_HUB_CLIENT_SECRET }}
         run: python scripts/generate_dashboards.py
 
       - name: Commit and push

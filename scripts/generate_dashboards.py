@@ -56,7 +56,7 @@ _OVERPASS_SERVERS = [
 _OVERPASS_HEADERS = {"User-Agent": "alfred-portal/1.0 (arctic environmental dashboard; hugues.lantuit@awi.de)"}
 
 
-def _overpass_post(query, timeout=120):
+def _overpass_post(query, timeout=75):
     """POST an Overpass query, retrying with a backup server on 5xx or timeout."""
     import requests as _requests
     last_exc = None
@@ -99,8 +99,7 @@ def ensure_coastline_geojson(community_id, bbox_latlon, out_path):
     """Fetch natural=coastline ways from Overpass API and save as GeoJSON LineStrings."""
     import json as _json
     s, w, n, e = bbox_latlon
-    # maxsize=20MB caps server response; coordinates rounded to 4 dp after fetch
-    query = f"[out:json][timeout:90][maxsize:20971520];way[natural=coastline]({s},{w},{n},{e});out geom;"
+    query = f"[out:json][timeout:60];way[natural=coastline]({s},{w},{n},{e});out geom qt 2000;"
     print(f"[{community_id}] COASTLINE: fetching from Overpass ({s},{w},{n},{e})")
     try:
         r = _overpass_post(query)
@@ -125,16 +124,16 @@ def ensure_water_bodies_geojson(community_id, bbox_latlon, out_path):
     """Fetch OSM natural=water and waterway=river polygons from Overpass and save as GeoJSON."""
     import json as _json
     s, w, n, e = bbox_latlon
-    # maxsize=20MB caps server response; coordinates rounded to 4 dp after fetch
+    # qt 3000 limits to 3000 largest features (quadtile order = big first); keeps response small
     query = (
-        f"[out:json][timeout:90][maxsize:20971520];"
+        f"[out:json][timeout:60];"
         f"("
         f"  way[natural=water]({s},{w},{n},{e});"
         f"  way[waterway=river]({s},{w},{n},{e});"
         f"  way[waterway=riverbank]({s},{w},{n},{e});"
         f"  relation[natural=water]({s},{w},{n},{e});"
         f");"
-        f"out geom;"
+        f"out geom qt 3000;"
     )
     print(f"[{community_id}] WATER BODIES: fetching from Overpass ({s},{w},{n},{e})")
     try:

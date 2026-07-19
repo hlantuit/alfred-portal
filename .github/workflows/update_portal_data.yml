@@ -38,11 +38,21 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/sites.json data/conditions_latest.json data/wind_grid_latest.json
           git add cache/ 2>/dev/null || true
-          # Chart images (served via GitHub raw URL in Notion external image blocks)
-          git add communities/*/charts/ 2>/dev/null || true
-          # Auto-fetched GeoJSON overlays (coastline, water bodies)
-          git add communities/*/coastline_data.geojson 2>/dev/null || true
-          git add communities/*/water_bodies.geojson 2>/dev/null || true
+
+          # Chart images — use find to avoid silent glob-expansion failures
+          PNG_COUNT=$(find communities -path "*/charts/*.png" 2>/dev/null | wc -l)
+          echo "Chart PNGs found: $PNG_COUNT"
+          if [ "$PNG_COUNT" -gt 0 ]; then
+            find communities -path "*/charts/*.png" -exec git add {} +
+          fi
+
+          # Auto-fetched GeoJSON overlays
+          find communities -name "coastline_data.geojson" -exec git add {} + 2>/dev/null || true
+          find communities -name "water_bodies.geojson"   -exec git add {} + 2>/dev/null || true
+
+          echo "Staged files:"
+          git diff --cached --name-only
+
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else

@@ -297,12 +297,14 @@ def upload_image_to_notion(image_bytes, filename="image.png"):
     """
     if CHARTS_SAVE_DIR and COMMUNITY_ID:
         os.makedirs(CHARTS_SAVE_DIR, exist_ok=True)
-        with open(os.path.join(CHARTS_SAVE_DIR, filename), "wb") as _f:
+        img_path = os.path.join(CHARTS_SAVE_DIR, filename)
+        with open(img_path, "wb") as _f:
             _f.write(image_bytes)
         github_url = (
             f"https://raw.githubusercontent.com/{_GITHUB_REPO}/{_GITHUB_BRANCH}"
             f"/communities/{COMMUNITY_ID}/charts/{filename}"
         )
+        print(f"IMAGE SAVED: {img_path} → {github_url}")
         return f"__ext__{github_url}"
 
     # Notion file upload API fallback (used when running locally without git context).

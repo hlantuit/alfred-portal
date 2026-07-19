@@ -464,7 +464,7 @@ def update_community(community, now_utc):
                     lat=lat, lon=lon, site_label=site_label,
                     utm_zone=utm_zone, utm_epsg=utm_epsg,
                     center_x=utm_center_x, center_y=utm_center_y,
-                    points=map_pts, tz_name=tz_name, half_width_m=50_000,
+                    points=map_pts, tz_name=tz_name, half_width_m=25_000,
                     reference_lines=ref_lines, coastline_geojson_path=coastline,
                     now_utc=now_utc,
                 )

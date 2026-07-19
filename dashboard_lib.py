@@ -4937,30 +4937,47 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
     try:
         import concurrent.futures as _cf
 
-        # ---- Step 1: get valid time range from GetCapabilities ----
-        caps_url = (
+        import re as _re
+
+        # ---- Step 1: discover layer name + get time range from GetCapabilities ----
+        # Try the known layer name first; if the server returns ServiceException
+        # (layer renamed/unavailable), scan the full capabilities for any GDWPS HTSGW layer.
+        htsgw_layer = "GDWPS_10km_HTSGW"
+        mtp_layer   = "GDWPS_10km_MTP"
+
+        caps_resp = requests.get(
             "https://geo.weather.gc.ca/geomet"
             "?service=WMS&version=1.3.0&request=GetCapabilities"
-            "&LAYERS=GDWPS_10km_HTSGW"
+            f"&LAYERS={htsgw_layer}",
+            timeout=30,
         )
-        caps_resp = requests.get(caps_url, timeout=20)
         caps_resp.raise_for_status()
 
-        import re as _re
-        # Try <Dimension name="time">value</Dimension> (WMS 1.3.0 style)
-        m = _re.search(
-            r'<Dimension[^>]*name=["\']time["\'][^>]*>([^<]+)</Dimension>',
-            caps_resp.text,
-        )
-        # Also try <Extent name="time">value</Extent> (WMS 1.1.1 style)
-        if not m:
-            m = _re.search(
-                r'<Extent[^>]*name=["\']time["\'][^>]*>([^<]+)</Extent>',
-                caps_resp.text,
+        if "ServiceException" in caps_resp.text or "non disponible" in caps_resp.text.lower():
+            print(f"GDWPS: layer {htsgw_layer!r} unavailable — scanning full GetCapabilities")
+            full_caps = requests.get(
+                "https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0&request=GetCapabilities",
+                timeout=60,
             )
+            full_caps.raise_for_status()
+            name_m = _re.search(r'<Name>([^<]*(?:GDWPS|gdwps)[^<]*(?:HTSGW|htsgw)[^<]*)</Name>', full_caps.text)
+            if not name_m:
+                raise ValueError("Could not find any GDWPS HTSGW layer in full GetCapabilities")
+            htsgw_layer = name_m.group(1).strip()
+            mtp_layer   = htsgw_layer.replace("HTSGW", "MTP")
+            print(f"GDWPS: discovered layers HTSGW={htsgw_layer!r} MTP={mtp_layer!r}")
+            caps_resp = requests.get(
+                "https://geo.weather.gc.ca/geomet"
+                f"?service=WMS&version=1.3.0&request=GetCapabilities&LAYERS={htsgw_layer}",
+                timeout=30,
+            )
+            caps_resp.raise_for_status()
+
+        m = _re.search(r'<Dimension[^>]*name=["\']time["\'][^>]*>([^<]+)</Dimension>', caps_resp.text)
         if not m:
-            # Log snippet for debugging.
-            snippet = caps_resp.text[:500] if len(caps_resp.text) > 0 else "(empty response)"
+            m = _re.search(r'<Extent[^>]*name=["\']time["\'][^>]*>([^<]+)</Extent>', caps_resp.text)
+        if not m:
+            snippet = caps_resp.text[:400]
             print(f"GDWPS GetCapabilities snippet: {snippet}")
             raise ValueError("Could not find time dimension in GDWPS GetCapabilities")
         time_dim = m.group(1).strip()
@@ -4986,7 +5003,7 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
                 url = (
                     "https://geo.weather.gc.ca/geomet"
                     "?service=WMS&version=1.3.0&request=GetFeatureInfo"
-                    "&layers=GDWPS_10km_HTSGW&query_layers=GDWPS_10km_HTSGW"
+                    f"&layers={htsgw_layer}&query_layers={htsgw_layer}"
                     f"&bbox={bbox}&width=10&height=10&crs=EPSG:4326&i=5&j=5"
                     "&info_format=application/json"
                     f"&time={ts.strftime('%Y-%m-%dT%H:%M:%SZ')}"
@@ -5007,7 +5024,7 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
                 url = (
                     "https://geo.weather.gc.ca/geomet"
                     "?service=WMS&version=1.3.0&request=GetFeatureInfo"
-                    "&layers=GDWPS_10km_MTP&query_layers=GDWPS_10km_MTP"
+                    f"&layers={mtp_layer}&query_layers={mtp_layer}"
                     f"&bbox={bbox}&width=10&height=10&crs=EPSG:4326&i=5&j=5"
                     "&info_format=application/json"
                     f"&time={ts.strftime('%Y-%m-%dT%H:%M:%SZ')}"

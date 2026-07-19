@@ -49,36 +49,74 @@ COMMUNITIES_DIR = os.path.join(REPO_ROOT, "communities")
 CACHE_DIR       = os.path.join(REPO_ROOT, "cache")
 
 
+_OVERPASS_SERVERS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+]
+_OVERPASS_HEADERS = {"User-Agent": "alfred-portal/1.0 (arctic environmental dashboard; hugues.lantuit@awi.de)"}
+
+
+def _overpass_post(query, timeout=120):
+    """POST an Overpass query, retrying with a backup server on 5xx or timeout."""
+    import requests as _requests
+    last_exc = None
+    for server in _OVERPASS_SERVERS:
+        try:
+            r = _requests.post(server, data={"data": query}, headers=_OVERPASS_HEADERS, timeout=timeout)
+            r.raise_for_status()
+            return r
+        except Exception as e:
+            print(f"Overpass {server} failed: {e} — trying next server")
+            last_exc = e
+    raise last_exc
+
+
+_GEOJSON_MAX_BYTES = 40 * 1024 * 1024  # 40 MB hard limit — GitHub rejects files > 100 MB
+_COORD_PRECISION = 4  # ~11 m; enough for display, cuts file size significantly
+
+
+def _round_coords(coords):
+    return [[round(c[0], _COORD_PRECISION), round(c[1], _COORD_PRECISION)] for c in coords]
+
+
+def _write_geojson_safe(community_id, label, geojson, out_path):
+    """Serialize geojson to out_path; skip if the result would exceed GitHub's size limit."""
+    import json as _json
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    data = _json.dumps(geojson, separators=(",", ":"))
+    if len(data) > _GEOJSON_MAX_BYTES:
+        print(
+            f"[{community_id}] {label}: output is {len(data)/1e6:.1f} MB — exceeds "
+            f"{_GEOJSON_MAX_BYTES/1e6:.0f} MB limit, skipping file write to avoid GitHub rejection"
+        )
+        return False
+    with open(out_path, "w") as f:
+        f.write(data)
+    return True
+
+
 def ensure_coastline_geojson(community_id, bbox_latlon, out_path):
     """Fetch natural=coastline ways from Overpass API and save as GeoJSON LineStrings."""
     import json as _json
-    import requests as _requests
     s, w, n, e = bbox_latlon
-    query = f"[out:json][timeout:90];way[natural=coastline]({s},{w},{n},{e});out geom;"
+    # maxsize=20MB caps server response; coordinates rounded to 4 dp after fetch
+    query = f"[out:json][timeout:90][maxsize:20971520];way[natural=coastline]({s},{w},{n},{e});out geom;"
     print(f"[{community_id}] COASTLINE: fetching from Overpass ({s},{w},{n},{e})")
     try:
-        r = _requests.post(
-            "https://overpass-api.de/api/interpreter",
-            data={"data": query},
-            headers={"User-Agent": "alfred-portal/1.0 (arctic environmental dashboard; hugues.lantuit@awi.de)"},
-            timeout=120,
-        )
-        r.raise_for_status()
+        r = _overpass_post(query)
         elements = r.json().get("elements", [])
         features = []
         for el in elements:
             if el.get("type") == "way" and "geometry" in el:
-                coords = [[pt["lon"], pt["lat"]] for pt in el["geometry"]]
+                coords = _round_coords([[pt["lon"], pt["lat"]] for pt in el["geometry"]])
                 features.append({
                     "type": "Feature",
                     "geometry": {"type": "LineString", "coordinates": coords},
                     "properties": {},
                 })
         geojson = {"type": "FeatureCollection", "features": features}
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        with open(out_path, "w") as f:
-            _json.dump(geojson, f)
-        print(f"[{community_id}] COASTLINE: {len(features)} segments saved to {out_path}")
+        if _write_geojson_safe(community_id, "COASTLINE", geojson, out_path):
+            print(f"[{community_id}] COASTLINE: {len(features)} segments saved to {out_path}")
     except Exception as e:
         print(f"[{community_id}] COASTLINE FETCH FAILED: {e}")
 
@@ -86,10 +124,10 @@ def ensure_coastline_geojson(community_id, bbox_latlon, out_path):
 def ensure_water_bodies_geojson(community_id, bbox_latlon, out_path):
     """Fetch OSM natural=water and waterway=river polygons from Overpass and save as GeoJSON."""
     import json as _json
-    import requests as _requests
     s, w, n, e = bbox_latlon
+    # maxsize=20MB caps server response; coordinates rounded to 4 dp after fetch
     query = (
-        f"[out:json][timeout:90];"
+        f"[out:json][timeout:90][maxsize:20971520];"
         f"("
         f"  way[natural=water]({s},{w},{n},{e});"
         f"  way[waterway=river]({s},{w},{n},{e});"
@@ -100,19 +138,12 @@ def ensure_water_bodies_geojson(community_id, bbox_latlon, out_path):
     )
     print(f"[{community_id}] WATER BODIES: fetching from Overpass ({s},{w},{n},{e})")
     try:
-        r = _requests.post(
-            "https://overpass-api.de/api/interpreter",
-            data={"data": query},
-            headers={"User-Agent": "alfred-portal/1.0 (arctic environmental dashboard; hugues.lantuit@awi.de)"},
-            timeout=120,
-        )
-        r.raise_for_status()
+        r = _overpass_post(query)
         elements = r.json().get("elements", [])
         features = []
         for el in elements:
             if el.get("type") == "way" and "geometry" in el:
-                coords = [[pt["lon"], pt["lat"]] for pt in el["geometry"]]
-                # Rings (closed ways) become Polygon; open ways become LineString
+                coords = _round_coords([[pt["lon"], pt["lat"]] for pt in el["geometry"]])
                 if coords and coords[0] == coords[-1] and len(coords) >= 4:
                     features.append({
                         "type": "Feature",
@@ -126,10 +157,8 @@ def ensure_water_bodies_geojson(community_id, bbox_latlon, out_path):
                         "properties": {},
                     })
         geojson = {"type": "FeatureCollection", "features": features}
-        os.makedirs(os.path.dirname(out_path), exist_ok=True)
-        with open(out_path, "w") as f:
-            _json.dump(geojson, f)
-        print(f"[{community_id}] WATER BODIES: {len(features)} features saved to {out_path}")
+        if _write_geojson_safe(community_id, "WATER BODIES", geojson, out_path):
+            print(f"[{community_id}] WATER BODIES: {len(features)} features saved to {out_path}")
     except Exception as e:
         print(f"[{community_id}] WATER BODIES FETCH FAILED: {e}")
 

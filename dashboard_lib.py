@@ -417,6 +417,8 @@ def fmt_temp(value):
     happens inside the format call on the float -0.0; round()-ing first
     to a plain int sidesteps that, since int 0 has no sign).
     """
+    if value is None:
+        return "—"
     r = round(value)
     if r == 0:
         r = 0

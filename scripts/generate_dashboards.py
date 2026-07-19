@@ -49,6 +49,38 @@ COMMUNITIES_DIR = os.path.join(REPO_ROOT, "communities")
 CACHE_DIR       = os.path.join(REPO_ROOT, "cache")
 
 
+def ensure_coastline_geojson(community_id, bbox_latlon, out_path):
+    """Fetch natural=coastline ways from Overpass API and save as GeoJSON LineStrings."""
+    import json as _json
+    import requests as _requests
+    s, w, n, e = bbox_latlon
+    query = f"[out:json][timeout:90];way[natural=coastline]({s},{w},{n},{e});out geom;"
+    print(f"[{community_id}] COASTLINE: fetching from Overpass ({s},{w},{n},{e})")
+    try:
+        r = _requests.post(
+            "https://overpass-api.de/api/interpreter",
+            data={"data": query}, timeout=120,
+        )
+        r.raise_for_status()
+        elements = r.json().get("elements", [])
+        features = []
+        for el in elements:
+            if el.get("type") == "way" and "geometry" in el:
+                coords = [[pt["lon"], pt["lat"]] for pt in el["geometry"]]
+                features.append({
+                    "type": "Feature",
+                    "geometry": {"type": "LineString", "coordinates": coords},
+                    "properties": {},
+                })
+        geojson = {"type": "FeatureCollection", "features": features}
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, "w") as f:
+            _json.dump(geojson, f)
+        print(f"[{community_id}] COASTLINE: {len(features)} segments saved to {out_path}")
+    except Exception as e:
+        print(f"[{community_id}] COASTLINE FETCH FAILED: {e}")
+
+
 def load_communities():
     communities = []
     for name in sorted(os.listdir(COMMUNITIES_DIR)):
@@ -264,6 +296,14 @@ def update_community(community, now_utc):
             os.path.join(COMMUNITIES_DIR, community["id"], _coastline_rel)
             if _coastline_rel else None
         )
+        if coastline and not os.path.exists(coastline):
+            # Derive bbox from map_points or fallback to ±3° around site
+            pts = community.get("map_points", [])
+            lats = [p[0] for p in pts] + [lat]
+            lons = [p[1] for p in pts] + [lon]
+            pad = 2.0
+            bbox = (min(lats) - pad, min(lons) - pad, max(lats) + pad, max(lons) + pad)
+            ensure_coastline_geojson(sid, bbox, coastline)
         water_bod  = community.get("water_bodies_geojson_path")
         map_pts    = community.get("map_points", [])
         ref_lines  = community.get("map_reference_lines", [])

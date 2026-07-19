@@ -6548,10 +6548,22 @@ def publish_blocks_to_notion(blocks):
     appends the new set. Shared by every site's entrypoint — the actual
     page-clear-and-republish mechanics never need to vary per site.
     """
-    existing = notion.blocks.children.list(block_id=PAGE_ID)
-    print("EXISTING BLOCK COUNT:", len(existing["results"]))
+    # Notion's children.list is paginated (max 100 per call) — must loop
+    # until has_more is False to delete ALL existing blocks, not just the first 100.
+    all_existing = []
+    cursor = None
+    while True:
+        kwargs = {"block_id": PAGE_ID}
+        if cursor:
+            kwargs["start_cursor"] = cursor
+        resp = notion.blocks.children.list(**kwargs)
+        all_existing.extend(resp.get("results", []))
+        if not resp.get("has_more"):
+            break
+        cursor = resp.get("next_cursor")
 
-    for b in existing["results"]:
+    print("EXISTING BLOCK COUNT:", len(all_existing))
+    for b in all_existing:
         notion.blocks.delete(block_id=b["id"])
 
     response = notion.blocks.children.append(block_id=PAGE_ID, children=blocks)

@@ -536,7 +536,7 @@ def main():
 
     for i, community in enumerate(communities):
         if i > 0:
-            time.sleep(45)
+            time.sleep(5)
         try:
             update_community(community, now_utc)
         except Exception as e:

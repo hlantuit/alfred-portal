@@ -194,7 +194,7 @@ def update_community(community, now_utc):
 
                 daily = gem_forecast.get("daily", {})
                 gem_days = lib.gem_daily_to_land_forecast_days(daily)
-                mini_strip_bytes = lib.build_mini_forecast_strip(gem_days) if gem_days else None
+                mini_strip_bytes = lib.build_mini_forecast_strip(gem_days[:5]) if gem_days else None
                 if mini_strip_bytes:
                     try:
                         uid = lib.upload_image_to_notion(mini_strip_bytes, "mini_forecast_strip.png")
@@ -271,6 +271,7 @@ def update_community(community, now_utc):
     modis_bytes = modis_date = None
     modis_block_obj = None
     gdsps_times = gdsps_values = gdsps_yearly_mean = None
+    topaz_times = topaz_values = topaz_yearly_mean = None
     sentinel1_bytes = None
     sentinel1_caption = "Sentinel-1 SAR image unavailable."
     sea_ice_bytes = sea_ice_caption = None
@@ -309,9 +310,10 @@ def update_community(community, now_utc):
         ref_lines  = community.get("map_reference_lines", [])
         hydro_stations = community.get("hydrometric_stations", [])
 
-        workers = max(len(needs_parallel) + len(hydro_stations), 1)
+        extra = 1 if "water_level" in needs_parallel else 0
+        workers = max(len(needs_parallel) + len(hydro_stations) + extra, 1)
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            fut_modis = fut_wl = fut_s1 = None
+            fut_modis = fut_wl = fut_topaz = fut_s1 = None
             fut_ice = fut_ice_zoom = fut_lake_ice = None
             fut_wave = fut_fire = None
 
@@ -331,6 +333,11 @@ def update_community(community, now_utc):
             if "water_level" in enabled:
                 fut_wl = ex.submit(
                     lib.fetch_gdsps_water_level,
+                    lat=lat, lon=lon, now_utc=now_utc, site_label=site_label,
+                    yearly_mean=community.get("water_level_yearly_mean", 0.0),
+                )
+                fut_topaz = ex.submit(
+                    lib.fetch_copernicus_water_level,
                     lat=lat, lon=lon, now_utc=now_utc, site_label=site_label,
                     yearly_mean=community.get("water_level_yearly_mean", 0.0),
                 )
@@ -400,6 +407,11 @@ def update_community(community, now_utc):
                     gdsps_times, gdsps_values, gdsps_yearly_mean = fut_wl.result()
                 except Exception as e:
                     print(f"[{sid}] WATER LEVEL FAILED: {e}")
+            if fut_topaz:
+                try:
+                    topaz_times, topaz_values, topaz_yearly_mean = fut_topaz.result()
+                except Exception as e:
+                    print(f"[{sid}] TOPAZ WATER LEVEL FAILED: {e}")
             if fut_s1:
                 try:
                     sentinel1_bytes, sentinel1_caption = fut_s1.result()
@@ -487,11 +499,14 @@ def update_community(community, now_utc):
 
     if "water_level" in enabled:
         wl_text = (
-            [("Latest forecast value: ", f"{gdsps_values[0]:.2f} m")]
+            [("TOPAZ6 now: ", f"{topaz_values[0]:.2f} m (vs. {topaz_yearly_mean:.2f} m yearly mean)" if topaz_yearly_mean is not None else f"{topaz_values[0]:.2f} m")]
+            if topaz_values else
+            [("GDSPS now: ", f"{gdsps_values[0]:.2f} m")]
             if gdsps_values else "Total water level forecast unavailable."
         )
         wl_chart_bytes, wl_chart_caption = lib.build_water_level_chart(
-            gdsps_times, gdsps_values, tz_name, gdsps_yearly_mean,
+            topaz_times, topaz_values, tz_name, topaz_yearly_mean,
+            gdsps_times=gdsps_times, gdsps_values=gdsps_values,
         )
         blocks += lib.build_total_water_level_section(wl_text, wl_chart_bytes, wl_chart_caption)
 

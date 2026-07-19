@@ -262,7 +262,11 @@ def update_community(community, now_utc):
         utm_center_y = community.get("utm_center_y")
         modis_cx   = community.get("modis_center_x")
         modis_cy   = community.get("modis_center_y")
-        coastline  = community.get("coastline_geojson_path", "coastline_data.geojson")
+        _coastline_rel = community.get("coastline_geojson_path")
+        coastline = (
+            os.path.join(COMMUNITIES_DIR, community["id"], _coastline_rel)
+            if _coastline_rel else None
+        )
         water_bod  = community.get("water_bodies_geojson_path")
         map_pts    = community.get("map_points", [])
         ref_lines  = community.get("map_reference_lines", [])

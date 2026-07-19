@@ -1291,8 +1291,15 @@ def gem_daily_to_land_forecast_days(daily):
     wdir = daily.get("winddir")     or []
     prcp = daily.get("precip")      or []
     for i, date_str in enumerate(daily.get("dates", [])):
+        try:
+            from datetime import date as _date
+            dt = _date.fromisoformat(date_str)
+            day_label = "Today" if i == 0 else dt.strftime("%a %-d")
+        except Exception:
+            day_label = date_str
         result.append({
             "date":           date_str,
+            "day_label":      day_label,
             "weathercode":    wc[i]   if i < len(wc)   else None,
             "temp_max":       tmax[i] if i < len(tmax) else 0,
             "temp_min":       tmin[i] if i < len(tmin) else 0,

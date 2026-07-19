@@ -1,22 +1,48 @@
 {
-  "lat": 71.291,
   "id": "barrow",
-  "lon": -156.789,
-  "water_level_yearly_mean": 0,
-  "hydrometric_stations": [],
   "name": "Utqiagvik (Barrow)",
+  "site_display_name": "Utqiagvik (Barrow)",
+  "lat": 71.291,
+  "lon": -156.789,
+  "tz_name": "America/Anchorage",
   "type": "coastal",
-  "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
   "notion_page_id": "3a000194631e8037a155c3ec63d10792",
+  "logo_url": "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg",
+  "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
+  "water_level_yearly_mean": 0.0,
+  "hydrometric_stations": [],
+  "map_points": [
+    [
+      71.291,
+      -156.789,
+      "Utqiagvik (Barrow)",
+      -28
+    ],
+    [
+      70.255,
+      -148.337,
+      "Prudhoe Bay",
+      -10
+    ]
+  ],
+  "map_reference_lines": [],
+  "coastline_geojson_path": "coastline_data.geojson",
   "blocks": [
     "weather",
     "alerts",
     "forecast",
     "water_level",
+    "modis",
+    "sentinel1",
     "temperature",
     "wind_chart"
   ],
-  "site_display_name": "Utqiagvik (Barrow)",
-  "tz_name": "America/Anchorage",
-  "logo_url": "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg"
+  "modis_center_x": -1898129,
+  "modis_center_y": 758775,
+  "modis_rotation_deg": 68.21,
+  "modis_bbox_3413": "-2078129,578775,-1718129,938775",
+  "utm_zone": 4,
+  "utm_epsg": "32604",
+  "utm_center_x": 579139,
+  "utm_center_y": 7911299
 }

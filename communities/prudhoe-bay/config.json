@@ -1,22 +1,48 @@
 {
-  "lat": 70.255,
   "id": "prudhoe-bay",
-  "lon": -148.337,
-  "water_level_yearly_mean": 0,
-  "hydrometric_stations": [],
   "name": "Prudhoe Bay",
+  "site_display_name": "Prudhoe Bay",
+  "lat": 70.255,
+  "lon": -148.337,
+  "tz_name": "America/Anchorage",
   "type": "coastal",
-  "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
   "notion_page_id": "3a000194631e80218fb0e1bd43976029",
+  "logo_url": "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg",
+  "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
+  "water_level_yearly_mean": 0.0,
+  "hydrometric_stations": [],
+  "map_points": [
+    [
+      70.255,
+      -148.337,
+      "Prudhoe Bay",
+      -28
+    ],
+    [
+      71.291,
+      -156.789,
+      "Utqiagvik (Barrow)",
+      -10
+    ]
+  ],
+  "map_reference_lines": [],
+  "coastline_geojson_path": "coastline_data.geojson",
   "blocks": [
     "weather",
     "alerts",
     "forecast",
     "water_level",
+    "modis",
+    "sentinel1",
     "temperature",
     "wind_chart"
   ],
-  "site_display_name": "Prudhoe Bay",
-  "tz_name": "America/Anchorage",
-  "logo_url": "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg"
+  "modis_center_x": -2101249,
+  "modis_center_y": 498147,
+  "modis_rotation_deg": 76.66,
+  "modis_bbox_3413": "-2281249,318147,-1921249,678147",
+  "utm_zone": 6,
+  "utm_epsg": "32606",
+  "utm_center_x": 449593,
+  "utm_center_y": 7794864
 }

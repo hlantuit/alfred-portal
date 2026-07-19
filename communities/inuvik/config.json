@@ -1,20 +1,49 @@
 {
   "id": "inuvik",
-  "type": "riverine",
-  "tz_name": "America/Inuvik",
-  "lon": -133.723,
+  "name": "Inuvik",
   "site_display_name": "Inuvik",
+  "lat": 68.361,
+  "lon": -133.723,
+  "tz_name": "America/Inuvik",
+  "type": "riverine",
+  "notion_page_id": "39100194631e8072ac35cf93142dfdcf",
+  "logo_url": "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg",
+  "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
+  "hydrometric_stations": [
+    {
+      "station_id": "10LC014",
+      "provterr": "NT",
+      "river_name": "Mackenzie River at Arctic Red River",
+      "heading": "Mackenzie River Water Level at Arctic Red River"
+    }
+  ],
+  "map_points": [
+    [
+      68.361,
+      -133.723,
+      "Inuvik",
+      -28
+    ],
+    [
+      68.224,
+      -135.013,
+      "Aklavik",
+      -10
+    ],
+    [
+      69.454,
+      -133.037,
+      "Tuktoyaktuk",
+      -10
+    ]
+  ],
+  "map_reference_lines": [],
   "blocks": [
     "weather",
     "alerts",
     "forecast",
+    "hydrometric",
     "temperature",
     "wind_chart"
-  ],
-  "hydrometric_stations": [],
-  "name": "Inuvik",
-  "notion_page_id": "39100194631e8072ac35cf93142dfdcf",
-  "logo_url": "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg",
-  "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
-  "lat": 68.361
+  ]
 }

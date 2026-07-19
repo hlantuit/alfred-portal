@@ -1,25 +1,82 @@
 {
-  "lat": 68.994,
   "id": "shingle-point",
-  "marine_zone_id": "16000",
-  "lon": -137.39,
-  "water_level_yearly_mean": -0.2668,
-  "hydrometric_stations": [],
   "name": "Shingle Point / Taqpaq",
+  "site_display_name": "Shingle Point",
+  "lat": 68.933,
+  "lon": -137.2,
+  "tz_name": "America/Inuvik",
   "type": "coastal",
-  "marine_zone_name": "Yukon Coast",
-  "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
   "notion_page_id": "3a000194631e808eb6dad607f33c9e97",
+  "logo_url": "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg",
+  "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
+  "tide_station_code": "06505",
+  "tide_station_name": "Shingle Point",
+  "marine_zone_id": "16000",
+  "marine_zone_name": "Yukon Coast",
+  "water_level_yearly_mean": -0.2668,
+  "hydrometric_stations": [
+    {
+      "station_id": "10MC023",
+      "provterr": "NT",
+      "river_name": "Mackenzie River, Napoiak Channel above Shallow Bay",
+      "heading": "Napoiak Channel Water Level"
+    }
+  ],
+  "map_points": [
+    [
+      68.933,
+      -137.2,
+      "Shingle Point",
+      -28
+    ],
+    [
+      69.578,
+      -138.917,
+      "Qikiqtaruk Herschel Island",
+      -10
+    ],
+    [
+      68.224,
+      -135.013,
+      "Aklavik",
+      -10
+    ],
+    [
+      68.361,
+      -133.723,
+      "Inuvik",
+      -10,
+      -90
+    ]
+  ],
+  "map_reference_lines": [
+    [
+      60.0,
+      -141.0,
+      69.65,
+      -141.0,
+      "Yukon/Alaska border"
+    ]
+  ],
+  "coastline_geojson_path": "coastline_data.geojson",
   "blocks": [
     "weather",
     "alerts",
     "forecast",
     "marine",
     "water_level",
+    "hydrometric",
+    "modis",
+    "sentinel1",
     "temperature",
     "wind_chart"
   ],
-  "site_display_name": "Shingle Point / Taqpaq",
-  "tz_name": "America/Inuvik",
-  "logo_url": "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg"
+  "modis_center_x": -2305455,
+  "modis_center_y": 88567,
+  "modis_rotation_deg": 87.8,
+  "modis_bbox_3413": "-2485455,-91433,-2125455,268567",
+  "utm_zone": 8,
+  "utm_epsg": "32608",
+  "utm_center_x": 411761,
+  "utm_center_y": 7648472
 }

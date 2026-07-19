@@ -229,11 +229,8 @@ def update_community(community, now_utc):
     if "wind_chart" in enabled:
         wind_chart_bytes, _, wind_chart_caption = lib.build_wind_charts_combined(lat, lon, now_utc)
 
-    # ------------------------------------------------------------------ #
-    # Logo                                                                 #
-    # ------------------------------------------------------------------ #
-    logo_url       = community.get("logo_url", "")
-    logo_png_bytes = lib.fetch_and_convert_logo_to_png(logo_url) if logo_url else None
+    logo_url       = None
+    logo_png_bytes = None
 
     # ------------------------------------------------------------------ #
     # Parallel fetches: MODIS, water level, Sentinel-1, sea ice, wave,    #

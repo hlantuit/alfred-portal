@@ -344,6 +344,14 @@ def update_community(community, now_utc):
     if "wind_chart" in enabled:
         wind_chart_bytes, _, wind_chart_caption = lib.build_wind_charts_combined(lat, lon, now_utc)
 
+    # ------------------------------------------------------------------ #
+    # Snow depth card (terrestrial/lake/riverine sites)                   #
+    # ------------------------------------------------------------------ #
+    snow_card = None
+    if "snow_depth" in enabled:
+        print(f"[{sid}] STARTING: snow depth card")
+        snow_card = lib.build_snow_depth_card(lat, lon, now_utc)
+
     logo_url       = None
     logo_png_bytes = None
 
@@ -369,25 +377,12 @@ def update_community(community, now_utc):
         "lake_river_ice", "wave_forecast", "wildfire", "hydrometric",
     }
     if needs_parallel:
-        utm_zone   = community.get("utm_zone")
-        utm_epsg   = community.get("utm_epsg")
-        utm_center_x = community.get("utm_center_x")
-        utm_center_y = community.get("utm_center_y")
-        modis_cx   = community.get("modis_center_x")
-        modis_cy   = community.get("modis_center_y")
-        _coastline_rel = community.get("coastline_geojson_path")
-        coastline = (
-            os.path.join(COMMUNITIES_DIR, community["id"], _coastline_rel)
-            if _coastline_rel else None
-        )
-        if coastline and not os.path.exists(coastline):
-            # Derive bbox from map_points or fallback to ±3° around site
-            pts = community.get("map_points", [])
-            lats = [p[0] for p in pts] + [lat]
-            lons = [p[1] for p in pts] + [lon]
-            pad = 2.0
-            bbox = (min(lats) - pad, min(lons) - pad, max(lats) + pad, max(lons) + pad)
-            ensure_coastline_geojson(sid, bbox, coastline)
+        utm_zone = community.get("utm_zone")
+        utm_epsg = community.get("utm_epsg")
+        # Compute UTM center dynamically from lat/lon — never trust hardcoded values
+        utm_center_x, utm_center_y = lib.latlon_to_utm(lat, lon, zone=utm_zone) if utm_zone else (None, None)
+        # Compute EPSG:3413 center dynamically too
+        modis_cx, modis_cy = lib.compute_3413_center(lat, lon)
         _wb_rel = community.get("water_bodies_geojson_path")
         water_bod = (
             os.path.join(COMMUNITIES_DIR, community["id"], _wb_rel)
@@ -400,6 +395,19 @@ def update_community(community, now_utc):
             pad = 1.5
             bbox = (min(lats) - pad, min(lons) - pad, max(lats) + pad, max(lons) + pad)
             ensure_water_bodies_geojson(sid, bbox, water_bod)
+        # Coastline GeoJSON — used by Sentinel-1 SAR/ice only, NOT by MODIS
+        _coastline_rel = community.get("coastline_geojson_path")
+        coastline = (
+            os.path.join(COMMUNITIES_DIR, community["id"], _coastline_rel)
+            if _coastline_rel else None
+        )
+        if coastline and not os.path.exists(coastline):
+            pts = community.get("map_points", [])
+            lats = [p[0] for p in pts] + [lat]
+            lons = [p[1] for p in pts] + [lon]
+            pad = 2.0
+            bbox_ll = (min(lats) - pad, min(lons) - pad, max(lats) + pad, max(lons) + pad)
+            ensure_coastline_geojson(sid, bbox_ll, coastline)
         map_pts    = community.get("map_points", [])
         ref_lines  = community.get("map_reference_lines", [])
         hydro_stations = community.get("hydrometric_stations", [])
@@ -411,18 +419,17 @@ def update_community(community, now_utc):
             fut_ice = fut_ice_zoom = fut_lake_ice = None
             fut_wave = fut_fire = None
 
-            if "modis" in enabled and modis_cx is not None:
-                bbox = community.get("modis_bbox_3413")
-                if not bbox:
-                    h = 150_000 * getattr(lib, "MODIS_OVERSIZE_FACTOR", 1.2)
-                    bbox = f"{modis_cx-h:.0f},{modis_cy-h:.0f},{modis_cx+h:.0f},{modis_cy+h:.0f}"
+            if "modis" in enabled:
+                # Build bbox from computed center; use config rotation_deg
+                h = 150_000 * getattr(lib, "MODIS_OVERSIZE_FACTOR", 1.2)
+                modis_bbox = f"{modis_cx-h:.0f},{modis_cy-h:.0f},{modis_cx+h:.0f},{modis_cy+h:.0f}"
                 fut_modis = ex.submit(
                     lib.fetch_and_process_modis,
-                    bbox_3413=bbox, center_x=modis_cx, center_y=modis_cy,
+                    bbox_3413=modis_bbox, center_x=modis_cx, center_y=modis_cy,
                     rotation_deg=community.get("modis_rotation_deg", 0.0),
                     points=map_pts, now_utc=now_utc, tz_name=tz_name,
                     reference_lines=ref_lines,
-                    coastline_geojson_path=coastline,
+                    # No coastline overlay on MODIS — it adds clutter with no benefit
                 )
 
             if "water_level" in enabled:
@@ -566,8 +573,9 @@ def update_community(community, now_utc):
         blocks += lib.build_todays_conditions_section(
             weather_text, weather_source_text, weather_icon_block, mini_forecast_strip_block,
             lat, lon, wind_now_text, wind_source_text, wind_icon_block, wind_forecast_chart_block,
-            tide_text, tide_chart_bytes, tide_chart_caption, tide_station_code or "",
+            tide_text, tide_chart_bytes, tide_chart_caption, tide_station_code or None,
             sun_text, sun_chart_bytes, sun_chart_caption,
+            extra_card=snow_card,
         )
 
     if "alerts" in enabled:
@@ -582,11 +590,13 @@ def update_community(community, now_utc):
         )
 
     if "wildfire" in enabled:
+        _wf_h = 150_000 * getattr(lib, "MODIS_OVERSIZE_FACTOR", 1.2)
+        _wf_bbox = f"{modis_cx-_wf_h:.0f},{modis_cy-_wf_h:.0f},{modis_cx+_wf_h:.0f},{modis_cy+_wf_h:.0f}"
         blocks += lib.build_wildfire_section(
             fires, lat, lon, now_utc, tz_name,
-            bbox_3413=community.get("modis_bbox_3413"),
-            center_x=community.get("modis_center_x"),
-            center_y=community.get("modis_center_y"),
+            bbox_3413=_wf_bbox,
+            center_x=modis_cx,
+            center_y=modis_cy,
             rotation_deg=community.get("modis_rotation_deg", 0.0),
         )
 
@@ -619,7 +629,7 @@ def update_community(community, now_utc):
         )
         blocks += lib.build_modis_section(
             modis_block_obj, modis_caption_str, modis_date, now_utc,
-            community.get("modis_bbox_3413", ""), site_label,
+            modis_bbox, site_label,
         )
 
     if "sentinel1" in enabled:

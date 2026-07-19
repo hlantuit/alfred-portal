@@ -6,7 +6,7 @@
   "lon": -133.5,
   "tz_name": "America/Inuvik",
   "type": "terrestrial",
-  "notion_page_id": "38a00194631e80229defe05ce06d5cfc",
+  "notion_page_id": "39000194631e802393b7f99a60fd88c4",
   "logo_url": "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg",
   "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
   "hydrometric_stations": [],
@@ -25,10 +25,16 @@
     ]
   ],
   "map_reference_lines": [],
+  "utm_zone": 8,
+  "utm_epsg": "32608",
+  "utm_center_x": 560934,
+  "utm_center_y": 7598220,
   "blocks": [
     "weather",
     "alerts",
-    "forecast",
+    "gem_forecast",
+    "lake_river_ice",
+    "wildfire",
     "temperature",
     "wind_chart"
   ]

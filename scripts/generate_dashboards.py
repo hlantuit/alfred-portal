@@ -388,6 +388,7 @@ def update_community(community, now_utc):
                     rotation_deg=community.get("modis_rotation_deg", 0.0),
                     points=map_pts, now_utc=now_utc, tz_name=tz_name,
                     reference_lines=ref_lines,
+                    coastline_geojson_path=coastline,
                 )
 
             if "water_level" in enabled:
@@ -446,7 +447,7 @@ def update_community(community, now_utc):
                 )
 
             if "wave_forecast" in enabled:
-                fut_wave = ex.submit(lib.fetch_wave_forecast, lat, lon, now_utc)
+                fut_wave = ex.submit(lib.fetch_wave_forecast, lat, lon, now_utc, site_label)
 
             if "wildfire" in enabled:
                 fut_fire = ex.submit(lib.fetch_cwfis_wildfires, lat, lon, 600, now_utc)

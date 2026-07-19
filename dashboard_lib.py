@@ -3187,7 +3187,7 @@ def fetch_modis_image(bbox_3413, now_utc, max_days_back=5, fetch_size_px=MODIS_F
 
 def annotate_modis_image(png_bytes, points, center_x, center_y, rotation_deg,
                           half_width_m=150_000, scale_km=50, reference_lines=None,
-                          final_size_px=MODIS_FINAL_SIZE_PX):
+                          final_size_px=MODIS_FINAL_SIZE_PX, coastline_geojson_path=None):
     """
     Draws label markers at the given coordinates and a scale bar on the
     MODIS image. The image itself has already been rotated to north-up
@@ -3245,6 +3245,29 @@ def annotate_modis_image(png_bytes, points, center_x, center_y, rotation_deg,
             x_px = width_px / 2 + dx_rot / meters_per_px
             y_px = height_px / 2 - dy_rot / meters_per_px
             return x_px, y_px
+
+        # --- Coastline overlay (white lines, 2px) ---
+        if coastline_geojson_path:
+            try:
+                import json as _json2
+                with open(coastline_geojson_path) as _cf:
+                    coast_geojson = _json2.load(_cf)
+                segments_drawn = 0
+                for feature in coast_geojson.get("features", []):
+                    geom = feature.get("geometry", {})
+                    if geom.get("type") != "LineString":
+                        continue
+                    coords = geom.get("coordinates", [])
+                    prev_px = None
+                    for coord_lon, coord_lat in coords:
+                        px = project_point(coord_lat, coord_lon)
+                        if prev_px is not None:
+                            draw.line([prev_px, px], fill=(255, 255, 255), width=2)
+                            segments_drawn += 1
+                        prev_px = px
+                print(f"MODIS COASTLINE OVERLAY: drew {segments_drawn} segments")
+            except Exception as e:
+                print(f"MODIS COASTLINE OVERLAY FAILED: {e}")
 
         # --- Label markers ---
         for point in points:
@@ -3578,7 +3601,8 @@ def stamp_timestamp(png_bytes, dt_local, label="Acquired"):
 
 
 def fetch_and_process_modis(bbox_3413, center_x, center_y, rotation_deg, points,
-                             now_utc, tz_name, half_width_m=150_000, reference_lines=None):
+                             now_utc, tz_name, half_width_m=150_000, reference_lines=None,
+                             coastline_geojson_path=None):
     """
     Wraps the full MODIS fetch-rotate-annotate-stamp chain as a single
     function, so it can run concurrently with the other independent
@@ -3591,6 +3615,7 @@ def fetch_and_process_modis(bbox_3413, center_x, center_y, rotation_deg, points,
         modis_bytes = annotate_modis_image(
             modis_bytes, points=points, center_x=center_x, center_y=center_y,
             rotation_deg=rotation_deg, half_width_m=half_width_m, reference_lines=reference_lines,
+            coastline_geojson_path=coastline_geojson_path,
         )
     if modis_bytes and modis_date:
         try:
@@ -4858,6 +4883,135 @@ def fetch_gdsps_water_level(lat, lon, now_utc, site_label, yearly_mean=None):
         return None, None, None
 
 
+def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
+    """
+    Fetches the GDWPS (Global Deterministic Wave Prediction System) significant
+    wave height, peak period, and mean direction at a point via MSC GeoMet WMS
+    GetFeatureInfo. Same approach as fetch_gdsps_water_level.
+
+    GDWPS covers the full Canadian Arctic domain (WAVEWATCH III), unlike the
+    Open-Meteo marine API which fails over sea-ice. 3-hour time steps.
+
+    Returns a wave_data dict (same structure as fetch_wave_forecast) or None.
+    """
+    try:
+        import concurrent.futures as _cf
+
+        # ---- Step 1: get valid time range from GetCapabilities ----
+        caps_url = (
+            "https://geo.weather.gc.ca/geomet"
+            "?service=WMS&version=1.3.0&request=GetCapabilities"
+            "&LAYERS=GDWPS_10km_HTSGW"
+        )
+        caps_resp = requests.get(caps_url, timeout=20)
+        caps_resp.raise_for_status()
+
+        import re as _re
+        m = _re.search(
+            r'<Dimension[^>]*name=["\']time["\'][^>]*>([^<]+)</Dimension>',
+            caps_resp.text,
+        )
+        if not m:
+            raise ValueError("Could not find time dimension in GDWPS GetCapabilities")
+        time_dim = m.group(1).strip()
+
+        parts = time_dim.split("/")
+        t_model = datetime.fromisoformat(parts[0].replace("Z", "+00:00")).replace(tzinfo=None)
+        t_end   = datetime.fromisoformat(parts[1].replace("Z", "+00:00")).replace(tzinfo=None)
+        now_naive = now_utc.replace(tzinfo=None)
+
+        step_h = 3
+        timestamps = []
+        t = t_model
+        while t <= t_end:
+            if t >= now_naive:
+                timestamps.append(t)
+            t += timedelta(hours=step_h)
+
+        # ---- Step 2: parallel GetFeatureInfo for HTSGW (wave height) ----
+        bbox = f"{lat - 0.5},{lon - 0.5},{lat + 0.5},{lon + 0.5}"
+
+        def _fetch_htsgw(ts):
+            try:
+                url = (
+                    "https://geo.weather.gc.ca/geomet"
+                    "?service=WMS&version=1.3.0&request=GetFeatureInfo"
+                    "&layers=GDWPS_10km_HTSGW&query_layers=GDWPS_10km_HTSGW"
+                    f"&bbox={bbox}&width=10&height=10&crs=EPSG:4326&i=5&j=5"
+                    "&info_format=application/json"
+                    f"&time={ts.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+                )
+                r = requests.get(url, timeout=15)
+                r.raise_for_status()
+                features = r.json().get("features", [])
+                if features:
+                    val = features[0]["properties"].get("value")
+                    if val is not None:
+                        return ts.strftime("%Y-%m-%dT%H:%M:%SZ"), float(val)
+            except Exception:
+                pass
+            return None
+
+        def _fetch_mtp(ts):
+            try:
+                url = (
+                    "https://geo.weather.gc.ca/geomet"
+                    "?service=WMS&version=1.3.0&request=GetFeatureInfo"
+                    "&layers=GDWPS_10km_MTP&query_layers=GDWPS_10km_MTP"
+                    f"&bbox={bbox}&width=10&height=10&crs=EPSG:4326&i=5&j=5"
+                    "&info_format=application/json"
+                    f"&time={ts.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+                )
+                r = requests.get(url, timeout=15)
+                r.raise_for_status()
+                features = r.json().get("features", [])
+                if features:
+                    val = features[0]["properties"].get("value")
+                    if val is not None:
+                        return ts.strftime("%Y-%m-%dT%H:%M:%SZ"), float(val)
+            except Exception:
+                pass
+            return None
+
+        with _cf.ThreadPoolExecutor(max_workers=20) as pool:
+            htsgw_raw = list(pool.map(_fetch_htsgw, timestamps))
+            mtp_raw   = list(pool.map(_fetch_mtp,   timestamps))
+
+        htsgw_pairs = [(t, v) for item in htsgw_raw if item for t, v in [item]]
+        if not htsgw_pairs:
+            raise ValueError(f"No valid GDWPS data returned for {site_label}")
+
+        mtp_dict = {t: v for item in mtp_raw if item for t, v in [item]}
+
+        times_out = [p[0] for p in htsgw_pairs]
+        heights   = [p[1] for p in htsgw_pairs]
+        periods   = [mtp_dict.get(t) for t in times_out]
+
+        now_str = now_utc.strftime("%Y-%m-%dT%H:00:00Z")
+        idx0 = next((i for i, t in enumerate(times_out) if t >= now_str), 0)
+
+        current = {
+            "height_m":    heights[idx0],
+            "period_s":    periods[idx0],
+            "direction_deg": None,
+        }
+
+        result = {
+            "times_raw":     times_out,
+            "heights_m":     heights,
+            "period_s":      periods,
+            "direction_deg": [None] * len(times_out),
+            "current":       current,
+            "source":        "GDWPS",
+        }
+        print(f"GDWPS WAVE: {len(times_out)} steps fetched for {site_label}")
+        return result
+
+    except Exception as e:
+        print(f"GDWPS WAVE FETCH FAILED for {site_label}:", e)
+        return None
+
+
 def build_water_level_chart(times, values, tz_name, yearly_mean=None,
                              gdsps_times=None, gdsps_values=None, gdsps_yearly_mean=None):
     if not times or not values:
@@ -5492,12 +5646,20 @@ def build_marine_forecast_section(marine_text, marine_source_text, zone_name, zo
     ]
 
 
-def fetch_wave_forecast(lat, lon, now_utc):
+def fetch_wave_forecast(lat, lon, now_utc, site_label="site"):
     """
-    Fetches 10-day wave forecast from Open-Meteo Marine API (GFS Wave /
-    ERA5-Ocean). Returns dict with 'times', 'heights_m', 'period_s',
-    'direction_deg', 'current', or None on failure.
+    Fetches 10-day significant wave height forecast. Tries ECCC GDWPS via
+    MSC GeoMet first (covers Canadian Arctic / ice-covered waters), then
+    falls back to Open-Meteo Marine API (fails in ice-covered areas).
+    Returns a wave_data dict or None on complete failure.
     """
+    # Primary: ECCC GDWPS (Canadian Arctic wave model, GeoMet WMS)
+    result = fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label)
+    if result:
+        return result
+
+    # Fallback: Open-Meteo marine API (fails over sea-ice but useful for open water)
+    print("WAVE FORECAST: GDWPS failed, falling back to Open-Meteo marine API")
     try:
         url = (
             "https://marine-api.open-meteo.com/v1/marine"
@@ -5524,14 +5686,15 @@ def fetch_wave_forecast(lat, lon, now_utc):
         }
 
         return {
-            "times_raw":   times_raw[idx:],
-            "heights_m":   heights[idx:],
-            "period_s":    periods[idx:],
+            "times_raw":     times_raw[idx:],
+            "heights_m":     heights[idx:],
+            "period_s":      periods[idx:],
             "direction_deg": directions[idx:],
-            "current":     current,
+            "current":       current,
+            "source":        "Open-Meteo",
         }
     except Exception as e:
-        print("WAVE FORECAST FETCH FAILED:", e)
+        print("WAVE FORECAST FETCH FAILED (both sources):", e)
         return None
 
 
@@ -5596,9 +5759,14 @@ def build_wave_forecast_chart(wave_data, tz_name, now_utc):
 
         png_bytes = fig_to_png_bytes(fig, white_bg=True)
         end_label = times[-1].strftime("%b %d, %Y %Z")
+        source = wave_data.get("source", "GDWPS")
+        if source == "GDWPS":
+            source_text = "Environment Canada GDWPS (WAVEWATCH III, 10 km) via MSC GeoMet"
+        else:
+            source_text = "Open-Meteo Marine API (GFS Wave / ERA5-Ocean)"
         caption = (
-            f"Significant wave height (VHM0), 10-day forecast ending {end_label}. "
-            f"Source: Copernicus Marine Service, GLOBAL_ANALYSIS_FORECAST_WAV_001_027."
+            f"Significant wave height, forecast ending {end_label}. "
+            f"Source: {source_text}."
         )
         location_note = wave_data.get("location_note")
         if location_note:

@@ -2,8 +2,8 @@
   "id": "trail-valley",
   "name": "Trail Valley Creek",
   "site_display_name": "Trail Valley Creek",
-  "lat": 68.749154,
-  "lon": -133.500000,
+  "lat": 68.74,
+  "lon": -133.50,
   "tz_name": "America/Inuvik",
   "type": "terrestrial",
   "public_notion_url": "https://snapdragon-hardboard-204.notion.site/trail-valley-creek-environmental-dashboard",
@@ -12,12 +12,13 @@
   "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
   "hydrometric_stations": [],
   "map_points": [
-    [68.749154, -133.5, "Trail Valley Creek", -28],
+    [68.74, -133.5, "Trail Valley Creek", -28],
     [68.360741, -133.723022, "Inuvik", -10, -90],
     [68.226653, -135.003294, "Aklavik", -10],
     [67.437781, -134.895544, "Fort McPherson", -10]
   ],
   "map_reference_lines": [],
+  "coastline_geojson_path": "coastline_data.geojson",
   "water_bodies_geojson_path": "water_bodies.geojson",
   "utm_zone": 8,
   "utm_epsg": "32608",
@@ -30,12 +31,12 @@
   "blocks": [
     "weather",
     "alerts",
+    "wildfire",
     "gem_forecast",
     "snow_depth",
     "modis",
     "sentinel1",
     "lake_river_ice",
-    "wildfire",
     "temperature",
     "wind_chart"
   ]

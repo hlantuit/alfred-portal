@@ -5386,7 +5386,7 @@ def fetch_snow_depth(lat, lon, past_days=30):
             f"?latitude={lat}&longitude={lon}"
             f"&hourly=snow_depth&past_days={past_days}&forecast_days=1&timezone=UTC"
         )
-        r = requests.get(url, timeout=20)
+        r = requests.get(url, timeout=45)
         r.raise_for_status()
         data = r.json()
         times = data["hourly"]["time"]

@@ -76,26 +76,34 @@ def _fetch_weather(lat, lon):
         "https://api.open-meteo.com/v1/forecast",
         params={
             "latitude": lat, "longitude": lon,
-            "hourly": "temperature_2m,wind_speed_10m,wind_direction_10m,weather_code",
+            "hourly": "temperature_2m,wind_u_component_10m,wind_v_component_10m,weather_code",
             "models": "ecmwf_ifs025",
             "timezone": "UTC",
             "start_date": now_iso,
             "end_date": now_iso,
         },
     )
-    data = r.json()
-    temps  = data["hourly"]["temperature_2m"]
-    speeds = data["hourly"]["wind_speed_10m"]
-    dirs   = data["hourly"]["wind_direction_10m"]
-    codes  = data["hourly"]["weather_code"]
+    data  = r.json()
+    temps = data["hourly"]["temperature_2m"]
+    us    = data["hourly"]["wind_u_component_10m"]  # m/s eastward, continuous float
+    vs    = data["hourly"]["wind_v_component_10m"]  # m/s northward, continuous float
+    codes = data["hourly"]["weather_code"]
 
     now_h = datetime.now(timezone.utc).hour
-    idx = min(range(len(temps)), key=lambda i: abs(i - now_h))
+    idx   = min(range(len(temps)), key=lambda i: abs(i - now_h))
+
+    u_ms   = us[idx] or 0.0
+    v_ms   = vs[idx] or 0.0
+    spd_ms = math.sqrt(u_ms**2 + v_ms**2)
+    # meteorological convention: direction wind comes FROM
+    wind_dir = (math.degrees(math.atan2(-u_ms, -v_ms)) + 360) % 360 if spd_ms > 0 else None
 
     return {
-        "air_temp_c":   round(temps[idx],  1) if temps[idx]  is not None else None,
-        "wind_kmh":     round(speeds[idx], 1) if speeds[idx] is not None else None,
-        "wind_dir_deg": dirs[idx],
+        "air_temp_c":   round(temps[idx], 1) if temps[idx] is not None else None,
+        "wind_kmh":     round(spd_ms * 3.6, 1),
+        "wind_dir_deg": round(wind_dir, 1) if wind_dir is not None else None,
+        "wind_u_ms":    round(u_ms, 3),
+        "wind_v_ms":    round(v_ms, 3),
         "weather_code": codes[idx],
         "surge_m":      None,
     }
@@ -108,9 +116,8 @@ def _fetch_weather(lat, lon):
 def _fetch_uv(lat, lon):
     try:
         d = _fetch_weather(lat, lon)
-        spd = (d["wind_kmh"] or 0) / 3.6
-        dr = math.radians(d["wind_dir_deg"] or 0)
-        return -spd * math.sin(dr), -spd * math.cos(dr)
+        # Use raw u/v directly — no angle roundtrip, fully continuous
+        return d["wind_u_ms"], d["wind_v_ms"]
     except Exception as e:
         print(f"WIND GRID FETCH FAILED ({lat:.2f},{lon:.2f}): {e}")
         return 0.0, 0.0

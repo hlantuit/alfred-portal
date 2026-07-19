@@ -4,8 +4,8 @@ weather block — current conditions from Open-Meteo ECMWF IFS 0.25°.
 render(community) -> list of Notion blocks
 """
 
-import math
 from datetime import datetime, timezone
+import math
 
 try:
     import requests
@@ -39,7 +39,7 @@ def _fetch(lat, lon):
         "https://api.open-meteo.com/v1/forecast",
         params={
             "latitude": lat, "longitude": lon,
-            "hourly": "temperature_2m,wind_speed_10m,wind_direction_10m,weather_code",
+            "hourly": "temperature_2m,wind_u_component_10m,wind_v_component_10m,weather_code",
             "models": "ecmwf_ifs025",
             "timezone": "UTC",
             "start_date": now_iso,
@@ -52,11 +52,15 @@ def _fetch(lat, lon):
     now_h  = datetime.now(timezone.utc).hour
     hourly = data["hourly"]
     idx    = min(range(len(hourly["time"])), key=lambda i: abs(i - now_h))
+    u_ms   = hourly["wind_u_component_10m"][idx] or 0.0
+    v_ms   = hourly["wind_v_component_10m"][idx] or 0.0
+    spd_ms = math.sqrt(u_ms**2 + v_ms**2)
+    wind_dir = (math.degrees(math.atan2(-u_ms, -v_ms)) + 360) % 360 if spd_ms > 0 else None
     return {
-        "temp_c":    hourly["temperature_2m"][idx],
-        "wind_kmh":  hourly["wind_speed_10m"][idx],
-        "wind_dir":  hourly["wind_direction_10m"][idx],
-        "wmo_code":  hourly["weather_code"][idx],
+        "temp_c":   hourly["temperature_2m"][idx],
+        "wind_kmh": round(spd_ms * 3.6, 1),
+        "wind_dir": round(wind_dir, 1) if wind_dir is not None else None,
+        "wmo_code": hourly["weather_code"][idx],
     }
 
 

@@ -492,55 +492,55 @@ def update_community(community, now_utc):
                 for st in hydro_stations
             ]
 
-            # Collect results
+            # Collect results — all with timeouts to prevent indefinite hangs
             if fut_modis:
                 try:
-                    modis_bytes, modis_date = fut_modis.result()
+                    modis_bytes, modis_date = fut_modis.result(timeout=180)
                 except Exception as e:
                     print(f"[{sid}] MODIS FAILED: {e}")
             if fut_wl:
                 try:
-                    gdsps_times, gdsps_values, gdsps_yearly_mean = fut_wl.result()
+                    gdsps_times, gdsps_values, gdsps_yearly_mean = fut_wl.result(timeout=180)
                 except Exception as e:
                     print(f"[{sid}] WATER LEVEL FAILED: {e}")
             if fut_topaz:
                 try:
-                    topaz_times, topaz_values, topaz_yearly_mean = fut_topaz.result()
+                    topaz_times, topaz_values, topaz_yearly_mean = fut_topaz.result(timeout=300)
                 except Exception as e:
                     print(f"[{sid}] TOPAZ WATER LEVEL FAILED: {e}")
             if fut_s1:
                 try:
-                    sentinel1_bytes, sentinel1_caption = fut_s1.result()
+                    sentinel1_bytes, sentinel1_caption = fut_s1.result(timeout=240)
                 except Exception as e:
                     print(f"[{sid}] SENTINEL-1 FAILED: {e}")
             if fut_ice:
                 try:
-                    sea_ice_bytes, sea_ice_caption = fut_ice.result()
+                    sea_ice_bytes, sea_ice_caption = fut_ice.result(timeout=240)
                 except Exception as e:
                     print(f"[{sid}] SEA ICE FAILED: {e}")
             if fut_ice_zoom:
                 try:
-                    sea_ice_zoom_bytes, sea_ice_zoom_caption = fut_ice_zoom.result()
+                    sea_ice_zoom_bytes, sea_ice_zoom_caption = fut_ice_zoom.result(timeout=240)
                 except Exception as e:
                     print(f"[{sid}] SEA ICE ZOOM FAILED: {e}")
             if fut_lake_ice:
                 try:
-                    lake_ice_bytes, lake_ice_caption = fut_lake_ice.result()
+                    lake_ice_bytes, lake_ice_caption = fut_lake_ice.result(timeout=240)
                 except Exception as e:
                     print(f"[{sid}] LAKE ICE FAILED: {e}")
             if fut_wave:
                 try:
-                    wave_data = fut_wave.result()
+                    wave_data = fut_wave.result(timeout=120)
                 except Exception as e:
                     print(f"[{sid}] WAVE FORECAST FAILED: {e}")
             if fut_fire:
                 try:
-                    fires = fut_fire.result()
+                    fires = fut_fire.result(timeout=90)
                 except Exception as e:
                     print(f"[{sid}] WILDFIRE FAILED: {e}")
             for st, fut in hydrometric_futures:
                 try:
-                    h_times, h_values = fut.result()
+                    h_times, h_values = fut.result(timeout=90)
                 except Exception as e:
                     print(f"[{sid}] HYDROMETRIC[{st['station_id']}] FAILED: {e}")
                     h_times, h_values = None, None
@@ -687,15 +687,19 @@ def main():
 
     now_utc = datetime.now(timezone.utc)
 
+    _COMMUNITY_TIMEOUT = 900  # 15 min per community; 9 × 15 = 135 min max total
     for i, community in enumerate(communities):
         if i > 0:
             time.sleep(5)
+        t0 = time.monotonic()
         try:
             update_community(community, now_utc)
         except Exception as e:
             import traceback
             print(f"ERROR [{community['id']}]: {e}")
             traceback.print_exc()
+        elapsed = time.monotonic() - t0
+        print(f"[{community['id']}] wall time: {elapsed:.0f}s")
 
     print("\nAll communities updated.")
 

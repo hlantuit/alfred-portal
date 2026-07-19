@@ -24,11 +24,13 @@ jobs:
       - name: Generate portal data
         run: python scripts/generate_portal_data.py --out-dir data
 
-      # Update every community's Notion dashboard (weather block + others)
-      - name: Update Notion dashboards
-        env:
-          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-        run: python scripts/generate_dashboards.py
+      # NOTE: generate_dashboards.py is disabled until blocks are fully ported
+      # from the old per-site dashboard_update.py scripts.
+      # Re-enable by uncommenting the step below once blocks are ready.
+      # - name: Update Notion dashboards
+      #   env:
+      #     NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      #   run: python scripts/generate_dashboards.py
 
       - name: Commit and push
         run: |

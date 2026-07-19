@@ -93,6 +93,13 @@
   .leaflet-control-attribution{
     font-size:10px;background:rgba(255,255,255,0.85);color:var(--body);
   }
+  .site-label{
+    background:none;border:none;box-shadow:none;
+    font-size:11px;font-weight:700;color:#1a2e40;
+    text-shadow:0 1px 3px #fff,0 -1px 3px #fff,1px 0 3px #fff,-1px 0 3px #fff;
+    white-space:nowrap;padding:0 2px;
+  }
+  .site-label::before{display:none;}
 </style>
 </head>
 <body>
@@ -274,6 +281,7 @@ setTimeout(reportHeight, 500);
         <a class="popup-link" href="${s.dashboard}" target="_blank">Open full dashboard</a>
       `;
       marker.bindPopup(popupContent);
+      marker.bindTooltip(s.name, {permanent: true, direction: 'right', className: 'site-label'});
       marker.on('mouseover', function() { this.openPopup(); });
     });
 

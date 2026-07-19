@@ -18,19 +18,17 @@ jobs:
         with:
           python-version: "3.11"
 
-      - run: pip install requests
+      - run: pip install requests pillow matplotlib numpy notion-client
 
       # Regenerate sites.json + conditions + wind grid from communities/
       - name: Generate portal data
         run: python scripts/generate_portal_data.py --out-dir data
 
-      # NOTE: generate_dashboards.py is disabled until blocks are fully ported
-      # from the old per-site dashboard_update.py scripts.
-      # Re-enable by uncommenting the step below once blocks are ready.
-      # - name: Update Notion dashboards
-      #   env:
-      #     NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-      #   run: python scripts/generate_dashboards.py
+      # Update Notion dashboards using dashboard_lib (vendored at repo root)
+      - name: Update Notion dashboards
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        run: python scripts/generate_dashboards.py
 
       - name: Commit and push
         run: |

@@ -1,9 +1,44 @@
 {
   "id": "herschel",
   "name": "Qikiqtaruk / Herschel Island",
+  "site_display_name": "Qikiqtaruk Herschel Island",
   "lat": 69.578,
   "lon": -138.917,
+  "tz_name": "America/Inuvik",
   "type": "coastal",
   "notion_page_id": "38700194631e806bb653e46a8606c7a5",
-  "blocks": ["weather", "erosion"]
+  "logo_url": "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg",
+  "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
+  "tide_station_code": "06525",
+  "tide_station_name": "Herschel Island",
+  "marine_zone_id": "16000",
+  "marine_zone_name": "Yukon Coast",
+  "water_level_yearly_mean": -0.2668,
+  "hydrometric_stations": [],
+  "modis_center_x": -2230848,
+  "modis_center_y": 152544,
+  "modis_rotation_deg": 86.09,
+  "utm_zone": 7,
+  "utm_epsg": "32607",
+  "coastline_geojson_path": "coastline_data.geojson",
+  "map_points": [
+    [69.578, -138.917, "Qikiqtaruk Herschel Island", -28],
+    [68.933333, -137.2, "Shingle Point", -10],
+    [68.226653, -135.003294, "Aklavik", -10],
+    [68.360741, -133.723022, "Inuvik", -10, -90]
+  ],
+  "map_reference_lines": [
+    [60.0, -141.0, 69.65, -141.0, "Yukon/Alaska border"]
+  ],
+  "blocks": [
+    "weather",
+    "alerts",
+    "forecast",
+    "marine",
+    "water_level",
+    "modis",
+    "sentinel1",
+    "temperature",
+    "wind_chart"
+  ]
 }

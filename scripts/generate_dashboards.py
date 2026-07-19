@@ -59,7 +59,9 @@ def ensure_coastline_geojson(community_id, bbox_latlon, out_path):
     try:
         r = _requests.post(
             "https://overpass-api.de/api/interpreter",
-            data={"data": query}, timeout=120,
+            data={"data": query},
+            headers={"User-Agent": "alfred-portal/1.0 (arctic environmental dashboard; hugues.lantuit@awi.de)"},
+            timeout=120,
         )
         r.raise_for_status()
         elements = r.json().get("elements", [])
@@ -100,7 +102,9 @@ def ensure_water_bodies_geojson(community_id, bbox_latlon, out_path):
     try:
         r = _requests.post(
             "https://overpass-api.de/api/interpreter",
-            data={"data": query}, timeout=120,
+            data={"data": query},
+            headers={"User-Agent": "alfred-portal/1.0 (arctic environmental dashboard; hugues.lantuit@awi.de)"},
+            timeout=120,
         )
         r.raise_for_status()
         elements = r.json().get("elements", [])

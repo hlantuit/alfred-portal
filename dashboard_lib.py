@@ -289,7 +289,7 @@ def upload_image_to_notion(image_bytes, filename="image.png"):
             "Notion-Version": "2022-06-28",
             "Content-Type": "application/json",
         },
-        json={"content_type": "image/png"},
+        json={"content_type": "image/png", "name": filename},
         timeout=20,
     )
     create_resp.raise_for_status()
@@ -307,16 +307,30 @@ def upload_image_to_notion(image_bytes, filename="image.png"):
         )
         put_resp.raise_for_status()
     else:
-        # Fallback: multipart send endpoint.
+        # upload_url absent: try raw binary POST to /send, then multipart.
+        print(f"NOTION UPLOAD DEBUG: no upload_url in create response keys={list(create_json.keys())}")
         send_resp = requests.post(
             f"https://api.notion.com/v1/file_uploads/{upload_id}/send",
             headers={
                 "Authorization": f"Bearer {NOTION_TOKEN}",
                 "Notion-Version": "2022-06-28",
+                "Content-Type": "image/png",
             },
-            files={"file": (filename, image_bytes, "image/png")},
+            data=image_bytes,
             timeout=60,
         )
+        if send_resp.status_code == 400:
+            # Some integration types need multipart instead of raw binary.
+            print(f"NOTION UPLOAD DEBUG: raw binary /send → {send_resp.status_code}, trying multipart")
+            send_resp = requests.post(
+                f"https://api.notion.com/v1/file_uploads/{upload_id}/send",
+                headers={
+                    "Authorization": f"Bearer {NOTION_TOKEN}",
+                    "Notion-Version": "2022-06-28",
+                },
+                files={"file": (filename, image_bytes, "image/png")},
+                timeout=60,
+            )
         send_resp.raise_for_status()
 
     return upload_id
@@ -4713,8 +4727,9 @@ def fetch_copernicus_water_level(lat, lon, now_utc, site_label, yearly_mean=None
         nearby = ds["zos"].sel(x=x_slice, y=y_slice)
         print(f"COPERNICUS WATER LEVEL DEBUG [{site_label}]: after x/y selection, nearby size={nearby.size}, dims={dict(nearby.sizes)}")
 
-        start = now_utc
-        end = now_utc + timedelta(days=10)
+        # Strip timezone for xarray sel — dataset time coords are tz-naive.
+        start = now_utc.replace(tzinfo=None)
+        end = (now_utc + timedelta(days=10)).replace(tzinfo=None)
 
         time_coords = nearby["time"].values
         time_ascending = time_coords[0] < time_coords[-1] if len(time_coords) > 1 else True
@@ -4765,8 +4780,9 @@ def fetch_copernicus_water_level(lat, lon, now_utc, site_label, yearly_mean=None
         # Each new site then works without a pre-computed constant — the
         # 30-day mean is a stable-enough proxy for the local TOPAZ6 geoid offset.
         if yearly_mean is None:
-            hist_start = now_utc - timedelta(days=30)
-            hist_time_slice = slice(hist_start, now_utc) if time_ascending else slice(now_utc, hist_start)
+            hist_start = (now_utc - timedelta(days=30)).replace(tzinfo=None)
+            hist_now = now_utc.replace(tzinfo=None)
+            hist_time_slice = slice(hist_start, hist_now) if time_ascending else slice(hist_now, hist_start)
             hist_data = ds["zos"].sel(x=best_point[0], y=best_point[1], time=hist_time_slice)
             hist_values = [float(v) for v in hist_data.values.flatten() if not math.isnan(float(v))]
             if hist_values:
@@ -4907,11 +4923,21 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
         caps_resp.raise_for_status()
 
         import re as _re
+        # Try <Dimension name="time">value</Dimension> (WMS 1.3.0 style)
         m = _re.search(
             r'<Dimension[^>]*name=["\']time["\'][^>]*>([^<]+)</Dimension>',
             caps_resp.text,
         )
+        # Also try <Extent name="time">value</Extent> (WMS 1.1.1 style)
         if not m:
+            m = _re.search(
+                r'<Extent[^>]*name=["\']time["\'][^>]*>([^<]+)</Extent>',
+                caps_resp.text,
+            )
+        if not m:
+            # Log snippet for debugging.
+            snippet = caps_resp.text[:500] if len(caps_resp.text) > 0 else "(empty response)"
+            print(f"GDWPS GetCapabilities snippet: {snippet}")
             raise ValueError("Could not find time dimension in GDWPS GetCapabilities")
         time_dim = m.group(1).strip()
 

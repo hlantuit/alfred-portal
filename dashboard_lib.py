@@ -5046,12 +5046,13 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
 
         htsgw_pairs = [(t, v) for item in htsgw_raw if item for t, v in [item]]
         print(f"GDWPS: {len(htsgw_pairs)} valid steps out of {len(timestamps)} requested for {site_label}")
-        # Require ≥72 valid steps (9 days at 3-hourly); shorter means either the
-        # site is outside the GDWPS domain or only the short-range product is available.
-        if len(htsgw_pairs) < 72:
+        # Require at least 8 valid steps (1 day). GDWPS is the correct Arctic wave
+        # model; accept any meaningful result rather than falling back to Open-Meteo
+        # which has poor coverage over the Beaufort Sea.
+        if len(htsgw_pairs) < 8:
             raise ValueError(
                 f"GDWPS returned only {len(htsgw_pairs)} valid steps for {site_label} "
-                f"(layer {htsgw_layer!r}) — need ≥72; falling back to Open-Meteo"
+                f"(layer {htsgw_layer!r}) — need ≥8; falling back to Open-Meteo"
             )
 
         mtp_dict = {t: v for item in mtp_raw if item for t, v in [item]}

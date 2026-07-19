@@ -481,7 +481,8 @@ def update_community(community, now_utc):
                 )
 
             if "wave_forecast" in enabled:
-                fut_wave = ex.submit(lib.fetch_wave_forecast, lat, lon, now_utc, site_label)
+                wave_lat = community.get("wave_lat", lat)
+                fut_wave = ex.submit(lib.fetch_wave_forecast, wave_lat, lon, now_utc, site_label)
 
             if "wildfire" in enabled:
                 fut_fire = ex.submit(lib.fetch_cwfis_wildfires, lat, lon, 600, now_utc)

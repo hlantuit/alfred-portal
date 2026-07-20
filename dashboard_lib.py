@@ -3752,7 +3752,7 @@ def _point_covered_by_geometry(lon, lat, geometry, half_width_deg_lon, half_widt
     return covered_count / len(test_points) >= 0.20
 
 
-def find_latest_sentinel1_date(token, lat, lon, site_label, lookback_days=10, half_width_km=150, now_utc=None):
+def find_latest_sentinel1_date(token, lat, lon, site_label, lookback_days=10, half_width_km=150, now_utc=None, required_band=None):
     """
     Searches the Catalog API for the most recent Sentinel-1 GRD scene
     that actually covers the given site within the lookback window.
@@ -3816,6 +3816,15 @@ def find_latest_sentinel1_date(token, lat, lon, site_label, lookback_days=10, ha
         if not covering_features:
             print(f"SENTINEL-1: scenes found nearby, but none actually cover {site_label} with margin")
             return None, None, None, None, None
+
+        if required_band:
+            covering_features = [
+                f for f in covering_features
+                if required_band in f.get("properties", {}).get("sar:polarizations", [])
+            ]
+            if not covering_features:
+                print(f"SENTINEL-1: no {required_band} scene found for {site_label} in {lookback_days}-day window")
+                return None, None, None, None, None
 
         covering_features.sort(key=lambda f: f["properties"]["datetime"], reverse=True)
         best = covering_features[0]
@@ -4972,6 +4981,22 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
         # ---- Step 2: parallel GetFeatureInfo for HTSGW (wave height) ----
         bbox = f"{lat - 0.5},{lon - 0.5},{lat + 0.5},{lon + 0.5}"
 
+        # Probe one timestamp to log what the server actually returns for diagnosis
+        if timestamps:
+            _probe_url = (
+                "https://geo.weather.gc.ca/geomet"
+                "?service=WMS&version=1.3.0&request=GetFeatureInfo"
+                f"&layers={htsgw_layer}&query_layers={htsgw_layer}"
+                f"&bbox={bbox}&width=10&height=10&crs=EPSG:4326&i=5&j=5"
+                "&info_format=application/json"
+                f"&time={timestamps[0].strftime('%Y-%m-%dT%H:%M:%SZ')}"
+            )
+            try:
+                _pr = requests.get(_probe_url, timeout=15)
+                print(f"GDWPS PROBE [{site_label}]: HTTP {_pr.status_code}, body[:300]={_pr.text[:300]!r}")
+            except Exception as _pe:
+                print(f"GDWPS PROBE [{site_label}]: failed: {_pe}")
+
         def _fetch_htsgw(ts):
             try:
                 url = (
@@ -5232,10 +5257,12 @@ def fetch_hydrometric_water_level(station_id, provterr):
         f"{provterr}_{station_id}_daily_hydrometric.csv"
     )
     try:
+        url = url_historical
         try:
             resp = get_with_retry(url_historical, timeout=20, retries=2, backoff_seconds=5)
         except Exception as _e:
             print(f"HYDROMETRIC[{station_id}]: historical URL failed ({_e}), trying today/ fallback")
+            url = url_today
             resp = get_with_retry(url_today, timeout=20, retries=1, backoff_seconds=3)
 
         import csv as _csv
@@ -5791,7 +5818,7 @@ def fetch_wave_forecast(lat, lon, now_utc, site_label="site"):
         return result
 
     # Fallback: Open-Meteo marine API (fails over sea-ice but useful for open water)
-    print("WAVE FORECAST: GDWPS failed, falling back to Open-Meteo marine API")
+    print(f"WAVE FORECAST: GDWPS failed for {site_label} [{lat},{lon}], falling back to Open-Meteo marine API")
     try:
         url = (
             "https://marine-api.open-meteo.com/v1/marine"
@@ -5800,6 +5827,7 @@ def fetch_wave_forecast(lat, lon, now_utc, site_label="site"):
             "&forecast_days=10&timezone=UTC"
         )
         r = requests.get(url, timeout=20)
+        print(f"WAVE FORECAST Open-Meteo [{site_label}]: HTTP {r.status_code}, body[:200]={r.text[:200]!r}")
         r.raise_for_status()
         data = r.json()
 
@@ -5840,7 +5868,7 @@ def fetch_wave_forecast(lat, lon, now_utc, site_label="site"):
             "source":        "Open-Meteo",
         }
     except Exception as e:
-        print("WAVE FORECAST FETCH FAILED (both sources):", e)
+        print(f"WAVE FORECAST FETCH FAILED (both sources) [{lat},{lon}]:", e)
         return None
 
 
@@ -6218,15 +6246,15 @@ def fetch_and_process_sentinel1_lake_ice(lat, lon, site_label, utm_zone, utm_eps
     if not s1_date:
         return None, "Lake ice classification unavailable — no recent Sentinel-1 scene found."
 
-    # Inland sites often have IW (VV) as the most-recent scene; EW (HH) acquisitions
-    # are less frequent but do occur over the Canadian Arctic. Try a 30-day lookback
-    # to find the most recent EW HH scene before giving up.
+    # Lake ice classification requires HH polarisation (EW mode).
+    # If the most recent scene is IW (VV), search the past 30 days specifically
+    # for an EW HH acquisition — these occur less frequently over inland sites.
     if band != "HH":
         print(f"LAKE ICE [{site_label}]: latest scene is {band} ({acq_mode}); searching 30-day window for EW HH")
         s1_date2, s1_full_datetime2, acq_mode2, band2, pol_filter2 = find_latest_sentinel1_date(
-            sh_token, lat, lon, site_label, lookback_days=30, now_utc=now_utc
+            sh_token, lat, lon, site_label, lookback_days=30, now_utc=now_utc, required_band="HH"
         )
-        if s1_date2 and band2 == "HH":
+        if s1_date2:
             s1_date, s1_full_datetime, acq_mode, band, pol_filter = s1_date2, s1_full_datetime2, acq_mode2, band2, pol_filter2
             print(f"LAKE ICE [{site_label}]: found EW HH scene {s1_date}")
         else:

@@ -52,6 +52,7 @@ CACHE_DIR       = os.path.join(REPO_ROOT, "cache")
 _OVERPASS_SERVERS = [
     "https://overpass-api.de/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.openstreetmap.ru/api/interpreter",
 ]
 _OVERPASS_HEADERS = {"User-Agent": "alfred-portal/1.0 (arctic environmental dashboard; hugues.lantuit@awi.de)"}
 

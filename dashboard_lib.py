@@ -474,7 +474,7 @@ def get_weather(lat, lon):
             "hourly": "relativehumidity_2m,pressure_msl,windspeed_10m,winddirection_10m",
             "timezone": "UTC",
         }
-        r = get_with_retry(url, params=params, timeout=20, retries=1, backoff_seconds=5)
+        r = get_with_retry(url, params=params, timeout=30, retries=2, backoff_seconds=5)
         data = r.json()
 
         cw = data["current_weather"]
@@ -5069,12 +5069,13 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
         htsgw_pairs = [(t, v) for item in htsgw_raw if item for t, v in [item]]
         print(f"GDWPS: {len(htsgw_pairs)} valid steps out of {len(timestamps)} requested for {site_label}")
         # Require at least 8 valid steps (1 day). GDWPS is the correct Arctic wave
-        # model; accept any meaningful result rather than falling back to Open-Meteo
-        # which has poor coverage over the Beaufort Sea.
-        if len(htsgw_pairs) < 8:
+        # The GDWPS 25 km layer has only a ~3-day horizon (~23 steps at 3 h).
+        # Require ≥ 50 steps (≥6 days) so the 25 km product always falls back
+        # to Open-Meteo, which provides a full 10-day forecast with direction.
+        if len(htsgw_pairs) < 50:
             raise ValueError(
                 f"GDWPS returned only {len(htsgw_pairs)} valid steps for {site_label} "
-                f"(layer {htsgw_layer!r}) — need ≥8; falling back to Open-Meteo"
+                f"(layer {htsgw_layer!r}) — need ≥50 for a useful forecast; falling back to Open-Meteo"
             )
 
         mtp_dict = {t: v for item in mtp_raw if item for t, v in [item]}
@@ -5092,6 +5093,7 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
             "direction_deg": None,
         }
 
+        res_km = "10 km" if "10km" in htsgw_layer else "25 km"
         result = {
             "times_raw":     times_out,
             "heights_m":     heights,
@@ -5099,6 +5101,7 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
             "direction_deg": [None] * len(times_out),
             "current":       current,
             "source":        "GDWPS",
+            "gdwps_res":     res_km,
         }
         print(f"GDWPS WAVE: {len(times_out)} steps fetched for {site_label}")
         return result
@@ -5603,27 +5606,58 @@ def build_snow_depth_chart(times, depths_cm, now_utc):
         return None, "Snow depth chart could not be generated — see Action logs."
 
 
+def _resolve_webcam_image_url(webcam_url):
+    """
+    For FAA WeatherCams, webcam_url may be the public images API endpoint
+    (https://weathercams.faa.gov/api/cameras/{id}/images).  Resolve it to
+    the actual latest JPEG URL.  For all other URLs, return as-is.
+    """
+    if "weathercams.faa.gov/api/cameras" in webcam_url and webcam_url.endswith("/images"):
+        try:
+            resp = requests.get(webcam_url, timeout=15, headers={"User-Agent": "alfred-portal/1.0"})
+            resp.raise_for_status()
+            payload = resp.json().get("payload") or []
+            if payload:
+                img_url = payload[0].get("imageUri")
+                if img_url:
+                    print(f"FAA WEBCAM: resolved latest image → {img_url}")
+                    return img_url
+        except Exception as e:
+            print(f"FAA WEBCAM API FAILED ({webcam_url}): {e}")
+        return None
+    return webcam_url
+
+
 def build_webcam_card(webcam_url, webcam_label="Webcam", webcam_page_url=None):
     """
     Downloads the current webcam JPEG/PNG from webcam_url, uploads it to
     Notion, and returns card blocks (list) for use as extra_card in
     build_todays_conditions_section.
 
-    webcam_url:      direct image URL (refreshed each run)
-    webcam_label:    short label shown as heading, e.g. "Webcam — North View"
+    webcam_url:      direct image URL or FAA images API URL
+    webcam_label:    short label shown as heading
     webcam_page_url: optional link to the full webcam page
     """
-    try:
-        r = requests.get(webcam_url, timeout=20, headers={"User-Agent": "alfred-portal/1.0"})
-        r.raise_for_status()
-        img_bytes = r.content
-    except Exception as e:
-        print(f"WEBCAM FETCH FAILED ({webcam_url}): {e}")
-        img_bytes = None
+    resolved = _resolve_webcam_image_url(webcam_url)
+    img_bytes = None
+    if resolved:
+        try:
+            r = requests.get(resolved, timeout=20, headers={"User-Agent": "alfred-portal/1.0"})
+            r.raise_for_status()
+            img_bytes = r.content
+        except Exception as e:
+            print(f"WEBCAM FETCH FAILED ({resolved}): {e}")
+    else:
+        print(f"WEBCAM: could not resolve image URL from {webcam_url}")
 
     img_block, _ = _upload_chart_or_caption(img_bytes, "webcam.jpg", "")
 
-    source_note = "NAV CANADA Weather Camera" if "navcanada" in webcam_url else webcam_url[:60]
+    if "navcanada" in webcam_url:
+        source_note = "NAV CANADA Weather Camera"
+    elif "weathercams.faa.gov" in webcam_url:
+        source_note = "FAA Weather Camera"
+    else:
+        source_note = webcam_url[:60]
     caption_page = webcam_page_url or webcam_url
     blocks = [
         heading(f"📷 {webcam_label}", level=3),
@@ -6018,7 +6052,8 @@ def build_wave_forecast_chart(wave_data, tz_name, now_utc):
         end_label = times[-1].strftime("%b %d, %Y %Z")
         source = wave_data.get("source", "GDWPS")
         if source == "GDWPS":
-            source_text = "Environment Canada GDWPS (WAVEWATCH III, 10 km) via MSC GeoMet"
+            gdwps_res = wave_data.get("gdwps_res", "25 km")
+            source_text = f"Environment Canada GDWPS (WAVEWATCH III, {gdwps_res}) via MSC GeoMet"
         else:
             source_text = "Open-Meteo Marine API (GFS Wave / ERA5-Ocean)"
         caption = (

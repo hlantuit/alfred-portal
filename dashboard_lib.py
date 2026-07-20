@@ -2432,11 +2432,22 @@ def build_temperature_chart(lat, lon, now_utc, temp_cache, normal_years=30):
                 normals_by_day[matching_label].append(temp)
 
     normal_values = []
+    normal_std    = []
     years_used_counts = []
     for d in day_labels:
         vals = normals_by_day[d]
         years_used_counts.append(len(vals))
-        normal_values.append(sum(vals) / len(vals) if vals else None)
+        if vals:
+            mean = sum(vals) / len(vals)
+            normal_values.append(mean)
+            if len(vals) >= 3:
+                variance = sum((v - mean) ** 2 for v in vals) / (len(vals) - 1)
+                normal_std.append(variance ** 0.5)
+            else:
+                normal_std.append(1.5)   # too few years: fall back to fixed width
+        else:
+            normal_values.append(None)
+            normal_std.append(None)
 
     min_years_used = min(years_used_counts) if years_used_counts else 0
     max_years_used = max(years_used_counts) if years_used_counts else 0
@@ -2472,9 +2483,12 @@ def build_temperature_chart(lat, lon, now_utc, temp_cache, normal_years=30):
     x_labels = [datetime.strptime(d, "%Y-%m-%d").strftime("%b %d") for d in day_labels]
     x = range(len(day_labels))
 
-    ax.fill_between(x, [v - 1.5 if v is not None else math.nan for v in normal_values],
-                     [v + 1.5 if v is not None else math.nan for v in normal_values],
-                     color=NOTION_HIST_GRAY, alpha=0.25, linewidth=0, zorder=1)
+    ax.fill_between(
+        x,
+        [v - s if (v is not None and s is not None) else math.nan for v, s in zip(normal_values, normal_std)],
+        [v + s if (v is not None and s is not None) else math.nan for v, s in zip(normal_values, normal_std)],
+        color=NOTION_HIST_GRAY, alpha=0.25, linewidth=0, zorder=1,
+    )
     ax.plot(x, normal_values, linewidth=1.5, color=NOTION_HIST_GRAY, alpha=0.80,
              label=normal_label, zorder=2)
 
@@ -2510,7 +2524,7 @@ def build_temperature_chart(lat, lon, now_utc, temp_cache, normal_years=30):
 
     caption = (
         f"Daily mean temperature, last 30 days vs. {normal_label.replace(' average', '')} "
-        f"(shaded band ±1.5°C). Normal computed from {years_phrase} of ERA5 data per calendar day."
+        f"(shaded band ±1σ). Normal computed from {years_phrase} of ERA5 data per calendar day."
     )
     return png_bytes, caption
 

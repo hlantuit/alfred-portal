@@ -3525,23 +3525,39 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
                 draw.line([seg_p1, seg_p2], fill=(180, 200, 210), width=1)
 
         # --- Arrow annotations (white labelled arrows pointing to named spots) ---
-        # Format: (lat, lon, label [, label_dx [, label_dy]])
-        # label_dx/dy: pixel offset from target where the arrow tail and label appear
+        # Format: (lat, lon, label [, tail_dx [, tail_dy [, tip_offset]]])
+        # tail_dx/dy: pixel offset from target where the arrow tail and label sit.
+        #   Positive dx → east (right), negative dx → west (left).
+        #   Positive dy → south (down), negative dy → north (up).
+        # tip_offset: stop the arrowhead this many pixels short of the target.
         for ann in (arrow_annotations or []):
             ann_lat, ann_lon, ann_label = ann[0], ann[1], ann[2]
-            ann_dx = ann[3] if len(ann) > 3 else -55
-            ann_dy = ann[4] if len(ann) > 4 else -55
+            ann_dx  = ann[3] if len(ann) > 3 else -55
+            ann_dy  = ann[4] if len(ann) > 4 else -55
+            ann_tip = ann[5] if len(ann) > 5 else 0
             try:
                 import math as _math
                 tx, ty = project_point(ann_lat, ann_lon)
                 lx, ly = tx + ann_dx, ty + ann_dy
-                draw.line([(lx, ly), (tx, ty)], fill=(255, 255, 255), width=3)
-                angle = _math.atan2(ty - ly, tx - lx)
+                # Shorten the arrowhead by tip_offset pixels so the tip doesn't
+                # land exactly on the annotated feature.
+                if ann_tip > 0:
+                    dist = _math.hypot(tx - lx, ty - ly)
+                    if dist > ann_tip:
+                        ratio = (dist - ann_tip) / dist
+                        tip_x = lx + (tx - lx) * ratio
+                        tip_y = ly + (ty - ly) * ratio
+                    else:
+                        tip_x, tip_y = tx, ty
+                else:
+                    tip_x, tip_y = tx, ty
+                draw.line([(lx, ly), (tip_x, tip_y)], fill=(255, 255, 255), width=3)
+                angle = _math.atan2(tip_y - ly, tip_x - lx)
                 head_len, head_angle = 14, _math.radians(28)
                 for side in (+head_angle, -head_angle):
-                    bx = tx - head_len * _math.cos(angle - side)
-                    by = ty - head_len * _math.sin(angle - side)
-                    draw.line([(tx, ty), (bx, by)], fill=(255, 255, 255), width=3)
+                    bx = tip_x - head_len * _math.cos(angle - side)
+                    by = tip_y - head_len * _math.sin(angle - side)
+                    draw.line([(tip_x, tip_y), (bx, by)], fill=(255, 255, 255), width=3)
                 bb = draw.textbbox((0, 0), ann_label, font=font)
                 lw, lh = bb[2] - bb[0], bb[3] - bb[1]
                 text_x = (lx - lw) if ann_dx < 0 else lx

@@ -549,7 +549,9 @@ def update_community(community, now_utc):
                 _ssdc_lon = community.get("ssdc_lon")
                 _ssdc_label = community.get("ssdc_label", "SSDC")
                 _ssdc_arrows = (
-                    [(_ssdc_lat, _ssdc_lon, _ssdc_label)]
+                    # dx=+65 → tail to the east, dy=-65 → tail to the north
+                    # tip_offset=22 → arrowhead stops just short of the SSDC
+                    [(_ssdc_lat, _ssdc_lon, _ssdc_label, 65, -65, 22)]
                     if _ssdc_lat is not None and _ssdc_lon is not None
                     else None
                 )

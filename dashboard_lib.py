@@ -5220,14 +5220,12 @@ def fetch_hydrometric_water_level(station_id, provterr):
     UTC-offset suffix stripped since a once-per-day value doesn't need
     timezone math for a 30-day chart), or (None, None) on failure.
     """
+    # Rolling 30-day historical daily CSV (not the "today/" single-day file)
     url = (
-        f"https://dd.weather.gc.ca/today/hydrometric/csv/{provterr}/daily/"
+        f"https://dd.weather.gc.ca/hydrometric/csv/{provterr}/daily/"
         f"{provterr}_{station_id}_daily_hydrometric.csv"
     )
     try:
-        # dd.weather.gc.ca and weather.gc.ca have both shown transient
-        # connection timeouts together on the same run in practice,
-        # suggesting shared underlying infrastructure.
         resp = get_with_retry(url, timeout=20, retries=2, backoff_seconds=5)
 
         import csv as _csv
@@ -5293,6 +5291,10 @@ def build_hydrometric_chart(times, values_m, station_id, river_name, tz_name="Am
         return None, f"{river_name} water level chart unavailable — no data."
 
     try:
+        # Keep most recent 10 days
+        times = times[-10:]
+        values_m = values_m[-10:]
+
         t0 = times[0]
         hours = [(t - t0).total_seconds() / 3600 for t in times]
 
@@ -5321,7 +5323,7 @@ def build_hydrometric_chart(times, values_m, station_id, river_name, tz_name="Am
         ax.spines["bottom"].set_color(NOTION_LIGHT_GRID)
 
         ax.set_xlim(0, max(hours))
-        tick_hours = list(range(0, int(max(hours)) + 1, 5 * 24))  # every 5 days, to avoid crowding over a 30-day span
+        tick_hours = list(range(0, int(max(hours)) + 1, 24))  # every day
         tz = ZoneInfo(tz_name)
         tick_labels = [
             (t0 + timedelta(hours=h)).replace(tzinfo=timezone.utc).astimezone(tz).strftime("%b %d")
@@ -5367,7 +5369,11 @@ def fetch_snow_depth(lat, lon, past_days=30):
             f"?latitude={lat}&longitude={lon}"
             f"&hourly=snow_depth&past_days={past_days}&forecast_days=1&timezone=UTC"
         )
-        r = requests.get(url, timeout=45)
+        try:
+            r = requests.get(url, timeout=60)
+        except Exception:
+            # Try the European mirror on timeout
+            r = requests.get(url.replace("api.open-meteo.com", "customer-api.open-meteo.com"), timeout=60)
         r.raise_for_status()
         data = r.json()
         times = data["hourly"]["time"]

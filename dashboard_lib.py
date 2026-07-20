@@ -5365,24 +5365,26 @@ def build_hydrometric_chart(times, values_m, station_id, river_name, tz_name="Am
 # =========================================================
 # SNOW DEPTH
 # =========================================================
-def fetch_snow_depth(lat, lon, past_days=30):
+def fetch_snow_depth(lat, lon, past_days=30, now_utc=None):
     """
     Fetches hourly snow depth (m) for the past `past_days` days via
     Open-Meteo ERA5-Land. Returns (times, depths_cm) as parallel lists,
     or (None, None) on failure.
     """
     try:
+        from datetime import date as _date
+        end_date   = now_utc.strftime("%Y-%m-%d") if now_utc else _date.today().isoformat()
+        start_date = (now_utc - timedelta(days=past_days)).strftime("%Y-%m-%d") if now_utc else (
+            _date.today() - timedelta(days=past_days)).isoformat()
+        # archive-api is specifically for historical ERA5-Land data and is not
+        # subject to the forecast-API rate limits that cause timeouts when many
+        # communities run sequentially on the same GitHub Actions runner.
         url = (
-            "https://api.open-meteo.com/v1/forecast"
+            "https://archive-api.open-meteo.com/v1/archive"
             f"?latitude={lat}&longitude={lon}"
-            f"&hourly=snow_depth&past_days={past_days}&forecast_days=1&timezone=UTC"
+            f"&hourly=snow_depth&start_date={start_date}&end_date={end_date}&timezone=UTC"
         )
-        try:
-            r = requests.get(url, timeout=60)
-        except Exception:
-            # Retry once on the same endpoint — open-meteo.com can be
-            # transiently slow from GitHub Actions
-            r = requests.get(url, timeout=90)
+        r = requests.get(url, timeout=30)
         r.raise_for_status()
         data = r.json()
         times = data["hourly"]["time"]
@@ -5475,7 +5477,7 @@ def build_snow_depth_card(lat, lon, now_utc):
     Returns the card blocks (list). Designed to be passed as extra_card to
     build_todays_conditions_section.
     """
-    times, depths_cm = fetch_snow_depth(lat, lon, past_days=30)
+    times, depths_cm = fetch_snow_depth(lat, lon, past_days=30, now_utc=now_utc)
 
     current_cm = None
     fetch_ok = times is not None and depths_cm is not None

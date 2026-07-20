@@ -281,27 +281,23 @@ def columns(*column_block_lists, width_ratios=None):
 
 def upload_image_to_notion(image_bytes, filename="image.png"):
     """
-    Saves image bytes to disk (communities/{id}/charts/) and returns a
-    GitHub raw URL token so the caller can build an external Notion image block.
+    Uploads raw image bytes to Notion's file upload API and returns the
+    upload id.
 
-    Images are committed to git after the script completes, so Notion loads
-    the version from the *previous* run (at most 24 h old for the daily
-    workflow). This is acceptable — the data text is always current.
+    Flow (matches the working original individual-dashboard libraries):
+      1. POST /v1/file_uploads with content_type only → get id
+      2. POST /v1/file_uploads/{id}/send with multipart file → complete upload
+
+    Also saves PNG to disk if CHARTS_SAVE_DIR is set so the workflow
+    commit step archives chart history in git.
     """
     if CHARTS_SAVE_DIR and COMMUNITY_ID:
         os.makedirs(CHARTS_SAVE_DIR, exist_ok=True)
         img_path = os.path.join(CHARTS_SAVE_DIR, filename)
         with open(img_path, "wb") as _f:
             _f.write(image_bytes)
-        github_url = (
-            f"https://raw.githubusercontent.com/{_GITHUB_REPO}/{_GITHUB_BRANCH}"
-            f"/communities/{COMMUNITY_ID}/charts/{filename}"
-        )
-        print(f"IMAGE SAVED: {img_path} → {github_url}")
-        return f"__ext__{github_url}"
+        print(f"IMAGE SAVED: {img_path}")
 
-    # Fallback when not running in GitHub Actions (no CHARTS_SAVE_DIR set):
-    # upload directly to Notion file upload API.
     create_resp = requests.post(
         "https://api.notion.com/v1/file_uploads",
         headers={
@@ -309,29 +305,22 @@ def upload_image_to_notion(image_bytes, filename="image.png"):
             "Notion-Version": "2022-06-28",
             "Content-Type": "application/json",
         },
-        json={"content_type": "image/png", "name": filename},
+        json={"content_type": "image/png"},
         timeout=20,
     )
     create_resp.raise_for_status()
-    create_json = create_resp.json()
-    upload_id  = create_json["id"]
-    upload_url = create_json.get("upload_url")
-    if upload_url:
-        put_resp = requests.put(
-            upload_url,
-            headers={"Content-Type": "image/png"},
-            data=image_bytes,
-            timeout=60,
-        )
-        put_resp.raise_for_status()
-    else:
-        send_resp = requests.post(
-            f"https://api.notion.com/v1/file_uploads/{upload_id}/send",
-            headers={"Authorization": f"Bearer {NOTION_TOKEN}", "Notion-Version": "2022-06-28"},
-            files={"file": (filename, image_bytes, "image/png")},
-            timeout=60,
-        )
-        send_resp.raise_for_status()
+    upload_id = create_resp.json()["id"]
+
+    send_resp = requests.post(
+        f"https://api.notion.com/v1/file_uploads/{upload_id}/send",
+        headers={
+            "Authorization": f"Bearer {NOTION_TOKEN}",
+            "Notion-Version": "2022-06-28",
+        },
+        files={"file": (filename, image_bytes, "image/png")},
+        timeout=60,
+    )
+    send_resp.raise_for_status()
     return upload_id
 
 

@@ -5414,9 +5414,20 @@ def build_hydrometric_chart(times, values_m, station_id, river_name, tz_name="Am
         return None, f"{river_name} water level chart unavailable — no data."
 
     try:
-        # Keep most recent 10 days
-        times = times[-10:]
-        values_m = values_m[-10:]
+        # Keep readings from the last 10 days (filter by time, not by count —
+        # the CSV may contain sub-daily real-time data with thousands of rows).
+        cutoff = times[-1] - timedelta(days=10)
+        paired = [(t, v) for t, v in zip(times, values_m) if t >= cutoff]
+        if not paired:
+            paired = list(zip(times[-10:], values_m[-10:]))
+        times, values_m = [p[0] for p in paired], [p[1] for p in paired]
+
+        # Downsample to at most one reading per hour so the chart stays crisp
+        # for sub-daily data (e.g. 20-min real-time feed → ~720 pts/10 days).
+        if len(times) > 250:
+            step = max(1, len(times) // 250)
+            times   = times[::step]
+            values_m = values_m[::step]
 
         t0 = times[0]
         hours = [(t - t0).total_seconds() / 3600 for t in times]
@@ -5462,6 +5473,7 @@ def build_hydrometric_chart(times, values_m, station_id, river_name, tz_name="Am
         ax.yaxis.grid(True, color=NOTION_LIGHT_GRID, linewidth=1, zorder=0)
         ax.xaxis.grid(False)
         ax.set_axisbelow(True)
+        ax.yaxis.get_major_formatter().set_useOffset(False)  # show real values, not "+1.156e1" offset
         ylabel = "Discharge (m³/s)" if unit == "discharge" else "Water level (m)"
         ax.set_ylabel(ylabel, fontsize=13, color=NOTION_TEXT_GRAY)
 

@@ -56,6 +56,50 @@ _OVERPASS_SERVERS = [
 _OVERPASS_HEADERS = {"User-Agent": "alfred-portal/1.0 (arctic environmental dashboard; hugues.lantuit@awi.de)"}
 
 
+def _rdp(points, tolerance):
+    """Ramer–Douglas–Peucker line simplification."""
+    if len(points) < 3:
+        return points
+    start, end = points[0], points[-1]
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    dist_sq = dx * dx + dy * dy
+    max_d, max_i = 0.0, 0
+    for i in range(1, len(points) - 1):
+        px, py = points[i][0] - start[0], points[i][1] - start[1]
+        d = abs(px * dy - py * dx) / (dist_sq ** 0.5) if dist_sq else (px * px + py * py) ** 0.5
+        if d > max_d:
+            max_d, max_i = d, i
+    if max_d > tolerance:
+        left  = _rdp(points[:max_i + 1], tolerance)
+        right = _rdp(points[max_i:], tolerance)
+        return left[:-1] + right
+    return [start, end]
+
+
+def _simplify_ring(ring, tolerance):
+    simplified = _rdp(ring, tolerance)
+    if len(simplified) < 4:
+        return ring  # keep original if simplification breaks closure
+    if simplified[0] != simplified[-1]:
+        simplified.append(simplified[0])
+    return simplified
+
+
+def _simplify_geojson(geojson, tolerance=0.0002):
+    """Simplify all polygon rings in a GeoJSON FeatureCollection."""
+    for feat in geojson.get("features", []):
+        geom = feat.get("geometry", {})
+        gt = geom.get("type")
+        if gt == "Polygon":
+            geom["coordinates"] = [_simplify_ring(r, tolerance) for r in geom["coordinates"]]
+        elif gt == "MultiPolygon":
+            geom["coordinates"] = [
+                [_simplify_ring(r, tolerance) for r in poly]
+                for poly in geom["coordinates"]
+            ]
+    return geojson
+
+
 def _overpass_post(query, timeout=75):
     """POST an Overpass query, retrying with a backup server on 5xx or timeout."""
     import requests as _requests
@@ -244,6 +288,9 @@ def ensure_water_bodies_geojson(community_id, bbox_latlon, out_path):
                     })
 
         geojson = {"type": "FeatureCollection", "features": features}
+        # Simplify geometries to reduce file size before the 42 MB git limit check.
+        # Tolerance ~0.0002° ≈ 15 m at Arctic latitudes — fine for a pixel-level mask.
+        geojson = _simplify_geojson(geojson, tolerance=0.0002)
         if _write_geojson_safe(community_id, "WATER BODIES", geojson, out_path):
             print(f"[{community_id}] WATER BODIES: {len(features)} features saved to {out_path}")
     except Exception as e:
@@ -497,8 +544,8 @@ def update_community(community, now_utc):
             # Pad must cover the full lake-ice Sentinel-1 frame (50 km half-width).
             # At Arctic latitudes lon degrees are compressed: use 80 km to be safe.
             import math as _math
-            lat_pad = 80_000 / 111_000          # ~0.72°
-            lon_pad = 80_000 / (111_000 * _math.cos(_math.radians(lat)))
+            lat_pad = 50_000 / 111_000          # exactly the lake-ice half_width_m
+            lon_pad = 50_000 / (111_000 * _math.cos(_math.radians(lat)))
             bbox = (lat - lat_pad, lon - lon_pad, lat + lat_pad, lon + lon_pad)
             ensure_water_bodies_geojson(sid, bbox, water_bod)
         # Coastline GeoJSON — used by Sentinel-1 SAR/ice only, NOT by MODIS

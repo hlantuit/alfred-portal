@@ -3112,7 +3112,7 @@ def build_gibs_url(date_str, bbox_3413, fetch_size_px=MODIS_FETCH_SIZE_PX):
         "SERVICE": "WMS",
         "REQUEST": "GetMap",
         "VERSION": "1.1.1",
-        "LAYERS": "MODIS_Terra_CorrectedReflectance_TrueColor",
+        "LAYERS": "MODIS_Terra_CorrectedReflectance_TrueColor,Coastlines",
         "STYLES": "",
         "FORMAT": "image/png",
         "TRANSPARENT": "false",

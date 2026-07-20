@@ -5220,13 +5220,21 @@ def fetch_hydrometric_water_level(station_id, provterr):
     UTC-offset suffix stripped since a once-per-day value doesn't need
     timezone math for a 30-day chart), or (None, None) on failure.
     """
-    # Rolling 30-day historical daily CSV (not the "today/" single-day file)
-    url = (
+    # Rolling 30-day historical daily CSV; fall back to today-only file on timeout
+    url_historical = (
         f"https://dd.weather.gc.ca/hydrometric/csv/{provterr}/daily/"
         f"{provterr}_{station_id}_daily_hydrometric.csv"
     )
+    url_today = (
+        f"https://dd.weather.gc.ca/today/hydrometric/csv/{provterr}/daily/"
+        f"{provterr}_{station_id}_daily_hydrometric.csv"
+    )
     try:
-        resp = get_with_retry(url, timeout=20, retries=2, backoff_seconds=5)
+        try:
+            resp = get_with_retry(url_historical, timeout=20, retries=2, backoff_seconds=5)
+        except Exception as _e:
+            print(f"HYDROMETRIC[{station_id}]: historical URL failed ({_e}), trying today/ fallback")
+            resp = get_with_retry(url_today, timeout=20, retries=1, backoff_seconds=3)
 
         import csv as _csv
 
@@ -5372,8 +5380,9 @@ def fetch_snow_depth(lat, lon, past_days=30):
         try:
             r = requests.get(url, timeout=60)
         except Exception:
-            # Try the European mirror on timeout
-            r = requests.get(url.replace("api.open-meteo.com", "customer-api.open-meteo.com"), timeout=60)
+            # Retry once on the same endpoint — open-meteo.com can be
+            # transiently slow from GitHub Actions
+            r = requests.get(url, timeout=90)
         r.raise_for_status()
         data = r.json()
         times = data["hourly"]["time"]

@@ -281,27 +281,27 @@ def columns(*column_block_lists, width_ratios=None):
 
 def upload_image_to_notion(image_bytes, filename="image.png"):
     """
-    Uploads raw image bytes to Notion's file upload API and returns the
-    upload id.
+    Saves image bytes to disk (communities/{id}/charts/) and returns a
+    GitHub raw URL token so the caller can build an external Notion image block.
 
-    If CHARTS_SAVE_DIR is set, also writes the PNG to disk so the workflow
-    commit step archives chart history in git. The Notion upload always goes
-    direct regardless — GitHub raw URLs are only available after the git
-    push that follows the script, so using them for Notion image blocks
-    would cause a 404 on every fresh page load until GitHub's CDN catches up.
-
-    Single-part upload flow:
-      1. POST /v1/file_uploads  →  {id, upload_url}
-      2. PUT upload_url with raw bytes + Content-Type: image/png
+    Images are committed to git after the script completes, so Notion loads
+    the version from the *previous* run (at most 24 h old for the daily
+    workflow). This is acceptable — the data text is always current.
     """
     if CHARTS_SAVE_DIR and COMMUNITY_ID:
         os.makedirs(CHARTS_SAVE_DIR, exist_ok=True)
         img_path = os.path.join(CHARTS_SAVE_DIR, filename)
         with open(img_path, "wb") as _f:
             _f.write(image_bytes)
-        print(f"IMAGE SAVED: {img_path}")
+        github_url = (
+            f"https://raw.githubusercontent.com/{_GITHUB_REPO}/{_GITHUB_BRANCH}"
+            f"/communities/{COMMUNITY_ID}/charts/{filename}"
+        )
+        print(f"IMAGE SAVED: {img_path} → {github_url}")
+        return f"__ext__{github_url}"
 
-    # Always upload directly to Notion (not via GitHub raw URL).
+    # Fallback when not running in GitHub Actions (no CHARTS_SAVE_DIR set):
+    # upload directly to Notion file upload API.
     create_resp = requests.post(
         "https://api.notion.com/v1/file_uploads",
         headers={
@@ -316,7 +316,6 @@ def upload_image_to_notion(image_bytes, filename="image.png"):
     create_json = create_resp.json()
     upload_id  = create_json["id"]
     upload_url = create_json.get("upload_url")
-
     if upload_url:
         put_resp = requests.put(
             upload_url,
@@ -326,29 +325,13 @@ def upload_image_to_notion(image_bytes, filename="image.png"):
         )
         put_resp.raise_for_status()
     else:
-        print(f"NOTION UPLOAD DEBUG: no upload_url — create keys={list(create_json.keys())}")
         send_resp = requests.post(
             f"https://api.notion.com/v1/file_uploads/{upload_id}/send",
-            headers={
-                "Authorization": f"Bearer {NOTION_TOKEN}",
-                "Notion-Version": "2022-06-28",
-                "Content-Type": "image/png",
-            },
-            data=image_bytes,
+            headers={"Authorization": f"Bearer {NOTION_TOKEN}", "Notion-Version": "2022-06-28"},
+            files={"file": (filename, image_bytes, "image/png")},
             timeout=60,
         )
-        if send_resp.status_code != 200:
-            send_resp = requests.post(
-                f"https://api.notion.com/v1/file_uploads/{upload_id}/send",
-                headers={
-                    "Authorization": f"Bearer {NOTION_TOKEN}",
-                    "Notion-Version": "2022-06-28",
-                },
-                files={"file": (filename, image_bytes, "image/png")},
-                timeout=60,
-            )
         send_resp.raise_for_status()
-
     return upload_id
 
 

@@ -4860,7 +4860,8 @@ def fetch_gdsps_water_level(lat, lon, now_utc, site_label, yearly_mean=None):
             t += timedelta(hours=step_h)
 
         # Step 2: parallel WMS GetFeatureInfo — one request per timestamp.
-        bbox = f"{lat - 0.5},{lon - 0.5},{lat + 0.5},{lon + 0.5}"
+        # CRS:84 always uses lon,lat axis order (unlike EPSG:4326 in WMS 1.3.0).
+        bbox = f"{lon - 0.5},{lat - 0.5},{lon + 0.5},{lat + 0.5}"
 
         def _fetch_one(ts):
             try:
@@ -4869,7 +4870,7 @@ def fetch_gdsps_water_level(lat, lon, now_utc, site_label, yearly_mean=None):
                     "?service=WMS&version=1.3.0&request=GetFeatureInfo"
                     "&layers=GDSPS_15km_SeaSfcHeight"
                     "&query_layers=GDSPS_15km_SeaSfcHeight"
-                    f"&bbox={bbox}&width=10&height=10&crs=EPSG:4326&i=5&j=5"
+                    f"&bbox={bbox}&width=10&height=10&crs=CRS:84&i=5&j=5"
                     "&info_format=application/json"
                     f"&time={ts.strftime('%Y-%m-%dT%H:%M:%SZ')}"
                 )
@@ -4979,7 +4980,9 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
             t += timedelta(hours=step_h)
 
         # ---- Step 2: parallel GetFeatureInfo for HTSGW (wave height) ----
-        bbox = f"{lat - 0.5},{lon - 0.5},{lat + 0.5},{lon + 0.5}"
+        # CRS:84 always uses lon,lat axis order (unlike EPSG:4326 in WMS 1.3.0
+        # which is lat,lon per spec but many servers including GeoMet treat as lon,lat).
+        bbox = f"{lon - 0.5},{lat - 0.5},{lon + 0.5},{lat + 0.5}"
 
         # Probe one timestamp to log what the server actually returns for diagnosis
         if timestamps:
@@ -4987,7 +4990,7 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
                 "https://geo.weather.gc.ca/geomet"
                 "?service=WMS&version=1.3.0&request=GetFeatureInfo"
                 f"&layers={htsgw_layer}&query_layers={htsgw_layer}"
-                f"&bbox={bbox}&width=10&height=10&crs=EPSG:4326&i=5&j=5"
+                f"&bbox={bbox}&width=10&height=10&crs=CRS:84&i=5&j=5"
                 "&info_format=application/json"
                 f"&time={timestamps[0].strftime('%Y-%m-%dT%H:%M:%SZ')}"
             )
@@ -5003,7 +5006,7 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
                     "https://geo.weather.gc.ca/geomet"
                     "?service=WMS&version=1.3.0&request=GetFeatureInfo"
                     f"&layers={htsgw_layer}&query_layers={htsgw_layer}"
-                    f"&bbox={bbox}&width=10&height=10&crs=EPSG:4326&i=5&j=5"
+                    f"&bbox={bbox}&width=10&height=10&crs=CRS:84&i=5&j=5"
                     "&info_format=application/json"
                     f"&time={ts.strftime('%Y-%m-%dT%H:%M:%SZ')}"
                 )
@@ -5026,7 +5029,7 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
                     "https://geo.weather.gc.ca/geomet"
                     "?service=WMS&version=1.3.0&request=GetFeatureInfo"
                     f"&layers={mtp_layer}&query_layers={mtp_layer}"
-                    f"&bbox={bbox}&width=10&height=10&crs=EPSG:4326&i=5&j=5"
+                    f"&bbox={bbox}&width=10&height=10&crs=CRS:84&i=5&j=5"
                     "&info_format=application/json"
                     f"&time={ts.strftime('%Y-%m-%dT%H:%M:%SZ')}"
                 )

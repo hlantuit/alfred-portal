@@ -5611,10 +5611,22 @@ def _resolve_webcam_image_url(webcam_url):
     For FAA WeatherCams, webcam_url may be the public images API endpoint
     (https://weathercams.faa.gov/api/cameras/{id}/images).  Resolve it to
     the actual latest JPEG URL.  For all other URLs, return as-is.
+
+    The API enforces same-origin by checking Origin/Referer; we spoof those
+    headers.  Images themselves are served from a public CDN so fetching the
+    resolved imageUri needs no auth.
     """
     if "weathercams.faa.gov/api/cameras" in webcam_url and webcam_url.endswith("/images"):
         try:
-            resp = requests.get(webcam_url, timeout=15, headers={"User-Agent": "alfred-portal/1.0"})
+            resp = requests.get(
+                webcam_url,
+                timeout=15,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; alfred-portal/1.0)",
+                    "Origin":  "https://weathercams.faa.gov",
+                    "Referer": "https://weathercams.faa.gov/",
+                },
+            )
             resp.raise_for_status()
             payload = resp.json().get("payload") or []
             if payload:

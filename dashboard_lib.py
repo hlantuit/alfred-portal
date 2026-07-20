@@ -5348,7 +5348,59 @@ def fetch_hydrometric_water_level(station_id, provterr):
         return times, values_m, "level"
 
     except Exception as e:
-        print(f"HYDROMETRIC[{station_id}] FETCH FAILED:", e)
+        print(f"HYDROMETRIC[{station_id}] FETCH FAILED (dd.weather.gc.ca): {e} — trying OGC API fallback")
+
+    # --- Fallback: ECCC OGC API (api.weather.gc.ca) ---
+    # Uses a different host/infrastructure than dd.weather.gc.ca so it succeeds
+    # even when the Datamart is unreachable from the GitHub Actions runner.
+    try:
+        ogc_url = (
+            "https://api.weather.gc.ca/collections/hydrometric-daily-mean/items"
+            f"?STATION_NUMBER={station_id}&sortby=-DATE&limit=40&f=json"
+        )
+        resp2 = requests.get(ogc_url, timeout=20)
+        resp2.raise_for_status()
+        features = resp2.json().get("features", [])
+        print(f"HYDROMETRIC[{station_id}] OGC: {len(features)} daily-mean features returned")
+
+        times2, values2, discharge_times2, discharge_vals2 = [], [], [], []
+        for feat in features:
+            props = feat.get("properties", {})
+            date_str = props.get("DATE") or props.get("DATETIME", "")
+            level    = props.get("LEVEL")
+            discharge = props.get("DISCHARGE")
+            try:
+                t = datetime.fromisoformat(date_str[:10])
+            except Exception:
+                continue
+            if level is not None:
+                try:
+                    times2.append(t)
+                    values2.append(float(level))
+                except Exception:
+                    pass
+            elif discharge is not None:
+                try:
+                    discharge_times2.append(t)
+                    discharge_vals2.append(float(discharge))
+                except Exception:
+                    pass
+
+        times2.reverse(); values2.reverse()
+        discharge_times2.reverse(); discharge_vals2.reverse()
+
+        if values2:
+            print(f"HYDROMETRIC[{station_id}] OGC: {len(values2)} water-level values")
+            return times2, values2, "level"
+        if discharge_vals2:
+            print(f"HYDROMETRIC[{station_id}] OGC: no level; using discharge fallback ({len(discharge_vals2)} values)")
+            return discharge_times2, discharge_vals2, "discharge"
+
+        print(f"HYDROMETRIC[{station_id}] OGC: no usable data in response")
+        return None, None, "level"
+
+    except Exception as e2:
+        print(f"HYDROMETRIC[{station_id}] OGC FALLBACK ALSO FAILED: {e2}")
         return None, None, "level"
 
 
@@ -6304,8 +6356,14 @@ def fetch_and_process_sentinel1_lake_ice(lat, lon, site_label, utm_zone, utm_eps
         water_bodies_geojson_path, center_x, center_y, utm_zone, half_width_m,
         MODIS_FINAL_SIZE_PX,
     )
-    if raw_gray is not None:
+    # Only composite color+gray if we have a real water mask. Without water
+    # bodies GeoJSON the mask is all-False (all-land), which would replace the
+    # ice classification with a plain gray SAR image — useless. Instead, keep
+    # the raw color classification so at least open water vs ice is visible.
+    if raw_gray is not None and water_mask is not None and water_mask.any():
         raw_color = _composite_sea_color_land_gray(raw_color, raw_gray, water_mask)
+    else:
+        print(f"LAKE ICE [{site_label}]: no water-body mask available — showing ice classification on all pixels")
 
     project_fn = functools.partial(latlon_to_utm, zone=utm_zone)
     ice_bytes = annotate_plain_image(

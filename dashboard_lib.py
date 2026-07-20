@@ -282,16 +282,15 @@ def columns(*column_block_lists, width_ratios=None):
 def upload_image_to_notion(image_bytes, filename="image.png"):
     """
     Uploads raw image bytes to Notion's file upload API and returns the
-    upload id — used instead of external image URLs because Notion's
-    external-URL fetcher is unreliable for query-string-based image
-    services (no file extension, content negotiated at request time).
+    upload id.
 
-    If CHARTS_SAVE_DIR is set, writes the PNG to disk and returns a GitHub
-    raw URL sentinel (``__ext__https://...``) — the Notion upload API is
-    bypassed entirely.  image_block_from_upload() converts the sentinel to
-    an external image block automatically.
+    If CHARTS_SAVE_DIR is set, also writes the PNG to disk so the workflow
+    commit step archives chart history in git. The Notion upload always goes
+    direct regardless — GitHub raw URLs are only available after the git
+    push that follows the script, so using them for Notion image blocks
+    would cause a 404 on every fresh page load until GitHub's CDN catches up.
 
-    Otherwise falls back to Notion's single-part upload flow:
+    Single-part upload flow:
       1. POST /v1/file_uploads  →  {id, upload_url}
       2. PUT upload_url with raw bytes + Content-Type: image/png
     """
@@ -300,14 +299,9 @@ def upload_image_to_notion(image_bytes, filename="image.png"):
         img_path = os.path.join(CHARTS_SAVE_DIR, filename)
         with open(img_path, "wb") as _f:
             _f.write(image_bytes)
-        github_url = (
-            f"https://raw.githubusercontent.com/{_GITHUB_REPO}/{_GITHUB_BRANCH}"
-            f"/communities/{COMMUNITY_ID}/charts/{filename}"
-        )
-        print(f"IMAGE SAVED: {img_path} → {github_url}")
-        return f"__ext__{github_url}"
+        print(f"IMAGE SAVED: {img_path}")
 
-    # Notion file upload API fallback (used when running locally without git context).
+    # Always upload directly to Notion (not via GitHub raw URL).
     create_resp = requests.post(
         "https://api.notion.com/v1/file_uploads",
         headers={

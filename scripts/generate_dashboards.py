@@ -120,28 +120,71 @@ def ensure_coastline_geojson(community_id, bbox_latlon, out_path):
         print(f"[{community_id}] COASTLINE FETCH FAILED: {e}")
 
 
+def _assemble_osm_rings(members, role):
+    """
+    Connect Overpass member-way segments (all sharing a given role) into
+    closed rings. Each segment is a list of (lon, lat) tuples. Segments
+    are joined end-to-end; the result is closed if not already so.
+    Returns a list of rings (each ring is a list of [lon, lat] pairs).
+    """
+    segments = []
+    for m in members:
+        if m.get("role") == role and m.get("type") == "way" and "geometry" in m:
+            pts = [(pt["lon"], pt["lat"]) for pt in m["geometry"]]
+            if pts:
+                segments.append(pts)
+    if not segments:
+        return []
+    rings = []
+    while segments:
+        ring = list(segments.pop(0))
+        changed = True
+        while changed and segments:
+            changed = False
+            for i, seg in enumerate(segments):
+                if ring[-1] == seg[0]:
+                    ring.extend(seg[1:]); segments.pop(i); changed = True; break
+                elif ring[-1] == seg[-1]:
+                    ring.extend(reversed(seg[:-1])); segments.pop(i); changed = True; break
+                elif ring[0] == seg[-1]:
+                    ring = list(seg) + ring[1:]; segments.pop(i); changed = True; break
+                elif ring[0] == seg[0]:
+                    ring = list(reversed(seg)) + ring[1:]; segments.pop(i); changed = True; break
+        if ring and ring[0] != ring[-1]:
+            ring.append(ring[0])
+        if len(ring) >= 4:
+            rings.append([[c[0], c[1]] for c in ring])
+    return rings
+
+
 def ensure_water_bodies_geojson(community_id, bbox_latlon, out_path):
-    """Fetch OSM natural=water and waterway=river polygons from Overpass and save as GeoJSON."""
+    """Fetch OSM water body polygons from Overpass and save as GeoJSON.
+
+    Handles both simple ways and multipolygon relations so that large
+    mapped features (e.g. Mackenzie River delta channels) are included.
+    """
     import json as _json
     s, w, n, e = bbox_latlon
-    # qt 3000 limits to 3000 largest features (quadtile order = big first); keeps response small
     query = (
-        f"[out:json][timeout:60];"
+        f"[out:json][timeout:90];"
         f"("
         f"  way[natural=water]({s},{w},{n},{e});"
         f"  way[waterway=river]({s},{w},{n},{e});"
         f"  way[waterway=riverbank]({s},{w},{n},{e});"
         f"  relation[natural=water]({s},{w},{n},{e});"
+        f"  relation[waterway=riverbank]({s},{w},{n},{e});"
         f");"
-        f"out geom qt 3000;"
+        f"out geom;"
     )
-    print(f"[{community_id}] WATER BODIES: fetching from Overpass ({s},{w},{n},{e})")
+    print(f"[{community_id}] WATER BODIES: fetching from Overpass ({s:.3f},{w:.3f},{n:.3f},{e:.3f})")
     try:
         r = _overpass_post(query)
         elements = r.json().get("elements", [])
         features = []
         for el in elements:
-            if el.get("type") == "way" and "geometry" in el:
+            etype = el.get("type")
+
+            if etype == "way" and "geometry" in el:
                 coords = _round_coords([[pt["lon"], pt["lat"]] for pt in el["geometry"]])
                 if coords and coords[0] == coords[-1] and len(coords) >= 4:
                     features.append({
@@ -149,12 +192,30 @@ def ensure_water_bodies_geojson(community_id, bbox_latlon, out_path):
                         "geometry": {"type": "Polygon", "coordinates": [coords]},
                         "properties": {},
                     })
-                else:
+                # Unclosed ways (e.g. riverbank segments) are skipped —
+                # they only appear as part of relations handled below.
+
+            elif etype == "relation":
+                members = el.get("members", [])
+                outer_rings = _assemble_osm_rings(members, "outer")
+                inner_rings = _assemble_osm_rings(members, "inner")
+                if not outer_rings:
+                    continue
+                if len(outer_rings) == 1:
+                    all_rings = [outer_rings[0]] + inner_rings
                     features.append({
                         "type": "Feature",
-                        "geometry": {"type": "LineString", "coordinates": coords},
+                        "geometry": {"type": "Polygon", "coordinates": all_rings},
                         "properties": {},
                     })
+                else:
+                    polys = [[outer] + inner_rings for outer in outer_rings]
+                    features.append({
+                        "type": "Feature",
+                        "geometry": {"type": "MultiPolygon", "coordinates": polys},
+                        "properties": {},
+                    })
+
         geojson = {"type": "FeatureCollection", "features": features}
         if _write_geojson_safe(community_id, "WATER BODIES", geojson, out_path):
             print(f"[{community_id}] WATER BODIES: {len(features)} features saved to {out_path}")

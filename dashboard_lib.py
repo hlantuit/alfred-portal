@@ -6356,14 +6356,12 @@ def fetch_and_process_sentinel1_lake_ice(lat, lon, site_label, utm_zone, utm_eps
         water_bodies_geojson_path, center_x, center_y, utm_zone, half_width_m,
         MODIS_FINAL_SIZE_PX,
     )
-    # Only composite color+gray if we have a real water mask. Without water
-    # bodies GeoJSON the mask is all-False (all-land), which would replace the
-    # ice classification with a plain gray SAR image — useless. Instead, keep
-    # the raw color classification so at least open water vs ice is visible.
     if raw_gray is not None and water_mask is not None and water_mask.any():
         raw_color = _composite_sea_color_land_gray(raw_color, raw_gray, water_mask)
-    else:
-        print(f"LAKE ICE [{site_label}]: no water-body mask available — showing ice classification on all pixels")
+    elif raw_gray is not None:
+        # No water-body mask — show plain SAR grayscale rather than coloring land
+        print(f"LAKE ICE [{site_label}]: no water-body mask — displaying SAR grayscale (water bodies GeoJSON missing)")
+        raw_color = raw_gray
 
     project_fn = functools.partial(latlon_to_utm, zone=utm_zone)
     ice_bytes = annotate_plain_image(

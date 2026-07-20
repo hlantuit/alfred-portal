@@ -160,25 +160,52 @@ def _assemble_osm_rings(members, role):
 def ensure_water_bodies_geojson(community_id, bbox_latlon, out_path):
     """Fetch OSM water body polygons from Overpass and save as GeoJSON.
 
-    Handles both simple ways and multipolygon relations so that large
-    mapped features (e.g. Mackenzie River delta channels) are included.
+    Tries a fast ways-only query first; if that times out (complex delta
+    areas like the Mackenzie), falls back to ways + multipolygon relations.
     """
     import json as _json
     s, w, n, e = bbox_latlon
-    query = (
-        f"[out:json][timeout:90];"
-        f"("
-        f"  way[natural=water]({s},{w},{n},{e});"
-        f"  way[waterway=river]({s},{w},{n},{e});"
-        f"  way[waterway=riverbank]({s},{w},{n},{e});"
-        f"  relation[natural=water]({s},{w},{n},{e});"
-        f"  relation[waterway=riverbank]({s},{w},{n},{e});"
-        f");"
-        f"out geom;"
-    )
+    # Tier 1: ways only — fast, covers most water bodies.
+    # Tier 2: add multipolygon relations — needed for some large river systems
+    #         but expensive (Mackenzie Delta times out on Overpass).
+    queries = [
+        (
+            f"[out:json][timeout:60];"
+            f"("
+            f"  way[natural=water]({s},{w},{n},{e});"
+            f"  way[waterway=riverbank]({s},{w},{n},{e});"
+            f");"
+            f"out geom;",
+            55,   # Python client timeout
+            "ways only",
+        ),
+        (
+            f"[out:json][timeout:100];"
+            f"("
+            f"  way[natural=water]({s},{w},{n},{e});"
+            f"  way[waterway=river]({s},{w},{n},{e});"
+            f"  way[waterway=riverbank]({s},{w},{n},{e});"
+            f"  relation[natural=water]({s},{w},{n},{e});"
+            f"  relation[waterway=riverbank]({s},{w},{n},{e});"
+            f");"
+            f"out geom;",
+            110,  # Python client timeout
+            "ways + relations",
+        ),
+    ]
     print(f"[{community_id}] WATER BODIES: fetching from Overpass ({s:.3f},{w:.3f},{n:.3f},{e:.3f})")
+    r = None
+    for query, client_timeout, tier_label in queries:
+        try:
+            r = _overpass_post(query, timeout=client_timeout)
+            print(f"[{community_id}] WATER BODIES: tier '{tier_label}' succeeded")
+            break
+        except Exception as _te:
+            print(f"[{community_id}] WATER BODIES: tier '{tier_label}' failed ({_te}); trying next tier")
+    if r is None:
+        print(f"[{community_id}] WATER BODIES FETCH FAILED: all tiers exhausted")
+        return
     try:
-        r = _overpass_post(query)
         elements = r.json().get("elements", [])
         features = []
         for el in elements:

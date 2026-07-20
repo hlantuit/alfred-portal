@@ -359,14 +359,22 @@ def update_community(community, now_utc):
         sun_text = lib.classify_sun_text(sun_info, lat, lon, now_utc, tz_name)
         sun_chart_bytes, sun_chart_caption = lib.build_sun_curve_chart(lat, lon, now_utc, now_local, tz_name)
 
-    tide_text = tide_chart_bytes = tide_chart_caption = None
+    tide_text = tide_chart_bytes = tide_chart_caption = tide_url = None
     tide_station_code = community.get("tide_station_code")
     tide_station_name = community.get("tide_station_name", "")
+    noaa_tide_station_id   = community.get("noaa_tide_station_id")
+    noaa_tide_station_name = community.get("noaa_tide_station_name", "")
     if "weather" in enabled and tide_station_code:
         station_id  = lib.find_iwls_station_id(tide_station_code)
         tide_points = lib.fetch_tide_predictions(station_id, now_utc, hours_ahead=24*7) if station_id else None
         tide_text   = lib.format_tide_text(tide_points, now_utc, tide_station_code, tide_station_name)
         tide_chart_bytes, tide_chart_caption = lib.build_tide_chart(tide_points, now_utc, tz_name)
+    elif "weather" in enabled and noaa_tide_station_id:
+        tide_points = lib.fetch_tide_predictions_noaa(noaa_tide_station_id, now_utc, hours_ahead=24*7)
+        tide_text   = lib.format_tide_text(tide_points, now_utc, noaa_tide_station_id, noaa_tide_station_name)
+        tide_chart_bytes, tide_chart_caption = lib.build_tide_chart(tide_points, now_utc, tz_name)
+        tide_station_code = noaa_tide_station_id  # so build_todays_conditions_section shows tide card
+        tide_url = f"https://tidesandcurrents.noaa.gov/stationhome.html?id={noaa_tide_station_id}"
 
     # ------------------------------------------------------------------ #
     # Marine forecast                                                      #
@@ -528,6 +536,14 @@ def update_community(community, now_utc):
                 )
 
             if "sea_ice_zoom" in enabled and utm_zone and utm_center_x is not None:
+                _ssdc_lat = community.get("ssdc_lat")
+                _ssdc_lon = community.get("ssdc_lon")
+                _ssdc_label = community.get("ssdc_label", "SSDC")
+                _ssdc_arrows = (
+                    [(_ssdc_lat, _ssdc_lon, _ssdc_label)]
+                    if _ssdc_lat is not None and _ssdc_lon is not None
+                    else None
+                )
                 fut_ice_zoom = ex.submit(
                     lib.fetch_and_process_sentinel1_ice,
                     lat=lat, lon=lon, site_label=site_label,
@@ -535,7 +551,7 @@ def update_community(community, now_utc):
                     center_x=utm_center_x, center_y=utm_center_y,
                     points=map_pts, tz_name=tz_name, half_width_m=25_000,
                     reference_lines=ref_lines, coastline_geojson_path=coastline,
-                    now_utc=now_utc,
+                    now_utc=now_utc, arrow_annotations=_ssdc_arrows,
                 )
 
             if "lake_river_ice" in enabled and utm_zone and utm_center_x is not None:
@@ -551,7 +567,8 @@ def update_community(community, now_utc):
 
             if "wave_forecast" in enabled:
                 wave_lat = community.get("wave_lat", lat)
-                fut_wave = ex.submit(lib.fetch_wave_forecast, wave_lat, lon, now_utc, site_label)
+                wave_lon = community.get("wave_lon", lon)
+                fut_wave = ex.submit(lib.fetch_wave_forecast, wave_lat, wave_lon, now_utc, site_label)
 
             if "wildfire" in enabled:
                 fut_fire = ex.submit(lib.fetch_cwfis_wildfires, lat, lon, 600, now_utc)
@@ -609,11 +626,11 @@ def update_community(community, now_utc):
                     print(f"[{sid}] WILDFIRE FAILED: {e}")
             for st, fut in hydrometric_futures:
                 try:
-                    h_times, h_values = fut.result(timeout=90)
+                    h_times, h_values, h_unit = fut.result(timeout=90)
                 except Exception as e:
                     print(f"[{sid}] HYDROMETRIC[{st['station_id']}] FAILED: {e}")
-                    h_times, h_values = None, None
-                hydrometric_results.append((st, h_times, h_values))
+                    h_times, h_values, h_unit = None, None, "level"
+                hydrometric_results.append((st, h_times, h_values, h_unit))
 
         if modis_bytes:
             modis_block_obj, _ = lib._upload_chart_or_caption(modis_bytes, "modis.png", None)
@@ -637,7 +654,7 @@ def update_community(community, now_utc):
             lat, lon, wind_now_text, wind_source_text, wind_icon_block, wind_forecast_chart_block,
             tide_text, tide_chart_bytes, tide_chart_caption, tide_station_code or None,
             sun_text, sun_chart_bytes, sun_chart_caption,
-            extra_card=snow_card,
+            extra_card=snow_card, tide_url=tide_url,
         )
 
     if "alerts" in enabled:
@@ -679,9 +696,9 @@ def update_community(community, now_utc):
         blocks += lib.build_total_water_level_section(wl_text, wl_chart_bytes, wl_chart_caption)
 
     if "hydrometric" in enabled:
-        for st, h_times, h_values in hydrometric_results:
+        for st, h_times, h_values, h_unit in hydrometric_results:
             h_chart_bytes, h_chart_caption = lib.build_hydrometric_chart(
-                h_times, h_values, st["station_id"], st["river_name"], tz_name,
+                h_times, h_values, st["station_id"], st["river_name"], tz_name, unit=h_unit,
             )
             blocks += lib.build_hydrometric_section(h_chart_bytes, h_chart_caption, st["heading"])
 

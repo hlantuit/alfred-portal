@@ -3862,10 +3862,9 @@ def fetch_sentinel1_image(token, date_str, center_x, center_y, utm_epsg,
         miny = center_y - half_width_m
         maxy = center_y + half_width_m
 
-        # dB range tuned for land surface backscatter (tundra, coastline):
-        # -15 dB (dark rock/wet soil) to +3 dB (rough terrain / urban).
-        # The previous [-22, -10] range was tuned for water/ice and clipped
-        # all land to white; this range shows land texture naturally.
+        # dB range -25 to 0: covers open water (-20 to -25 dB, now visible as
+        # dark gray) through tundra (-15 to -5 dB, mid-gray) to bright targets.
+        # Gamma 0.65 gives a perceptually balanced stretch across the full range.
         evalscript = f"""
         //VERSION=3
         function setup() {{
@@ -3879,10 +3878,9 @@ def fetch_sentinel1_image(token, date_str, center_x, center_y, utm_epsg,
             return [0, 0];
           }}
           var db = 10 * Math.log(Math.max(samples.{band}, 1e-10)) / Math.LN10;
-          var clipped = Math.max(-15, Math.min(0, db));
-          var linear = (clipped + 15) / 15;
-          // Gamma 0.5 (square-root) brightens dark tundra without clipping peaks.
-          var gray = Math.round(Math.sqrt(linear) * 255);
+          var clipped = Math.max(-25, Math.min(0, db));
+          var linear = (clipped + 25) / 25;
+          var gray = Math.round(Math.pow(linear, 0.65) * 255);
           return [gray, 255];
         }}
         """
@@ -5158,8 +5156,12 @@ def build_water_level_chart(times, values, tz_name, yearly_mean=None,
         tick_labels = [(t0 + timedelta(hours=h)).replace(tzinfo=timezone.utc).astimezone(tz).strftime("%b %d") for h in tick_hours]
         ax.set_xticks(tick_hours)
         ax.set_xticklabels(tick_labels, fontsize=9, color=NOTION_TEXT_GRAY, rotation=45, ha="right")
+        # Noon minor ticks (midday markers, shorter than midnight)
+        noon_hours = [h + 12 for h in ([0] + midnight_hours) if h + 12 <= max(hours)]
+        ax.set_xticks(noon_hours, minor=True)
         ax.tick_params(axis="y", labelsize=9, colors=NOTION_TEXT_GRAY, length=0)
-        ax.tick_params(axis="x", length=8, color="#555555", width=1.2, bottom=True, direction="out")
+        ax.tick_params(axis="x", which="major", length=8, color="#555555", width=1.2, bottom=True, direction="out")
+        ax.tick_params(axis="x", which="minor", length=4, color="#999999", width=1.0, bottom=True, direction="out")
         ax.yaxis.grid(True, color=NOTION_LIGHT_GRID, linewidth=1, zorder=0)
         ax.xaxis.grid(False)
         ax.set_axisbelow(True)
@@ -5253,6 +5255,8 @@ def fetch_hydrometric_water_level(station_id, provterr):
         rows_too_short = 0
         rows_empty_level = 0
         rows_parse_failed = 0
+        discharge_times = []
+        discharge_vals  = []
         for row in reader:
             rows_seen += 1
             if len(row) < 3:
@@ -5262,6 +5266,16 @@ def fetch_hydrometric_water_level(station_id, provterr):
             level_str = row[2].strip()
             if not level_str:
                 rows_empty_level += 1
+                # Try col 3 (discharge m³/s) as fallback
+                if len(row) >= 4:
+                    disch_str = row[3].strip()
+                    if disch_str:
+                        try:
+                            t = datetime.fromisoformat(date_str[:19])
+                            discharge_times.append(t)
+                            discharge_vals.append(float(disch_str))
+                        except Exception:
+                            pass
                 continue
             try:
                 t = datetime.fromisoformat(date_str[:19])
@@ -5274,22 +5288,25 @@ def fetch_hydrometric_water_level(station_id, provterr):
 
         print(f"HYDROMETRIC[{station_id}] DEBUG: rows_seen={rows_seen}, rows_too_short={rows_too_short}, "
               f"rows_empty_level={rows_empty_level}, rows_parse_failed={rows_parse_failed}, "
-              f"rows_kept={len(values_m)}")
+              f"rows_kept={len(values_m)}, discharge_fallback={len(discharge_vals)}")
 
         if not values_m:
+            if discharge_vals:
+                print(f"HYDROMETRIC[{station_id}]: no water level data; using discharge (m³/s) as fallback")
+                return discharge_times, discharge_vals, "discharge"
             print(f"HYDROMETRIC[{station_id}]: fetch succeeded but no usable water level values found "
                   f"— this station may report Discharge only, not Water Level; see DEBUG lines above")
-            return None, None
+            return None, None, "level"
 
         print(f"HYDROMETRIC[{station_id}]: parsed {len(values_m)} daily values from {url}")
-        return times, values_m
+        return times, values_m, "level"
 
     except Exception as e:
         print(f"HYDROMETRIC[{station_id}] FETCH FAILED:", e)
-        return None, None
+        return None, None, "level"
 
 
-def build_hydrometric_chart(times, values_m, station_id, river_name, tz_name="America/Inuvik"):
+def build_hydrometric_chart(times, values_m, station_id, river_name, tz_name="America/Inuvik", unit="level"):
     """
     river_name should describe the specific reach/gauge location, e.g.
     "Mackenzie River, Napoiak Channel above Shallow Bay" — used in the
@@ -5339,19 +5356,24 @@ def build_hydrometric_chart(times, values_m, station_id, river_name, tz_name="Am
         ]
         ax.set_xticks(tick_hours)
         ax.set_xticklabels(tick_labels, fontsize=13, color=NOTION_TEXT_GRAY, rotation=45, ha="right")
+        noon_hours = [h + 12 for h in tick_hours if h + 12 <= max(hours)]
+        ax.set_xticks(noon_hours, minor=True)
         ax.tick_params(axis="y", labelsize=13, colors=NOTION_TEXT_GRAY, length=0)
-        ax.tick_params(axis="x", length=0)
+        ax.tick_params(axis="x", which="major", length=8, color="#555555", width=1.2, bottom=True, direction="out")
+        ax.tick_params(axis="x", which="minor", length=4, color="#999999", width=1.0, bottom=True, direction="out")
         ax.yaxis.grid(True, color=NOTION_LIGHT_GRID, linewidth=1, zorder=0)
         ax.xaxis.grid(False)
         ax.set_axisbelow(True)
-        ax.set_ylabel("Water level (m)", fontsize=13, color=NOTION_TEXT_GRAY)
+        ylabel = "Discharge (m³/s)" if unit == "discharge" else "Water level (m)"
+        ax.set_ylabel(ylabel, fontsize=13, color=NOTION_TEXT_GRAY)
 
         fig.tight_layout()
         png_bytes = fig_to_png_bytes(fig, white_bg=True)
         span_days = round(max(hours) / 24)
         end_label = times[-1].replace(tzinfo=timezone.utc).astimezone(tz).strftime("%b %d, %Y %Z")
+        unit_note = " (discharge — water level not available for this station)" if unit == "discharge" else ""
         caption = (
-            f"{river_name}, "
+            f"{river_name}{unit_note}, "
             f"past {span_days} days, ending {end_label}. "
             f"Source: ECCC Water Survey of Canada, station {station_id} (real-time, preliminary/unreviewed)."
         )
@@ -5583,7 +5605,7 @@ def build_todays_conditions_section(weather_text, weather_source_text, weather_i
                                       wind_forecast_chart_block,
                                       tide_text, tide_chart_bytes, tide_chart_caption, station_code,
                                       sun_text, sun_chart_bytes, sun_chart_caption,
-                                      extra_card=None):
+                                      extra_card=None, tide_url=None):
     """
     Builds the 2x2 "Today's Conditions" card grid (Weather, Wind, Tide,
     Sun) — the most important, fastest-scanning part of the page, with
@@ -5639,6 +5661,7 @@ def build_todays_conditions_section(weather_text, weather_source_text, weather_i
 
     if tide_text is not None:
         tide_chart_block, _ = _upload_chart_or_caption(tide_chart_bytes, "tide_chart.png", "")
+        _tide_url = tide_url or f"https://www.tides.gc.ca/en/stations/{station_code}"
         tide_card = [
             heading("🌊 Tide", level=3),
             callout(
@@ -5648,7 +5671,7 @@ def build_todays_conditions_section(weather_text, weather_source_text, weather_i
             ),
             link_paragraph(
                 "Full station data →",
-                f"https://www.tides.gc.ca/en/stations/{station_code}",
+                _tide_url,
                 prefix=f"{tide_chart_caption if tide_chart_bytes else 'Tide chart could not be generated — see Action logs.'}  ",
                 prefix_gray=True,
             ),
@@ -6158,11 +6181,22 @@ def fetch_and_process_sentinel1_lake_ice(lat, lon, site_label, utm_zone, utm_eps
     if not s1_date:
         return None, "Lake ice classification unavailable — no recent Sentinel-1 scene found."
 
+    # Inland sites often have IW (VV) as the most-recent scene; EW (HH) acquisitions
+    # are less frequent but do occur over the Canadian Arctic. Try a 30-day lookback
+    # to find the most recent EW HH scene before giving up.
     if band != "HH":
-        return None, (
-            "Lake ice classification requires HH polarisation (EW mode). "
-            f"Latest scene uses {band} — classification not available for this acquisition."
+        print(f"LAKE ICE [{site_label}]: latest scene is {band} ({acq_mode}); searching 30-day window for EW HH")
+        s1_date2, s1_full_datetime2, acq_mode2, band2, pol_filter2 = find_latest_sentinel1_date(
+            sh_token, lat, lon, site_label, lookback_days=30, now_utc=now_utc
         )
+        if s1_date2 and band2 == "HH":
+            s1_date, s1_full_datetime, acq_mode, band, pol_filter = s1_date2, s1_full_datetime2, acq_mode2, band2, pol_filter2
+            print(f"LAKE ICE [{site_label}]: found EW HH scene {s1_date}")
+        else:
+            return None, (
+                "Lake ice classification requires HH polarisation (EW mode). "
+                f"No EW HH scene found in the past 30 days for {site_label}."
+            )
 
     # Compute a zoomed UTM center — same lat/lon, smaller frame
     with _TPEX(max_workers=2) as _ex:

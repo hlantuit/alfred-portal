@@ -1709,9 +1709,6 @@ def _gem_precip_chart(hours, rain_vals, snow_vals, t0):
     """
     try:
         import math as _math
-        # Trim trailing all-zero hours from the tail (GEM pads the 10-day window)
-        while hours and rain_vals[-1] == 0.0 and snow_vals[-1] == 0.0:
-            hours = hours[:-1]; rain_vals = rain_vals[:-1]; snow_vals = snow_vals[:-1]
         if not hours:
             return None
 
@@ -3115,7 +3112,7 @@ def build_gibs_url(date_str, bbox_3413, fetch_size_px=MODIS_FETCH_SIZE_PX):
         "SERVICE": "WMS",
         "REQUEST": "GetMap",
         "VERSION": "1.1.1",
-        "LAYERS": "MODIS_Terra_CorrectedReflectance_TrueColor,Coastlines",
+        "LAYERS": "MODIS_Terra_CorrectedReflectance_TrueColor",
         "STYLES": "",
         "FORMAT": "image/png",
         "TRANSPARENT": "false",
@@ -3183,6 +3180,19 @@ def fetch_modis_image(bbox_3413, now_utc, max_days_back=10, fetch_size_px=MODIS_
         print(f"MODIS {date_str}: HTTP {resp.status_code}, type={content_type}, bytes={len(resp.content)}")
 
         if resp.status_code == 200 and "image/png" in content_type and is_real_png and len(resp.content) >= 5000:
+            # Reject near-black images (GIBS returns black pixels when no MODIS
+            # data is available for a date — passes size check but is unusable).
+            try:
+                from PIL import Image as _PI
+                import io as _io
+                import numpy as _np
+                _img = _PI.open(_io.BytesIO(resp.content)).convert("RGB")
+                _mean_brightness = _np.array(_img).mean()
+                if _mean_brightness < 12:
+                    print(f"  -> rejected (mean brightness {_mean_brightness:.1f} — near-black, no MODIS data)")
+                    continue
+            except Exception:
+                pass
             return resp.content, date_str
         print("  -> rejected (not a usable image for this date)")
 
@@ -4980,7 +4990,9 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
                 if features:
                     val = features[0]["properties"].get("value")
                     if val is not None:
-                        return ts.strftime("%Y-%m-%dT%H:%M:%SZ"), float(val)
+                        fval = float(val)
+                        if fval < 500:   # 9999 = GDWPS fill value (outside model domain)
+                            return ts.strftime("%Y-%m-%dT%H:%M:%SZ"), fval
             except Exception:
                 pass
             return None
@@ -5001,7 +5013,9 @@ def fetch_gdwps_wave_forecast(lat, lon, now_utc, site_label="site"):
                 if features:
                     val = features[0]["properties"].get("value")
                     if val is not None:
-                        return ts.strftime("%Y-%m-%dT%H:%M:%SZ"), float(val)
+                        fval = float(val)
+                        if fval < 500:
+                            return ts.strftime("%Y-%m-%dT%H:%M:%SZ"), fval
             except Exception:
                 pass
             return None

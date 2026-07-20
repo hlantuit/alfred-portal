@@ -420,6 +420,15 @@ def update_community(community, now_utc):
     if "snow_depth" in enabled:
         print(f"[{sid}] STARTING: snow depth card")
         snow_card = lib.build_snow_depth_card(lat, lon, now_utc)
+    if "webcam" in enabled:
+        webcam_url = community.get("webcam_url")
+        if webcam_url:
+            print(f"[{sid}] STARTING: webcam card")
+            snow_card = lib.build_webcam_card(
+                webcam_url,
+                webcam_label=community.get("webcam_label", "Webcam"),
+                webcam_page_url=community.get("webcam_page_url"),
+            )
 
     logo_url       = None
     logo_png_bytes = None

@@ -5493,6 +5493,43 @@ def build_snow_depth_chart(times, depths_cm, now_utc):
         return None, "Snow depth chart could not be generated — see Action logs."
 
 
+def build_webcam_card(webcam_url, webcam_label="Webcam", webcam_page_url=None):
+    """
+    Downloads the current webcam JPEG/PNG from webcam_url, uploads it to
+    Notion, and returns card blocks (list) for use as extra_card in
+    build_todays_conditions_section.
+
+    webcam_url:      direct image URL (refreshed each run)
+    webcam_label:    short label shown as heading, e.g. "Webcam — North View"
+    webcam_page_url: optional link to the full webcam page
+    """
+    try:
+        r = requests.get(webcam_url, timeout=20, headers={"User-Agent": "alfred-portal/1.0"})
+        r.raise_for_status()
+        img_bytes = r.content
+    except Exception as e:
+        print(f"WEBCAM FETCH FAILED ({webcam_url}): {e}")
+        img_bytes = None
+
+    img_block, _ = _upload_chart_or_caption(img_bytes, "webcam.jpg", "")
+
+    source_note = "NAV CANADA Weather Camera" if "navcanada" in webcam_url else webcam_url[:60]
+    caption_page = webcam_page_url or webcam_url
+    blocks = [
+        heading(f"📷 {webcam_label}", level=3),
+        callout(
+            source_note,
+            color="blue_background",
+            children=[img_block] if img_block else None,
+        ),
+    ]
+    if webcam_page_url:
+        blocks.append(link_paragraph("Full webcam page →", caption_page))
+    else:
+        blocks.append(gray_caption("Image refreshed each run."))
+    return blocks
+
+
 def build_snow_depth_card(lat, lon, now_utc):
     """
     Builds the snow depth Today's Conditions card (list of Notion blocks).

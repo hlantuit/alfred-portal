@@ -5694,7 +5694,6 @@ def build_webcam_card(webcam_url, webcam_label="Webcam", webcam_page_url=None):
         source_note = "FAA Weather Camera"
     else:
         source_note = webcam_url[:60]
-    caption_page = webcam_page_url or webcam_url
     blocks = [
         heading(f"📷 {webcam_label}", level=3),
         callout(
@@ -5703,9 +5702,11 @@ def build_webcam_card(webcam_url, webcam_label="Webcam", webcam_page_url=None):
             children=[img_block] if img_block else None,
         ),
     ]
+    if resolved:
+        blocks.append(link_paragraph("Full-resolution image →", resolved))
     if webcam_page_url:
-        blocks.append(link_paragraph("Full webcam page →", caption_page))
-    else:
+        blocks.append(link_paragraph("Full webcam page →", webcam_page_url))
+    if not resolved and not webcam_page_url:
         blocks.append(gray_caption("Image refreshed each run."))
     return blocks
 

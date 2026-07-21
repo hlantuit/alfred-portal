@@ -327,11 +327,12 @@ const ctx = canvas.getContext('2d');
 
 function resizeCanvas() {
   const size = map.getSize();
-  canvas.width = size.x;
-  canvas.height = size.y;
+  canvas.width  = size.x || window.innerWidth;
+  canvas.height = size.y || window.innerHeight;
+  console.log('[wind] canvas sized:', canvas.width, 'x', canvas.height);
 }
 map.on('resize', resizeCanvas);
-resizeCanvas();
+map.whenReady(resizeCanvas);
 
 const N_PARTICLES = 650;
 let particles = [];
@@ -388,6 +389,9 @@ function speedColor(sp) {
 function step() {
   // Clear visible canvas each frame — trail is stored per-particle, not on canvas.
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // Diagnostic: red square — visible if canvas is rendering at all.
+  ctx.fillStyle = 'rgba(255,0,0,0.7)';
+  ctx.fillRect(canvas.width - 35, 10, 25, 25);
 
   particles.forEach(p => {
     const w   = windAt(p.lat, p.lon);

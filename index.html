@@ -317,7 +317,7 @@ setTimeout(reportHeight, 500);
 // stacking-context or pane-transform issue can hide it. #map fills the entire
 // viewport, so latLngToContainerPoint() coordinates are viewport-identical.
 const canvas = document.createElement('canvas');
-canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999;';
+canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:250;';
 document.body.appendChild(canvas);
 const ctx = canvas.getContext('2d');
 

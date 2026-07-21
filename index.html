@@ -391,9 +391,6 @@ function speedColor(sp) {
 function step() {
   if (!mapReady) { requestAnimationFrame(step); return; }
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  // Diagnostic: red square — remove once particles confirmed working.
-  ctx.fillStyle = 'rgba(255,0,0,0.7)';
-  ctx.fillRect(canvas.width - 35, 10, 25, 25);
 
   particles.forEach(p => {
     const w   = windAt(p.lat, p.lon);

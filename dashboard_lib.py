@@ -4270,21 +4270,28 @@ def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_wi
                    sea_seed_from="top"):
     """
     Rasterises the coastline GeoJSON as thick lines on a binary mask, then
-    flood-fills from an edge pixel to identify the sea region.
+    flood-fills from one or more edge pixels to identify the sea region.
     Returns a boolean numpy array, True = sea pixel, False = land pixel.
     On any failure returns all-True (treat everything as sea).
 
-    sea_seed_from: which image edge to seed the flood fill from.
-      "top"    — north edge; correct for sites where sea is north (default:
-                 Herschel, Shingle Point, Tuktoyaktuk, Prudhoe Bay, Barrow)
-      "bottom" — south edge; use for sites where sea is south (e.g. Sachs
-                 Harbour, on the south coast of Banks Island)
-      "left"   — west edge
-      "right"  — east edge
+    sea_seed_from: which image edge(s) to seed the flood fill from.
+      Single value or comma-separated string of values:
+      "top"         — north edge (default; sea is north)
+      "bottom"      — south edge (sea is south, e.g. Sachs Harbour)
+      "left"        — west edge
+      "right"       — east edge
+      "bottom,left" — seeds from both south and west edges (Sachs Harbour,
+                      where the western ocean is disconnected from the south)
     """
     import json
     import numpy as np
-    from PIL import Image as _PI, ImageDraw as _PID
+    from PIL import Image as _PI, ImageDraw as _PID, ImageFilter as _PIF
+
+    # Normalise to a set of edge names
+    if isinstance(sea_seed_from, (list, tuple)):
+        seed_edges = set(sea_seed_from)
+    else:
+        seed_edges = {s.strip() for s in str(sea_seed_from).split(",")}
 
     w = h = output_size_px
     mask = _PI.new("L", (w, h), 0)
@@ -4311,34 +4318,45 @@ def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_wi
                     pts = [_to_px(c[0], c[1]) for c in line]
                     if len(pts) >= 2:
                         draw.line(pts, fill=200, width=6)
+
+            # Dilate coastline pixels by 2 px to close sub-pixel gaps that
+            # the flood fill would otherwise leak through (common at large
+            # frame scales where each pixel covers ~300 m).
+            mask = mask.filter(_PIF.MaxFilter(5))
         except Exception as e:
             print(f"SEA MASK COASTLINE RASTERISE FAILED: {e}")
 
-    # Seal the three non-seed edges so the flood-fill can't leak around the
-    # coastline via the image border. The seed edge is left open.
+    # Seal every non-seed edge so the flood fill can't escape via the border.
     _draw2 = _PID.Draw(mask)
     _e = 4
-    _sides = {
-        "top":    [(0, h - 1 - _e, w - 1, h - 1), (0, 0, _e, h - 1), (w - 1 - _e, 0, w - 1, h - 1)],
-        "bottom": [(0, 0, w - 1, _e),              (0, 0, _e, h - 1), (w - 1 - _e, 0, w - 1, h - 1)],
-        "left":   [(0, 0, w - 1, _e),              (0, h - 1 - _e, w - 1, h - 1), (w - 1 - _e, 0, w - 1, h - 1)],
-        "right":  [(0, 0, w - 1, _e),              (0, h - 1 - _e, w - 1, h - 1), (0, 0, _e, h - 1)],
+    _all_edge_rects = {
+        "top":    (0, 0, w - 1, _e),
+        "bottom": (0, h - 1 - _e, w - 1, h - 1),
+        "left":   (0, 0, _e, h - 1),
+        "right":  (w - 1 - _e, 0, w - 1, h - 1),
     }
-    for rect in _sides.get(sea_seed_from, _sides["top"]):
-        _draw2.rectangle(rect, fill=200)
+    for edge_name, rect in _all_edge_rects.items():
+        if edge_name not in seed_edges:
+            _draw2.rectangle(rect, fill=200)
 
-    _seed_pts = {
-        "top":    (w // 2, 3),
-        "bottom": (w // 2, h - 4),
-        "left":   (3, h // 2),
-        "right":  (w - 4, h // 2),
+    # Seed points: three per edge (25 %, 50 %, 75 % along the edge) for
+    # robustness when the ocean region is disconnected at the centre point.
+    _edge_seeds = {
+        "top":    [(w // 4, 3), (w // 2, 3), (3 * w // 4, 3)],
+        "bottom": [(w // 4, h - 4), (w // 2, h - 4), (3 * w // 4, h - 4)],
+        "left":   [(3, h // 4), (3, h // 2), (3, 3 * h // 4)],
+        "right":  [(w - 4, h // 4), (w - 4, h // 2), (w - 4, 3 * h // 4)],
     }
-    seed = _seed_pts.get(sea_seed_from, (w // 2, 3))
+    any_filled = False
+    for edge in seed_edges:
+        for seed in _edge_seeds.get(edge, []):
+            try:
+                _PID.floodfill(mask, seed, 128)
+                any_filled = True
+            except Exception as e:
+                print(f"SEA MASK FLOOD FILL FAILED ({edge} {seed}): {e}")
 
-    try:
-        _PID.floodfill(mask, seed, 128)
-    except Exception as e:
-        print(f"SEA MASK FLOOD FILL FAILED: {e}")
+    if not any_filled:
         return np.ones((h, w), dtype=bool)
 
     return np.array(mask) == 128

@@ -313,22 +313,24 @@ setTimeout(reportHeight, 500);
 })();
 
 // ---------- Particle canvas overlay ----------
-const canvas = L.DomUtil.create('canvas', 'leaflet-wind-canvas');
+// Canvas goes directly in the map container (not in a Leaflet pane) so that
+// latLngToContainerPoint() maps directly to canvas pixel coordinates without
+// any Leaflet pane transform interference.
+const canvas = document.createElement('canvas');
 canvas.style.position = 'absolute';
+canvas.style.top = '0';
+canvas.style.left = '0';
 canvas.style.pointerEvents = 'none';
-map.getPanes().overlayPane.appendChild(canvas);
+canvas.style.zIndex = '300'; // above tiles (200), below markers (600)
+map.getContainer().appendChild(canvas);
 const ctx = canvas.getContext('2d');
 
 function resizeCanvas() {
   const size = map.getSize();
   canvas.width = size.x;
   canvas.height = size.y;
-  // Reposition relative to the overlayPane's internal coordinate system.
-  // Only needed on resize/zoom — panning moves the whole overlayPane via CSS.
-  const topLeft = map.containerPointToLayerPoint([0,0]);
-  L.DomUtil.setPosition(canvas, topLeft);
 }
-map.on('resize zoomend', resizeCanvas);
+map.on('resize', resizeCanvas);
 resizeCanvas();
 
 const N_PARTICLES = 650;

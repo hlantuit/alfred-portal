@@ -354,11 +354,22 @@ initParticles();
 map.on('moveend zoomend', initParticles);
 
 function speedColor(sp) {
-  // Alfred blue (slow) -> orange (fast), matching dashboard chart palette
-  const t = Math.min(sp/1.4, 1);
-  const r = Math.round(0 + t*(245-0));
-  const g = Math.round(172 + t*(166-172));
-  const b = Math.round(232 + t*(35-232));
+  // Plasma colormap: 0 m/s → deep purple → magenta → orange → yellow at 20+ m/s
+  const t = Math.min(sp / 20, 1);
+  const stops = [
+    [0.00, [13,   8, 135]],
+    [0.25, [126,  3, 168]],
+    [0.50, [204, 71, 120]],
+    [0.75, [248,149,  64]],
+    [1.00, [240,249,  33]],
+  ];
+  let i = 0;
+  while (i < stops.length - 2 && t > stops[i+1][0]) i++;
+  const [t0, c0] = stops[i], [t1, c1] = stops[i+1];
+  const f = (t - t0) / (t1 - t0);
+  const r = Math.round(c0[0] + f*(c1[0]-c0[0]));
+  const g = Math.round(c0[1] + f*(c1[1]-c0[1]));
+  const b = Math.round(c0[2] + f*(c1[2]-c0[2]));
   return `rgba(${r},${g},${b},`;
 }
 
@@ -379,7 +390,7 @@ function step() {
     // Speed factor: slow wind → short step, strong wind → longer step, capped.
     const STEP_PX = 1.8;
     const spd = w.speed || 0.01;
-    const factor = Math.min(spd / 6, 1.4) + 0.25;
+    const factor = Math.min(spd / 5, 2.5) + 0.15;
     const p1 = L.point(p0.x + (w.u / spd) * STEP_PX * factor,
                        p0.y - (w.v / spd) * STEP_PX * factor);
     const ll = map.containerPointToLatLng(p1);

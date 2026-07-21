@@ -3978,7 +3978,8 @@ def fetch_sentinel1_image(token, date_str, center_x, center_y, utm_epsg,
 def fetch_and_process_sentinel1(lat, lon, site_label, utm_zone, utm_epsg,
                                  center_x, center_y, points, tz_name,
                                  half_width_m=150_000, reference_lines=None,
-                                 coastline_geojson_path=None, now_utc=None):
+                                 coastline_geojson_path=None, now_utc=None,
+                                 lookback_days=10):
     """
     Wraps the full Sentinel-1 token-catalog-image-annotate-stamp chain as
     a single function, for the same concurrent-top-level-fetch reason as
@@ -3996,7 +3997,7 @@ def fetch_and_process_sentinel1(lat, lon, site_label, utm_zone, utm_epsg,
     sh_token = get_sentinel_hub_token()
     if sh_token:
         s1_date, s1_full_datetime, acq_mode, band, pol_filter = find_latest_sentinel1_date(
-            sh_token, lat, lon, site_label, now_utc=now_utc
+            sh_token, lat, lon, site_label, lookback_days=lookback_days, now_utc=now_utc
         )
         if s1_date:
             s1_raw = fetch_sentinel1_image(
@@ -4368,7 +4369,7 @@ def fetch_and_process_sentinel1_ice(lat, lon, site_label, utm_zone, utm_epsg,
                                      center_x, center_y, points, tz_name,
                                      half_width_m=150_000, reference_lines=None,
                                      coastline_geojson_path=None, now_utc=None,
-                                     arrow_annotations=None):
+                                     arrow_annotations=None, lookback_days=10):
     """
     Fetches a Sentinel-1 sea-ice classification image for the same scene
     as fetch_and_process_sentinel1, using a colour-ramp evalscript instead
@@ -4382,16 +4383,25 @@ def fetch_and_process_sentinel1_ice(lat, lon, site_label, utm_zone, utm_epsg,
         return None, "Sea ice classification unavailable — Sentinel Hub credentials missing."
 
     s1_date, s1_full_datetime, acq_mode, band, pol_filter = find_latest_sentinel1_date(
-        sh_token, lat, lon, site_label, now_utc=now_utc
+        sh_token, lat, lon, site_label, lookback_days=lookback_days, now_utc=now_utc
     )
     if not s1_date:
         return None, "Sea ice classification unavailable — no recent Sentinel-1 scene found."
 
     if band != "HH":
-        return None, (
-            "Sea ice classification requires HH polarisation (EW mode). "
-            f"Latest scene uses {band} — classification not available for this acquisition."
+        # Most recent scene is IW/VV; search a wider window (up to 30 days) for EW/HH.
+        extended_days = max(lookback_days, 30)
+        print(f"SEA ICE [{site_label}]: latest scene is {band} ({acq_mode}); searching {extended_days}-day window for EW HH")
+        s1_date2, s1_full_datetime2, acq_mode2, band2, pol_filter2 = find_latest_sentinel1_date(
+            sh_token, lat, lon, site_label, lookback_days=extended_days, now_utc=now_utc, required_band="HH"
         )
+        if s1_date2 and band2 == "HH":
+            s1_date, s1_full_datetime, acq_mode, band, pol_filter = s1_date2, s1_full_datetime2, acq_mode2, band2, pol_filter2
+        else:
+            return None, (
+                "Sea ice classification requires HH polarisation (EW mode). "
+                f"No EW HH scene found in {extended_days}-day window — classification not available."
+            )
 
     # Fetch colour-ramp and grayscale images in parallel (same scene)
     from concurrent.futures import ThreadPoolExecutor as _TPEX

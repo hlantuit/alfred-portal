@@ -313,16 +313,12 @@ setTimeout(reportHeight, 500);
 })();
 
 // ---------- Particle canvas overlay ----------
-// Canvas goes directly in the map container (not in a Leaflet pane) so that
-// latLngToContainerPoint() maps directly to canvas pixel coordinates without
-// any Leaflet pane transform interference.
+// Fixed-position canvas in <body> (not inside Leaflet at all) so no Leaflet
+// stacking-context or pane-transform issue can hide it. #map fills the entire
+// viewport, so latLngToContainerPoint() coordinates are viewport-identical.
 const canvas = document.createElement('canvas');
-canvas.style.position = 'absolute';
-canvas.style.top = '0';
-canvas.style.left = '0';
-canvas.style.pointerEvents = 'none';
-canvas.style.zIndex = '300'; // above tiles (200), below markers (600)
-map.getContainer().appendChild(canvas);
+canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:9999;';
+document.body.appendChild(canvas);
 const ctx = canvas.getContext('2d');
 
 function resizeCanvas() {

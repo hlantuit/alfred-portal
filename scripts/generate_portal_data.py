@@ -80,7 +80,7 @@ def _fetch_weather(lat, lon):
             # standard verified surface variables; u/v components can return
             # pressure-level values on some models despite the "10m" name.
             "hourly": "temperature_2m,wind_speed_10m,wind_direction_10m,weather_code",
-            "models": "best_match",
+            "models": "gem_seamless",
             "timezone": "UTC",
             "start_date": now_iso,
             "end_date": now_iso,

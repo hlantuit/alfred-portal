@@ -369,7 +369,7 @@ function speedColor(sp) {
   // 0 m/s → bright purple, ~10 m/s → magenta/pink, 20+ m/s → yellow.
   // tAdj shifts the input into [0.2, 1.0] of the full plasma range so the
   // darkest stop (#0d0887) is never used — it's invisible on a light basemap.
-  const t = Math.min(sp / 20, 1);
+  const t = Math.min(sp / 8, 1);  // 8 m/s (~29 km/h) = full yellow
   const tAdj = 0.2 + t * 0.8;
   const stops = [
     [0.00, [13,   8, 135]],

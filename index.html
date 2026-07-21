@@ -135,8 +135,6 @@
 <script>
 // ---------- Map setup (Web Mercator — reliable tile coverage at these latitudes) ----------
 const map = L.map('map', {
-  center: [69.6, -143.0],
-  zoom: 6,
   minZoom: 4,
   maxZoom: 13,
   zoomControl: true,
@@ -268,8 +266,10 @@ setTimeout(reportHeight, 500);
       badge.style.color = '#8A6A1D';
     }
 
-    // Create site markers
+    // Create site markers and collect positions for fitBounds
+    const markerLatLngs = [];
     sitesData.forEach(s => {
+      markerLatLngs.push([s.lat, s.lon]);
       const c = conds[s.id] || {};
       const marker = L.marker([s.lat, s.lon], {icon: siteIcon}).addTo(map);
       const popupContent = `
@@ -292,12 +292,19 @@ setTimeout(reportHeight, 500);
         'trail-valley':  {direction: 'right',  offset: [18,  0]},
         'inuvik':        {direction: 'bottom', offset: [0,   18]},
         'tuktoyaktuk':   {direction: 'top',    offset: [0,  -18]},
+        'paulatuk':      {direction: 'bottom', offset: [0,   18]},
+        'sachs-harbour': {direction: 'top',    offset: [0,  -18]},
+        'ulukhaktok':    {direction: 'right',  offset: [18,  0]},
       };
       const lp = labelPlacement[s.id] || {direction: 'right', offset: [18, 0]};
       marker.bindPopup(popupContent);
       marker.bindTooltip(s.name, {permanent: true, direction: lp.direction, offset: lp.offset, className: 'site-label'});
       marker.on('mouseover', function() { this.openPopup(); });
     });
+
+    if (markerLatLngs.length) {
+      map.fitBounds(markerLatLngs, { padding: [40, 40] });
+    }
 
   } catch (err) {
     console.error('Portal data fetch failed:', err);

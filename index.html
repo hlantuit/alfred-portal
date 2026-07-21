@@ -354,8 +354,12 @@ initParticles();
 map.on('moveend zoomend', initParticles);
 
 function speedColor(sp) {
-  // Plasma colormap: 0 m/s → deep purple → magenta → orange → yellow at 20+ m/s
+  // Plasma colormap starting at visible purple (skip near-black dark end).
+  // 0 m/s → bright purple, ~10 m/s → magenta/pink, 20+ m/s → yellow.
+  // tAdj shifts the input into [0.2, 1.0] of the full plasma range so the
+  // darkest stop (#0d0887) is never used — it's invisible on a light basemap.
   const t = Math.min(sp / 20, 1);
+  const tAdj = 0.2 + t * 0.8;
   const stops = [
     [0.00, [13,   8, 135]],
     [0.25, [126,  3, 168]],
@@ -364,9 +368,9 @@ function speedColor(sp) {
     [1.00, [240,249,  33]],
   ];
   let i = 0;
-  while (i < stops.length - 2 && t > stops[i+1][0]) i++;
+  while (i < stops.length - 2 && tAdj > stops[i+1][0]) i++;
   const [t0, c0] = stops[i], [t1, c1] = stops[i+1];
-  const f = (t - t0) / (t1 - t0);
+  const f = (tAdj - t0) / (t1 - t0);
   const r = Math.round(c0[0] + f*(c1[0]-c0[0]));
   const g = Math.round(c0[1] + f*(c1[1]-c0[1]));
   const b = Math.round(c0[2] + f*(c1[2]-c0[2]));
@@ -398,7 +402,7 @@ function step() {
     p.lon = ll.lng;
     p.age += 1;
 
-    ctx.strokeStyle = speedColor(w.speed) + '0.5)';
+    ctx.strokeStyle = speedColor(w.speed) + '0.7)';
     ctx.lineWidth = 1.4;
     ctx.beginPath();
     ctx.moveTo(p0.x, p0.y);

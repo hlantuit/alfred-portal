@@ -314,6 +314,8 @@ setTimeout(reportHeight, 500);
 
 // ---------- Particle canvas overlay ----------
 const canvas = L.DomUtil.create('canvas', 'leaflet-wind-canvas');
+canvas.style.position = 'absolute';
+canvas.style.pointerEvents = 'none';
 map.getPanes().overlayPane.appendChild(canvas);
 const ctx = canvas.getContext('2d');
 
@@ -321,10 +323,12 @@ function resizeCanvas() {
   const size = map.getSize();
   canvas.width = size.x;
   canvas.height = size.y;
+  // Reposition relative to the overlayPane's internal coordinate system.
+  // Only needed on resize/zoom — panning moves the whole overlayPane via CSS.
   const topLeft = map.containerPointToLayerPoint([0,0]);
   L.DomUtil.setPosition(canvas, topLeft);
 }
-map.on('resize move zoom', resizeCanvas);
+map.on('resize zoomend', resizeCanvas);
 resizeCanvas();
 
 const N_PARTICLES = 650;

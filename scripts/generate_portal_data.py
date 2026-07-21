@@ -76,7 +76,10 @@ def _fetch_weather(lat, lon):
         "https://api.open-meteo.com/v1/forecast",
         params={
             "latitude": lat, "longitude": lon,
-            "hourly": "temperature_2m,wind_u_component_10m,wind_v_component_10m,weather_code",
+            # wind_speed_10m (km/h) and wind_direction_10m (degrees) are the
+            # standard verified surface variables; u/v components can return
+            # pressure-level values on some models despite the "10m" name.
+            "hourly": "temperature_2m,wind_speed_10m,wind_direction_10m,weather_code",
             "models": "best_match",
             "timezone": "UTC",
             "start_date": now_iso,
@@ -84,23 +87,25 @@ def _fetch_weather(lat, lon):
         },
     )
     data  = r.json()
-    temps = data["hourly"]["temperature_2m"]
-    us    = data["hourly"]["wind_u_component_10m"]  # m/s eastward, continuous float
-    vs    = data["hourly"]["wind_v_component_10m"]  # m/s northward, continuous float
-    codes = data["hourly"]["weather_code"]
+    temps  = data["hourly"]["temperature_2m"]
+    speeds = data["hourly"]["wind_speed_10m"]    # km/h
+    dirs   = data["hourly"]["wind_direction_10m"] # degrees FROM (meteorological)
+    codes  = data["hourly"]["weather_code"]
 
     now_h = datetime.now(timezone.utc).hour
     idx   = min(range(len(temps)), key=lambda i: abs(i - now_h))
 
-    u_ms   = us[idx] or 0.0
-    v_ms   = vs[idx] or 0.0
-    spd_ms = math.sqrt(u_ms**2 + v_ms**2)
-    # meteorological convention: direction wind comes FROM
-    wind_dir = (math.degrees(math.atan2(-u_ms, -v_ms)) + 360) % 360 if spd_ms > 0 else None
+    spd_kmh  = speeds[idx] or 0.0
+    wind_dir = dirs[idx]
+    spd_ms   = spd_kmh / 3.6
+    # Derive u/v (eastward/northward) from speed + direction for wind grid
+    dir_rad = math.radians(wind_dir) if wind_dir is not None else 0.0
+    u_ms = -spd_ms * math.sin(dir_rad)
+    v_ms = -spd_ms * math.cos(dir_rad)
 
     return {
         "air_temp_c":   round(temps[idx], 1) if temps[idx] is not None else None,
-        "wind_kmh":     round(spd_ms * 3.6, 1),
+        "wind_kmh":     round(spd_kmh, 1),
         "wind_dir_deg": round(wind_dir, 1) if wind_dir is not None else None,
         "wind_u_ms":    round(u_ms, 3),
         "wind_v_ms":    round(v_ms, 3),

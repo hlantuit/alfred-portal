@@ -332,35 +332,41 @@ function resizeCanvas() {
   console.log('[wind] canvas sized:', canvas.width, 'x', canvas.height);
 }
 map.on('resize', resizeCanvas);
-map.whenReady(resizeCanvas);
+resizeCanvas(); // size immediately from CSS layout
 
 const N_PARTICLES = 650;
 let particles = [];
 
-// Spawn particles only within the wind grid bounds (or whole viewport if no grid yet)
 const GRID_LAT_S = 62.0, GRID_LAT_N = 78.0, GRID_LON_W = -175.0, GRID_LON_E = -110.0;
+const TRAIL_LEN = 18;
 
-const TRAIL_LEN = 18; // number of past positions stored per particle
+// Guard: map.getBounds() throws before the first fitBounds/setView.
+// Wait for the Leaflet 'load' event before spawning particles or drawing.
+let mapReady = false;
+map.once('load', () => {
+  mapReady = true;
+  resizeCanvas();   // re-size now that fitBounds has run
+  initParticles();  // spawn in valid lat/lon range
+});
+map.on('moveend zoomend', () => { if (mapReady) initParticles(); });
 
 function spawnParticle() {
   const b = map.getBounds();
-  const latS = windGrid ? Math.max(b.getSouth(), GRID_LAT_S) : b.getSouth();
-  const latN = windGrid ? Math.min(b.getNorth(), GRID_LAT_N) : b.getNorth();
-  const lonW = windGrid ? Math.max(b.getWest(),  GRID_LON_W) : b.getWest();
-  const lonE = windGrid ? Math.min(b.getEast(),  GRID_LON_E) : b.getEast();
+  const latS = Math.max(b.getSouth(), GRID_LAT_S);
+  const latN = Math.min(b.getNorth(), GRID_LAT_N);
+  const lonW = Math.max(b.getWest(),  GRID_LON_W);
+  const lonE = Math.min(b.getEast(),  GRID_LON_E);
   return {
     lat: latS + Math.random() * (latN - latS),
     lon: lonW + Math.random() * (lonE - lonW),
     age: Math.random() * 80,
-    trail: []  // recent {x,y} screen positions
+    trail: []
   };
 }
 function initParticles() {
   particles = [];
-  for (let i=0;i<N_PARTICLES;i++) particles.push(spawnParticle());
+  for (let i = 0; i < N_PARTICLES; i++) particles.push(spawnParticle());
 }
-initParticles();
-map.on('moveend zoomend', initParticles);
 
 function speedColor(sp) {
   // Plasma colormap starting at visible purple (skip near-black dark end).
@@ -387,9 +393,9 @@ function speedColor(sp) {
 }
 
 function step() {
-  // Clear visible canvas each frame — trail is stored per-particle, not on canvas.
+  if (!mapReady) { requestAnimationFrame(step); return; }
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  // Diagnostic: red square — visible if canvas is rendering at all.
+  // Diagnostic: red square — remove once particles confirmed working.
   ctx.fillStyle = 'rgba(255,0,0,0.7)';
   ctx.fillRect(canvas.width - 35, 10, 25, 25);
 

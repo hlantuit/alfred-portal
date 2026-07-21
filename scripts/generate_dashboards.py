@@ -773,12 +773,15 @@ def update_community(community, now_utc):
         blocks += lib.build_wave_forecast_section(wave_data)
 
     if "water_level" in enabled:
-        wl_text = (
-            [("TOPAZ6 now: ", f"{topaz_values[0]:.2f} m (vs. {topaz_yearly_mean:.2f} m yearly mean)" if topaz_yearly_mean is not None else f"{topaz_values[0]:.2f} m")]
-            if topaz_values else
-            [("GDSPS now: ", f"{gdsps_values[0]:.2f} m")]
-            if gdsps_values else "Total water level forecast unavailable."
-        )
+        if topaz_values:
+            _topaz_str = f"{topaz_values[0]:.2f} m (vs. {topaz_yearly_mean:.2f} m yearly mean)" if topaz_yearly_mean is not None else f"{topaz_values[0]:.2f} m"
+            wl_text = [("TOPAZ6 now: ", _topaz_str)]
+            if not gdsps_values:
+                wl_text.append(("", "GDSPS unavailable this run (geo.weather.gc.ca timeout)."))
+        elif gdsps_values:
+            wl_text = [("GDSPS now: ", f"{gdsps_values[0]:.2f} m")]
+        else:
+            wl_text = "Total water level forecast unavailable."
         wl_chart_bytes, wl_chart_caption = lib.build_water_level_chart(
             topaz_times, topaz_values, tz_name, topaz_yearly_mean,
             gdsps_times=gdsps_times, gdsps_values=gdsps_values,

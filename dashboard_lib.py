@@ -1878,7 +1878,7 @@ def get_marine_forecast(zone_id):
         # weather.gc.ca's RSS endpoints have shown occasional transient
         # connection timeouts (seen in practice on a real run), so this
         # uses the retry helper rather than a single unprotected attempt.
-        r = get_with_retry(url, timeout=15, retries=2, backoff_seconds=5)
+        r = get_with_retry(url, timeout=25, retries=3, backoff_seconds=5)
 
         ns = {"atom": "http://www.w3.org/2005/Atom"}
         root = ET.fromstring(r.content)
@@ -4868,7 +4868,7 @@ def fetch_gdsps_water_level(lat, lon, now_utc, site_label, yearly_mean=None):
             "?service=WMS&version=1.3.0&request=GetCapabilities"
             "&LAYERS=GDSPS_15km_SeaSfcHeight"
         )
-        caps_resp = requests.get(caps_url, timeout=20)
+        caps_resp = get_with_retry(caps_url, timeout=30, retries=2, backoff_seconds=10)
         caps_resp.raise_for_status()
 
         # Parse time dimension via regex — avoids WMS namespace issues with ElementTree.

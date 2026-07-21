@@ -339,9 +339,10 @@ let particles = [];
 // Spawn particles only within the wind grid bounds (or whole viewport if no grid yet)
 const GRID_LAT_S = 62.0, GRID_LAT_N = 78.0, GRID_LON_W = -175.0, GRID_LON_E = -110.0;
 
+const TRAIL_LEN = 18; // number of past positions stored per particle
+
 function spawnParticle() {
   const b = map.getBounds();
-  // Clamp spawn area to grid bounds (or full viewport if no grid yet)
   const latS = windGrid ? Math.max(b.getSouth(), GRID_LAT_S) : b.getSouth();
   const latN = windGrid ? Math.min(b.getNorth(), GRID_LAT_N) : b.getNorth();
   const lonW = windGrid ? Math.max(b.getWest(),  GRID_LON_W) : b.getWest();
@@ -349,7 +350,8 @@ function spawnParticle() {
   return {
     lat: latS + Math.random() * (latN - latS),
     lon: lonW + Math.random() * (lonE - lonW),
-    age: Math.random() * 80
+    age: Math.random() * 80,
+    trail: []  // recent {x,y} screen positions
   };
 }
 function initParticles() {
@@ -383,31 +385,10 @@ function speedColor(sp) {
   return `rgba(${r},${g},${b},`;
 }
 
-// Trail buffer: off-screen canvas that accumulates fading trails.
-// We draw new streaks onto it each frame, then composite a faded copy
-// back to itself, then blit it to the visible canvas via source-over.
-// This avoids the destination-in / transparent-canvas interaction that
-// silently produced an invisible result on the main canvas.
-const trail = document.createElement('canvas');
-let tctx = null;
-
-function ensureTrailSize() {
-  if (trail.width !== canvas.width || trail.height !== canvas.height) {
-    trail.width  = canvas.width;
-    trail.height = canvas.height;
-    tctx = trail.getContext('2d');
-  }
-}
-
 function step() {
-  ensureTrailSize();
+  // Clear visible canvas each frame — trail is stored per-particle, not on canvas.
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // 1. Fade the trail buffer: draw a semi-transparent black rect
-  //    in source-over mode — equivalent to multiplying existing alpha by ~0.85.
-  tctx.fillStyle = 'rgba(0,0,0,0.15)';
-  tctx.fillRect(0, 0, trail.width, trail.height);
-
-  // 2. Draw each particle's new streak onto the trail buffer.
   particles.forEach(p => {
     const w   = windAt(p.lat, p.lon);
     const p0  = map.latLngToContainerPoint([p.lat, p.lon]);
@@ -415,30 +396,34 @@ function step() {
     const factor = Math.min(spd / 5, 2.5) + 0.15;
     const dx  = (w.u / spd) * 1.8 * factor;
     const dy  = -(w.v / spd) * 1.8 * factor;
-    const p1  = L.point(p0.x + dx, p0.y + dy);
 
-    // Advance particle position geographically.
-    const ll = map.containerPointToLatLng(p1);
+    // Store current screen position in particle trail history.
+    p.trail.push({x: p0.x, y: p0.y});
+    if (p.trail.length > TRAIL_LEN) p.trail.shift();
+
+    // Draw fading trail: oldest segment = transparent, newest = fully opaque.
+    const color = speedColor(w.speed);
+    for (let i = 1; i < p.trail.length; i++) {
+      const alpha = (i / p.trail.length) * 0.80;
+      ctx.strokeStyle = color + alpha + ')';
+      ctx.lineWidth   = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(p.trail[i - 1].x, p.trail[i - 1].y);
+      ctx.lineTo(p.trail[i].x,     p.trail[i].y);
+      ctx.stroke();
+    }
+
+    // Advance particle geographically.
+    const ll = map.containerPointToLatLng(L.point(p0.x + dx, p0.y + dy));
     p.lat = ll.lat;
     p.lon = ll.lng;
     p.age += 1;
-
-    tctx.strokeStyle = speedColor(w.speed) + '0.85)';
-    tctx.lineWidth   = 1.6;
-    tctx.beginPath();
-    tctx.moveTo(p0.x, p0.y);
-    tctx.lineTo(p1.x, p1.y);
-    tctx.stroke();
 
     const outOfGrid = windGrid && (p.lat < GRID_LAT_S || p.lat > GRID_LAT_N || p.lon < GRID_LON_W || p.lon > GRID_LON_E);
     if (p.age > 90 || outOfGrid || p0.x < -20 || p0.x > canvas.width + 20 || p0.y < -20 || p0.y > canvas.height + 20) {
       Object.assign(p, spawnParticle());
     }
   });
-
-  // 3. Blit trail buffer onto the visible canvas (clear first).
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(trail, 0, 0);
 
   requestAnimationFrame(step);
 }

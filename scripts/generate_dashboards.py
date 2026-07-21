@@ -598,7 +598,8 @@ def update_community(community, now_utc):
                     yearly_mean=community.get("water_level_yearly_mean", 0.0),
                 )
 
-            _s1_lookback = community.get("sentinel1_lookback_days", 10)
+            _s1_lookback    = community.get("sentinel1_lookback_days", 10)
+            _sea_seed_from  = community.get("sea_seed_from", "top")
 
             if "sentinel1" in enabled and utm_zone and utm_center_x is not None:
                 fut_s1 = ex.submit(
@@ -620,6 +621,7 @@ def update_community(community, now_utc):
                     points=map_pts, tz_name=tz_name, half_width_m=150_000,
                     reference_lines=ref_lines, coastline_geojson_path=coastline,
                     now_utc=now_utc, lookback_days=_s1_lookback,
+                    sea_seed_from=_sea_seed_from,
                 )
 
             if "sea_ice_zoom" in enabled and utm_zone and utm_center_x is not None:
@@ -641,7 +643,7 @@ def update_community(community, now_utc):
                     points=map_pts, tz_name=tz_name, half_width_m=25_000,
                     reference_lines=ref_lines, coastline_geojson_path=coastline,
                     now_utc=now_utc, arrow_annotations=_ssdc_arrows,
-                    lookback_days=_s1_lookback,
+                    lookback_days=_s1_lookback, sea_seed_from=_sea_seed_from,
                 )
 
             if "lake_river_ice" in enabled and utm_zone and utm_center_x is not None:

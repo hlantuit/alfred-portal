@@ -4266,14 +4266,21 @@ def add_ice_classification_legend(png_bytes, ice_label="Sea ice"):
         return png_bytes
 
 
-def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_width_m, output_size_px):
+def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_width_m, output_size_px,
+                   sea_seed_from="top"):
     """
     Rasterises the coastline GeoJSON as thick lines on a binary mask, then
-    flood-fills from the top-centre pixel (assumed to be Beaufort Sea / open
-    ocean for all Arctic coastal sites where north = sea).
+    flood-fills from an edge pixel to identify the sea region.
     Returns a boolean numpy array, True = sea pixel, False = land pixel.
     On any failure returns all-True (treat everything as sea).
-    Uses latlon_to_utm so no extra dependencies are needed.
+
+    sea_seed_from: which image edge to seed the flood fill from.
+      "top"    — north edge; correct for sites where sea is north (default:
+                 Herschel, Shingle Point, Tuktoyaktuk, Prudhoe Bay, Barrow)
+      "bottom" — south edge; use for sites where sea is south (e.g. Sachs
+                 Harbour, on the south coast of Banks Island)
+      "left"   — west edge
+      "right"  — east edge
     """
     import json
     import numpy as np
@@ -4307,16 +4314,29 @@ def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_wi
         except Exception as e:
             print(f"SEA MASK COASTLINE RASTERISE FAILED: {e}")
 
-    # Seal left, right, and bottom edges so flood-fill can't leak around the
-    # coastline via the image border (top is left open — that's the sea seed).
+    # Seal the three non-seed edges so the flood-fill can't leak around the
+    # coastline via the image border. The seed edge is left open.
     _draw2 = _PID.Draw(mask)
     _e = 4
-    _draw2.rectangle([0, 0, _e, h - 1], fill=200)
-    _draw2.rectangle([w - 1 - _e, 0, w - 1, h - 1], fill=200)
-    _draw2.rectangle([0, h - 1 - _e, w - 1, h - 1], fill=200)
+    _sides = {
+        "top":    [(0, h - 1 - _e, w - 1, h - 1), (0, 0, _e, h - 1), (w - 1 - _e, 0, w - 1, h - 1)],
+        "bottom": [(0, 0, w - 1, _e),              (0, 0, _e, h - 1), (w - 1 - _e, 0, w - 1, h - 1)],
+        "left":   [(0, 0, w - 1, _e),              (0, h - 1 - _e, w - 1, h - 1), (w - 1 - _e, 0, w - 1, h - 1)],
+        "right":  [(0, 0, w - 1, _e),              (0, h - 1 - _e, w - 1, h - 1), (0, 0, _e, h - 1)],
+    }
+    for rect in _sides.get(sea_seed_from, _sides["top"]):
+        _draw2.rectangle(rect, fill=200)
+
+    _seed_pts = {
+        "top":    (w // 2, 3),
+        "bottom": (w // 2, h - 4),
+        "left":   (3, h // 2),
+        "right":  (w - 4, h // 2),
+    }
+    seed = _seed_pts.get(sea_seed_from, (w // 2, 3))
 
     try:
-        _PID.floodfill(mask, (w // 2, 3), 128)
+        _PID.floodfill(mask, seed, 128)
     except Exception as e:
         print(f"SEA MASK FLOOD FILL FAILED: {e}")
         return np.ones((h, w), dtype=bool)
@@ -4369,7 +4389,8 @@ def fetch_and_process_sentinel1_ice(lat, lon, site_label, utm_zone, utm_epsg,
                                      center_x, center_y, points, tz_name,
                                      half_width_m=150_000, reference_lines=None,
                                      coastline_geojson_path=None, now_utc=None,
-                                     arrow_annotations=None, lookback_days=10):
+                                     arrow_annotations=None, lookback_days=10,
+                                     sea_seed_from="top"):
     """
     Fetches a Sentinel-1 sea-ice classification image for the same scene
     as fetch_and_process_sentinel1, using a colour-ramp evalscript instead
@@ -4425,7 +4446,7 @@ def fetch_and_process_sentinel1_ice(lat, lon, site_label, utm_zone, utm_epsg,
     # Composite: sea pixels → colour ramp, land pixels → SAR grayscale
     sea_mask = _make_sea_mask(
         coastline_geojson_path, center_x, center_y, utm_zone, half_width_m,
-        MODIS_FINAL_SIZE_PX,
+        MODIS_FINAL_SIZE_PX, sea_seed_from=sea_seed_from,
     )
     if raw_gray is not None and sea_mask is not None:
         raw_color = _composite_sea_color_land_gray(raw_color, raw_gray, sea_mask)

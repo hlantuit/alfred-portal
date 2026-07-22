@@ -304,6 +304,8 @@ setTimeout(reportHeight, 500);
 
     if (markerLatLngs.length) {
       map.fitBounds(markerLatLngs, { padding: [40, 40] });
+      resizeCanvas();
+      initParticles(); // explicit init right after bounds are set — no 'load' event needed
     }
 
   } catch (err) {
@@ -323,28 +325,24 @@ const ctx = canvas.getContext('2d');
 
 function resizeCanvas() {
   const size = map.getSize();
-  canvas.width  = size.x || window.innerWidth;
-  canvas.height = size.y || window.innerHeight;
-  console.log('[wind] canvas sized:', canvas.width, 'x', canvas.height);
+  const w = size.x || window.innerWidth;
+  const h = size.y || window.innerHeight;
+  // Only reassign if dimensions actually changed — assigning canvas.width/height
+  // always resets the context and clears all pixels, even with the same value.
+  if (canvas.width !== w) canvas.width  = w;
+  if (canvas.height !== h) canvas.height = h;
 }
 map.on('resize', resizeCanvas);
 resizeCanvas(); // size immediately from CSS layout
 
 const N_PARTICLES = 650;
 let particles = [];
+let particlesReady = false;
 
 const GRID_LAT_S = 62.0, GRID_LAT_N = 78.0, GRID_LON_W = -175.0, GRID_LON_E = -110.0;
 const TRAIL_LEN = 18;
 
-// Guard: map.getBounds() throws before the first fitBounds/setView.
-// Wait for the Leaflet 'load' event before spawning particles or drawing.
-let mapReady = false;
-map.once('load', () => {
-  mapReady = true;
-  resizeCanvas();   // re-size now that fitBounds has run
-  initParticles();  // spawn in valid lat/lon range
-});
-map.on('moveend zoomend', () => { if (mapReady) initParticles(); });
+map.on('moveend zoomend', () => { if (particlesReady) initParticles(); });
 
 function spawnParticle() {
   const b = map.getBounds();
@@ -360,8 +358,14 @@ function spawnParticle() {
   };
 }
 function initParticles() {
-  particles = [];
-  for (let i = 0; i < N_PARTICLES; i++) particles.push(spawnParticle());
+  try {
+    const next = [];
+    for (let i = 0; i < N_PARTICLES; i++) next.push(spawnParticle());
+    particles = next;
+    particlesReady = true;
+  } catch(e) {
+    console.warn('[wind] initParticles failed:', e);
+  }
 }
 
 function speedColor(sp) {
@@ -389,10 +393,9 @@ function speedColor(sp) {
 }
 
 function step() {
-  if (!mapReady) { requestAnimationFrame(step); return; }
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  try {
+  if (particlesReady) try {
     particles.forEach(p => {
       // Reset any particle that has acquired NaN coordinates (bilinear crash guard).
       if (!isFinite(p.lat) || !isFinite(p.lon)) { Object.assign(p, spawnParticle()); return; }

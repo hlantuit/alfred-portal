@@ -392,41 +392,48 @@ function step() {
   if (!mapReady) { requestAnimationFrame(step); return; }
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  particles.forEach(p => {
-    const w   = windAt(p.lat, p.lon);
-    const p0  = map.latLngToContainerPoint([p.lat, p.lon]);
-    const spd = w.speed || 0.01;
-    const factor = Math.min(spd / 5, 2.5) + 0.15;
-    const dx  = (w.u / spd) * 1.8 * factor;
-    const dy  = -(w.v / spd) * 1.8 * factor;
+  try {
+    particles.forEach(p => {
+      // Reset any particle that has acquired NaN coordinates (bilinear crash guard).
+      if (!isFinite(p.lat) || !isFinite(p.lon)) { Object.assign(p, spawnParticle()); return; }
 
-    // Store current screen position in particle trail history.
-    p.trail.push({x: p0.x, y: p0.y});
-    if (p.trail.length > TRAIL_LEN) p.trail.shift();
+      const w   = windAt(p.lat, p.lon);
+      const p0  = map.latLngToContainerPoint([p.lat, p.lon]);
+      const spd = w.speed || 0.01;
+      const factor = Math.min(spd / 5, 2.5) + 0.15;
+      const dx  = (w.u / spd) * 1.8 * factor;
+      const dy  = -(w.v / spd) * 1.8 * factor;
 
-    // Draw fading trail: oldest segment = transparent, newest = fully opaque.
-    const color = speedColor(w.speed);
-    for (let i = 1; i < p.trail.length; i++) {
-      const alpha = (i / p.trail.length) * 0.80;
-      ctx.strokeStyle = color + alpha + ')';
-      ctx.lineWidth   = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(p.trail[i - 1].x, p.trail[i - 1].y);
-      ctx.lineTo(p.trail[i].x,     p.trail[i].y);
-      ctx.stroke();
-    }
+      // Store current screen position in particle trail history.
+      p.trail.push({x: p0.x, y: p0.y});
+      if (p.trail.length > TRAIL_LEN) p.trail.shift();
 
-    // Advance particle geographically.
-    const ll = map.containerPointToLatLng(L.point(p0.x + dx, p0.y + dy));
-    p.lat = ll.lat;
-    p.lon = ll.lng;
-    p.age += 1;
+      // Draw fading trail: oldest segment = transparent, newest = fully opaque.
+      const color = speedColor(w.speed);
+      for (let i = 1; i < p.trail.length; i++) {
+        const alpha = (i / p.trail.length) * 0.80;
+        ctx.strokeStyle = color + alpha + ')';
+        ctx.lineWidth   = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(p.trail[i - 1].x, p.trail[i - 1].y);
+        ctx.lineTo(p.trail[i].x,     p.trail[i].y);
+        ctx.stroke();
+      }
 
-    const outOfGrid = windGrid && (p.lat < GRID_LAT_S || p.lat > GRID_LAT_N || p.lon < GRID_LON_W || p.lon > GRID_LON_E);
-    if (p.age > 90 || outOfGrid || p0.x < -20 || p0.x > canvas.width + 20 || p0.y < -20 || p0.y > canvas.height + 20) {
-      Object.assign(p, spawnParticle());
-    }
-  });
+      // Advance particle geographically.
+      const ll = map.containerPointToLatLng(L.point(p0.x + dx, p0.y + dy));
+      p.lat = ll.lat;
+      p.lon = ll.lng;
+      p.age += 1;
+
+      const outOfGrid = windGrid && (p.lat < GRID_LAT_S || p.lat > GRID_LAT_N || p.lon < GRID_LON_W || p.lon > GRID_LON_E);
+      if (p.age > 90 || outOfGrid || p0.x < -20 || p0.x > canvas.width + 20 || p0.y < -20 || p0.y > canvas.height + 20) {
+        Object.assign(p, spawnParticle());
+      }
+    });
+  } catch(e) {
+    console.warn('[wind] step error (loop continues):', e);
+  }
 
   requestAnimationFrame(step);
 }

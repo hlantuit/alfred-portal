@@ -4322,7 +4322,7 @@ def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_wi
             # Dilate coastline pixels by 2 px to close sub-pixel gaps that
             # the flood fill would otherwise leak through (common at large
             # frame scales where each pixel covers ~300 m).
-            mask = mask.filter(_PIF.MaxFilter(21))
+            mask = mask.filter(_PIF.MaxFilter(5))
         except Exception as e:
             print(f"SEA MASK COASTLINE RASTERISE FAILED: {e}")
 

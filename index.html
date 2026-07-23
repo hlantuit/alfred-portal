@@ -367,27 +367,16 @@ function initParticles() {
 }
 
 function speedColor(sp) {
-  // Plasma colormap starting at visible purple (skip near-black dark end).
-  // 0 m/s → bright purple, ~10 m/s → magenta/pink, 20+ m/s → yellow.
-  // tAdj shifts the input into [0.2, 1.0] of the full plasma range so the
-  // darkest stop (#0d0887) is never used — it's invisible on a light basemap.
-  const t = Math.min(sp / 8, 1);  // 8 m/s (~29 km/h) = full yellow
-  const tAdj = 0.2 + t * 0.8;
+  // WMO Beaufort colour scale. sp is in m/s; convert to km/h for the lookup.
+  const kmh = sp * 3.6;
   const stops = [
-    [0.00, [13,   8, 135]],
-    [0.25, [126,  3, 168]],
-    [0.50, [204, 71, 120]],
-    [0.75, [248,149,  64]],
-    [1.00, [240,249,  33]],
+    [  1, [180,200,215]], [  5, [150,190,210]], [ 11, [120,180,190]],
+    [ 19, [100,170,140]], [ 28, [140,170, 80]], [ 38, [200,170, 50]],
+    [ 49, [220,140, 40]], [ 61, [220,100, 40]], [ 74, [200, 60, 40]],
+    [ 88, [170, 40, 40]], [102, [140, 20, 60]], [117, [110, 10, 80]],
   ];
-  let i = 0;
-  while (i < stops.length - 2 && tAdj > stops[i+1][0]) i++;
-  const [t0, c0] = stops[i], [t1, c1] = stops[i+1];
-  const f = (tAdj - t0) / (t1 - t0);
-  const r = Math.round(c0[0] + f*(c1[0]-c0[0]));
-  const g = Math.round(c0[1] + f*(c1[1]-c0[1]));
-  const b = Math.round(c0[2] + f*(c1[2]-c0[2]));
-  return `rgba(${r},${g},${b},`;
+  for (const [max, c] of stops) { if (kmh <= max) return `rgba(${c},`; }
+  return 'rgba(80,0,80,';
 }
 
 function step() {

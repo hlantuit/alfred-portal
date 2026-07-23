@@ -708,8 +708,8 @@ def _icon_wind_arrow(direction_from_deg, speed_kmh):
     Draws a wind direction arrow on a compass-rose target background.
     The target (concentric rings + N/S/E/W labels) gives immediate
     directional context. Arrow points toward wind destination (180° from
-    meteorological "from" convention). Color follows the plasma colormap
-    at 0–40 km/h, consistent with the 30-day wind rose.
+    meteorological "from" convention). Color follows the WMO Beaufort
+    colour scale, consistent with the 30-day wind rose.
     """
     from PIL import ImageFilter
 
@@ -772,10 +772,8 @@ def _icon_wind_arrow(direction_from_deg, speed_kmh):
         draw.text((lx - lw / 2, ly - lh / 2), label, font=font, fill=label_color)
 
     # ---- Arrow ----
-    import matplotlib
-    _norm_speed = max(0, min(speed_kmh, 40)) / 40
-    _plasma_rgba = matplotlib.colormaps["plasma"](_norm_speed)
-    color = tuple(round(c * 255) for c in _plasma_rgba[:3]) + (255,)
+    color, _ = windspeed_to_beaufort_color(speed_kmh)
+    color = color + (255,)
 
     arrow_len = int((r_inner + 4) * 1.25)  # 25% longer than base
     angle_rad = math.radians(direction_from_deg + 180)
@@ -2830,8 +2828,8 @@ def _render_wind_combined_figure(day_labels, daily_speed, daily_dir, by_day):
         n_dirs = 16
         dir_width_deg = 360 / n_dirs
         speed_bins = [0, 10, 20, 30, 40, 9999]
-        cmap = matplotlib.colormaps["plasma"]
-        colors = [cmap(v) for v in [0.05, 0.28, 0.52, 0.76, 0.97]]
+        colors = [tuple(c / 255 for c in windspeed_to_beaufort_color(s)[0]) + (1.0,)
+                  for s in [5, 15, 25, 35, 50]]
 
         counts = np.zeros((n_dirs, len(speed_bins) - 1))
         for spd, drn in zip(all_speeds, all_dirs):
@@ -2873,10 +2871,22 @@ def _render_wind_combined_figure(day_labels, daily_speed, daily_dir, by_day):
 
     ax_vec.axhline(0, color=NOTION_LIGHT_GRID, linewidth=1.2, zorder=1)
 
+    import matplotlib.colors as _mcolors
+    _bft_stops = [
+        (0,   (180, 200, 215)), (1,   (150, 190, 210)), (5,   (120, 180, 190)),
+        (11,  (100, 170, 140)), (19,  (140, 170,  80)), (28,  (200, 170,  50)),
+        (38,  (220, 140,  40)), (49,  (220, 100,  40)), (61,  (200,  60,  40)),
+        (74,  (170,  40,  40)), (88,  (140,  20,  60)), (102, (110,  10,  80)),
+        (120, ( 80,   0,  80)),
+    ]
+    _bft_cmap = _mcolors.LinearSegmentedColormap.from_list(
+        "beaufort",
+        [(kmh / 120, tuple(c / 255 for c in rgb)) for kmh, rgb in _bft_stops],
+    )
     quiv = ax_vec.quiver(
         x, [0] * len(x), u_arrows, v_arrows,
-        daily_speed, cmap="plasma", scale=220, width=0.005,
-        pivot="tail", clim=(0, 40), zorder=2,
+        daily_speed, cmap=_bft_cmap, scale=220, width=0.005,
+        pivot="tail", clim=(0, 60), zorder=2,
     )
 
     cbar = fig.colorbar(quiv, ax=ax_vec, orientation="vertical", pad=0.02, fraction=0.03)
@@ -2928,7 +2938,7 @@ def build_wind_charts_combined(lat, lon, now_utc):
     caption = (
         f"Wind rose (left): {n_obs} hourly observations, frequency by direction and speed. "
         f"Wind vectors (right): daily averages, arrows point toward wind destination. "
-        f"Plasma color scale: 0–40 km/h. Source: Open-Meteo (ERA5)."
+        f"WMO Beaufort colour scale (BF 0–12). Source: Open-Meteo (ERA5)."
     )
     return combined_bytes, None, caption
 

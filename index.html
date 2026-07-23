@@ -315,15 +315,12 @@ setTimeout(reportHeight, 500);
 })();
 
 // ---------- Particle canvas overlay ----------
-// Canvas lives inside a Leaflet custom pane (z-index:300, between tiles@200
-// and overlay/markers@400+). Drawing in the pane's coordinate space (layer
-// points) means the canvas moves with the map during panning so no per-frame
-// offset compensation is needed; trails stay pinned to geography.
-map.createPane('windPane');
-map.getPane('windPane').style.zIndex = 300;
+// position:fixed in <body> at z-index:600 — above Leaflet's tile/overlay panes
+// (200/400 within the map-pane stacking context) and above the map-pane itself.
+// latLngToContainerPoint() returns viewport-absolute coords that match directly.
 const canvas = document.createElement('canvas');
-canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;';
-map.getPane('windPane').appendChild(canvas);
+canvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:600;';
+document.body.appendChild(canvas);
 const ctx = canvas.getContext('2d');
 
 function resizeCanvas() {
@@ -336,9 +333,6 @@ function resizeCanvas() {
   if (canvas.height !== h) canvas.height = h;
 }
 map.on('resize', resizeCanvas);
-// Clear stale trail points on zoom — layer coordinates rescale with zoom level,
-// so old trail segments would appear at wrong positions after a zoom change.
-map.on('zoom viewreset', function() { particles.forEach(function(p) { p.trail = []; }); });
 resizeCanvas(); // size immediately from CSS layout
 
 const N_PARTICLES = 650;
@@ -405,17 +399,13 @@ function step() {
       if (!isFinite(p.lat) || !isFinite(p.lon)) { Object.assign(p, spawnParticle()); return; }
 
       const w   = windAt(p.lat, p.lon);
-      // Layer points match the windPane coordinate space: canvas (0,0) is at the
-      // same origin as the Leaflet layer, so no pane-offset correction is needed.
-      const p0  = map.latLngToLayerPoint([p.lat, p.lon]);
-      // Container point (viewport coords) is used only for the off-screen check.
-      const c0  = map.latLngToContainerPoint([p.lat, p.lon]);
+      const p0  = map.latLngToContainerPoint([p.lat, p.lon]);
       const spd = w.speed || 0.01;
       const factor = Math.min(spd / 5, 2.5) + 0.15;
       const dx  = (w.u / spd) * 1.8 * factor;
       const dy  = -(w.v / spd) * 1.8 * factor;
 
-      // Store layer-space position in particle trail history.
+      // Store current screen position in particle trail history.
       p.trail.push({x: p0.x, y: p0.y});
       if (p.trail.length > TRAIL_LEN) p.trail.shift();
 
@@ -431,14 +421,14 @@ function step() {
         ctx.stroke();
       }
 
-      // Advance particle geographically (dx/dy in layer pixels → new lat/lon).
-      const ll = map.layerPointToLatLng(L.point(p0.x + dx, p0.y + dy));
+      // Advance particle geographically.
+      const ll = map.containerPointToLatLng(L.point(p0.x + dx, p0.y + dy));
       p.lat = ll.lat;
       p.lon = ll.lng;
       p.age += 1;
 
       const outOfGrid = windGrid && (p.lat < GRID_LAT_S || p.lat > GRID_LAT_N || p.lon < GRID_LON_W || p.lon > GRID_LON_E);
-      if (p.age > 90 || outOfGrid || c0.x < -20 || c0.x > canvas.width + 20 || c0.y < -20 || c0.y > canvas.height + 20) {
+      if (p.age > 90 || outOfGrid || p0.x < -20 || p0.x > canvas.width + 20 || p0.y < -20 || p0.y > canvas.height + 20) {
         Object.assign(p, spawnParticle());
       }
     });

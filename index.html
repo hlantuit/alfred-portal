@@ -342,8 +342,6 @@ let particlesReady = false;
 const GRID_LAT_S = 62.0, GRID_LAT_N = 78.0, GRID_LON_W = -175.0, GRID_LON_E = -110.0;
 const TRAIL_LEN = 18;
 
-map.on('moveend zoomend', () => { if (particlesReady) initParticles(); });
-
 function spawnParticle() {
   const b = map.getBounds();
   const latS = Math.max(b.getSouth(), GRID_LAT_S);

@@ -344,10 +344,15 @@ const TRAIL_LEN = 18;
 
 function spawnParticle() {
   const b = map.getBounds();
-  const latS = Math.max(b.getSouth(), GRID_LAT_S);
-  const latN = Math.min(b.getNorth(), GRID_LAT_N);
-  const lonW = Math.max(b.getWest(),  GRID_LON_W);
-  const lonE = Math.min(b.getEast(),  GRID_LON_E);
+  // Use actual data grid bounds when available; fall back to the display limits.
+  const gS = windGrid ? windGrid.bounds.south : GRID_LAT_S;
+  const gN = windGrid ? windGrid.bounds.north : GRID_LAT_N;
+  const gW = windGrid ? windGrid.bounds.west  : GRID_LON_W;
+  const gE = windGrid ? windGrid.bounds.east  : GRID_LON_E;
+  const latS = Math.max(b.getSouth(), gS);
+  const latN = Math.min(b.getNorth(), gN);
+  const lonW = Math.max(b.getWest(),  gW);
+  const lonE = Math.min(b.getEast(),  gE);
   return {
     lat: latS + Math.random() * (latN - latS),
     lon: lonW + Math.random() * (lonE - lonW),
@@ -416,7 +421,8 @@ function step() {
       p.lon = ll.lng;
       p.age += 1;
 
-      const outOfGrid = windGrid && (p.lat < GRID_LAT_S || p.lat > GRID_LAT_N || p.lon < GRID_LON_W || p.lon > GRID_LON_E);
+      const gb = windGrid ? windGrid.bounds : null;
+      const outOfGrid = gb && (p.lat < gb.south || p.lat > gb.north || p.lon < gb.west || p.lon > gb.east);
       if (p.age > 90 || outOfGrid || p0.x < -20 || p0.x > canvas.width + 20 || p0.y < -20 || p0.y > canvas.height + 20) {
         Object.assign(p, spawnParticle());
       }

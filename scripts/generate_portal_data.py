@@ -43,16 +43,8 @@ def load_communities():
 # Wind grid
 # ---------------------------------------------------------------------------
 
-# Bounds match the particle animation display extent in index.html.
-# Resolution is 1° lat × 1° lon — coarser than the GEM model (~15 km) but
-# fine enough to resolve synoptic-scale wind patterns without hundreds of
-# individual API calls.  Batch fetching keeps total request count low (~35).
-GRID_BOUNDS = {"south": 35.0, "north": 76.0, "west": -175.0, "east": -94.0}
-GRID_LAT_STEP = 1.0   # degrees
-GRID_LON_STEP = 1.0   # degrees
-GRID_NY = round((GRID_BOUNDS["north"] - GRID_BOUNDS["south"]) / GRID_LAT_STEP) + 1
-GRID_NX = round((GRID_BOUNDS["east"]  - GRID_BOUNDS["west"])  / GRID_LON_STEP) + 1
-GRID_BATCH = 100       # Open-Meteo supports up to ~300 locations per request
+GRID_BOUNDS = {"south": 62.0, "north": 78.0, "west": -175.0, "east": -110.0}
+GRID_NX, GRID_NY = 20, 20
 
 # ---------------------------------------------------------------------------
 # HTTP helper
@@ -126,82 +118,40 @@ def _fetch_weather(lat, lon):
 # Wind grid
 # ---------------------------------------------------------------------------
 
-def _fetch_uv_batch(batch_points, now_h, now_iso):
-    """
-    Fetch u/v wind components for a list of (lat, lon) points in one
-    Open-Meteo request.  Returns a list of (u_ms, v_ms) in the same order.
-    """
-    lats_str = ",".join(f"{lat:.2f}" for lat, _ in batch_points)
-    lons_str = ",".join(f"{lon:.2f}" for _, lon in batch_points)
-    r = _get(
-        "https://api.open-meteo.com/v1/forecast",
-        params={
-            "latitude":  lats_str,
-            "longitude": lons_str,
-            "hourly":    "wind_speed_10m,wind_direction_10m",
-            "models":    "gem_seamless",
-            "timezone":  "UTC",
-            "start_date": now_iso,
-            "end_date":   now_iso,
-        },
-        timeout=30,
-    )
-    results = r.json()
-    # Single location returns a dict; multiple return a list.
-    if isinstance(results, dict):
-        results = [results]
-    uvs = []
-    for d in results:
-        speeds = d["hourly"]["wind_speed_10m"]
-        dirs   = d["hourly"]["wind_direction_10m"]
-        idx    = min(range(len(speeds)), key=lambda i: abs(i - now_h))
-        spd_ms  = (speeds[idx] or 0.0) / 3.6
-        wind_dir = dirs[idx] or 0.0
-        dir_rad  = math.radians(wind_dir)
-        uvs.append((-spd_ms * math.sin(dir_rad), -spd_ms * math.cos(dir_rad)))
-    return uvs
+def _fetch_uv(lat, lon):
+    try:
+        d = _fetch_weather(lat, lon)
+        # Use raw u/v directly — no angle roundtrip, fully continuous
+        return d["wind_u_ms"], d["wind_v_ms"]
+    except Exception as e:
+        print(f"WIND GRID FETCH FAILED ({lat:.2f},{lon:.2f}): {e}")
+        return 0.0, 0.0
 
 
 def build_wind_grid(now_utc):
     s, n = GRID_BOUNDS["south"], GRID_BOUNDS["north"]
     w, e = GRID_BOUNDS["west"],  GRID_BOUNDS["east"]
-    lats = [round(s + j * GRID_LAT_STEP, 4) for j in range(GRID_NY)]
-    lons = [round(w + i * GRID_LON_STEP, 4) for i in range(GRID_NX)]
+    lats = [s + (n - s) * j / (GRID_NY - 1) for j in range(GRID_NY)]
+    lons = [w + (e - w) * i / (GRID_NX - 1) for i in range(GRID_NX)]
+
+    u_grid = [[0.0] * GRID_NX for _ in range(GRID_NY)]
+    v_grid = [[0.0] * GRID_NX for _ in range(GRID_NY)]
 
     total = GRID_NY * GRID_NX
-    print(f"WIND GRID: fetching {total} points ({GRID_NY}×{GRID_NX}) in batches of {GRID_BATCH}")
+    print(f"WIND GRID: fetching {total} points ({GRID_NY}x{GRID_NX})")
 
-    # Flat list of (flat_index, lat, lon)
-    all_points = [(j * GRID_NX + i, lats[j], lons[i])
-                  for j in range(GRID_NY) for i in range(GRID_NX)]
-    batches = [all_points[k:k + GRID_BATCH] for k in range(0, total, GRID_BATCH)]
-
-    now_h    = now_utc.hour
-    now_iso  = now_utc.strftime("%Y-%m-%d")
-    u_flat   = [0.0] * total
-    v_flat   = [0.0] * total
-
-    with ThreadPoolExecutor(max_workers=15) as ex:
-        futs = {
-            ex.submit(_fetch_uv_batch, [(lat, lon) for _, lat, lon in batch], now_h, now_iso): batch
-            for batch in batches
-        }
-        done_pts = 0
+    with ThreadPoolExecutor(max_workers=20) as ex:
+        futs = {ex.submit(_fetch_uv, lats[j], lons[i]): (j, i)
+                for j in range(GRID_NY) for i in range(GRID_NX)}
+        done = 0
         for fut in as_completed(futs):
-            batch = futs[fut]
-            try:
-                uvs = fut.result()
-            except Exception as e:
-                print(f"WIND GRID BATCH FAILED: {e}")
-                uvs = [(0.0, 0.0)] * len(batch)
-            for (flat_idx, _, _), (u, v) in zip(batch, uvs):
-                u_flat[flat_idx] = round(u, 3)
-                v_flat[flat_idx] = round(v, 3)
-            done_pts += len(batch)
-            print(f"WIND GRID: {done_pts}/{total} done")
-
-    u_grid = [[u_flat[j * GRID_NX + i] for i in range(GRID_NX)] for j in range(GRID_NY)]
-    v_grid = [[v_flat[j * GRID_NX + i] for i in range(GRID_NX)] for j in range(GRID_NY)]
+            j, i = futs[fut]
+            u, v = fut.result()
+            u_grid[j][i] = round(u, 2)
+            v_grid[j][i] = round(v, 2)
+            done += 1
+            if done % 50 == 0:
+                print(f"WIND GRID: {done}/{total} done")
 
     print("WIND GRID: complete")
     return {

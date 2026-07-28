@@ -6173,6 +6173,10 @@ def build_wave_forecast_chart(wave_data, tz_name, now_utc):
         times   = [datetime.fromisoformat(t).replace(tzinfo=timezone.utc).astimezone(tz) for t, _ in times_raw]
         heights = [h for _, h in times_raw]
 
+        # Convert to hours from now (same x-axis convention as GEM forecast charts)
+        t0    = times[0]
+        hours = [(t - t0).total_seconds() / 3600 for t in times]
+
         NOTION_BLUE       = "#337EA9"
         NOTION_RED        = "#E16259"
         NOTION_TEXT_GRAY  = "#787774"
@@ -6183,32 +6187,47 @@ def build_wave_forecast_chart(wave_data, tz_name, now_utc):
         fig.patch.set_alpha(0)
         ax.set_facecolor("none")
 
-        ax.fill_between(times, heights, 0, color=NOTION_BLUE, alpha=0.15, linewidth=0)
-        ax.plot(times, heights, color=NOTION_BLUE, linewidth=2.5)
+        ax.fill_between(hours, heights, 0, color=NOTION_BLUE, alpha=0.15, linewidth=0)
+        ax.plot(hours, heights, color=NOTION_BLUE, linewidth=2.5)
 
         # Rough sea thresholds
+        x_end = max(hours) if hours else 240
         ax.axhline(1.5, color="#E8A838", linewidth=1, linestyle="--", alpha=0.6, zorder=1)
         ax.axhline(2.5, color="#E16259", linewidth=1, linestyle="--", alpha=0.6, zorder=1)
-        ax.text(times[-1], 1.55, "rough", color="#E8A838", fontsize=9, ha="right", va="bottom")
-        ax.text(times[-1], 2.55, "very rough", color="#E16259", fontsize=9, ha="right", va="bottom")
+        ax.text(x_end, 1.55, "rough",      color="#E8A838", fontsize=9, ha="right", va="bottom")
+        ax.text(x_end, 2.55, "very rough", color="#E16259", fontsize=9, ha="right", va="bottom")
 
-        # "now" marker — data starts from current hour so index 0 is now
-        ax.plot([times[0]], [heights[0]], marker="o", markersize=10,
+        # "now" dot + label at h=0
+        ax.plot([0], [heights[0]], marker="o", markersize=9,
                 color=NOTION_RED, markeredgecolor="white", markeredgewidth=1.5, zorder=5)
-        valid_heights = [h for h in heights if h is not None]
-        y_range = max(valid_heights) if valid_heights and max(valid_heights) > 0 else 1.0
-        ax.annotate("now", xy=(times[0], heights[0]),
-                    xytext=(times[0], heights[0] + y_range * 0.08 + 0.05),
-                    color=NOTION_RED, fontsize=11, fontweight="bold", ha="left", va="bottom",
+        ax.annotate("now", xy=(0, heights[0]), xytext=(x_end * 0.02, heights[0]),
+                    color=NOTION_RED, fontsize=13, fontweight="bold", ha="left", va="center",
                     bbox=dict(boxstyle="round,pad=0.15", facecolor="white", edgecolor="none", alpha=0.8))
 
-        import matplotlib.dates as mdates
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %d", tz=tz))
-        ax.xaxis.set_major_locator(mdates.DayLocator(interval=2, tz=tz))
-        ax.tick_params(axis="x", labelsize=13, colors=NOTION_TEXT_GRAY, length=0, rotation=45)
+        # x-ticks: one per local day (same logic as _gem_chart)
+        tick_hours, tick_labels, minor_tick_hours = [], [], []
+        for h, t in zip(hours, times):
+            if t.hour == 0 or h == 0:
+                tick_hours.append(h)
+                tick_labels.append("now" if h == 0 else t.strftime("%b %d"))
+            elif t.hour == 12:
+                minor_tick_hours.append(h)
+        ax.set_xticks(tick_hours)
+        ax.set_xticklabels(tick_labels, fontsize=13, color=NOTION_TEXT_GRAY, rotation=45, ha="right")
+        ax.set_xticks(minor_tick_hours, minor=True)
+        ax.tick_params(axis="x", which="minor", length=4, color="#555555", width=1.0, bottom=True, direction="out")
+        ax.tick_params(axis="x", which="major", length=8, color="#555555", width=1.2, bottom=True, direction="out")
         ax.tick_params(axis="y", labelsize=13, colors=NOTION_TEXT_GRAY, length=0)
+
+        # Subtle midnight dividers
+        for h in tick_hours:
+            if h > 0:
+                ax.axvline(h, color=NOTION_TEXT_GRAY, linewidth=0.6, alpha=0.18, zorder=0.5)
+
+        ax.set_xlim(0, x_end)
         ax.set_ylabel("Wave height (m)", fontsize=13, color=NOTION_TEXT_GRAY)
         ax.yaxis.grid(True, color=NOTION_LIGHT_GRID, linewidth=1)
+        ax.xaxis.grid(False)
         ax.set_axisbelow(True)
         for spine in ["top", "right", "left"]:
             ax.spines[spine].set_visible(False)

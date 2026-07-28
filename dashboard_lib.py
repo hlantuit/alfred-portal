@@ -1871,7 +1871,7 @@ def build_gem_forecast_charts(hourly, tz_name, now_utc=None, cloud_cover_vals=No
 
         if cloud_cover_vals:
             cc = (cloud_cover_vals + [0.0] * len(hours))[:len(hours)]
-            cloud_b = _gem_chart(hours, cc, "#7B9EC0", "Cloud cover (%)", t0,
+            cloud_b = _gem_chart(hours, cc, "#9B9B9B", "Cloud cover (%)", t0,
                                  ymin=0, ymax=100, strip_trailing_zeros=False)
         else:
             cloud_b = None

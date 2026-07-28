@@ -2633,6 +2633,10 @@ def build_tdd_histogram(lat, lon, now_utc, temp_cache, num_years=25):
     current_year = today.year
 
     tdd_by_year = {}
+    partial_tdd_by_year = {}  # TDD for each past year up to the same day-of-year
+
+    current_start = date(current_year, 1, 1)
+    current_end = today - timedelta(days=1)
 
     prefetch_years_concurrently(lat, lon, [current_year - yb for yb in range(1, num_years + 1)], temp_cache)
 
@@ -2650,9 +2654,18 @@ def build_tdd_histogram(lat, lon, now_utc, temp_cache, num_years=25):
             print(f"TDD HISTOGRAM: {year} only has {days_counted}/{days_in_year} days, skipping (too incomplete, will retry next run)")
             continue
         tdd_by_year[year] = tdd
+        # Partial TDD to same calendar day as current year (for expected-value line)
+        try:
+            partial_end = date(year, current_end.month, current_end.day)
+        except ValueError:
+            partial_end = date(year, current_end.month, 28)  # Feb 29 in non-leap year
+        partial_tdd, _ = compute_tdd_from_temps(temps, year_start, partial_end)
+        partial_tdd_by_year[year] = partial_tdd
 
-    current_start = date(current_year, 1, 1)
-    current_end = today - timedelta(days=1)
+    expected_tdd = (
+        sum(partial_tdd_by_year.values()) / len(partial_tdd_by_year)
+        if partial_tdd_by_year else None
+    )
     current_temps = fetch_daily_temps(lat, lon, current_start, current_end)
     if not current_temps:
         # ERA5 archive has a 5-7 day lag; fall back to the forecast API for the
@@ -2706,6 +2719,20 @@ def build_tdd_histogram(lat, lon, now_utc, temp_cache, num_years=25):
 
         x = range(len(full_year_range))
         ax.bar(x, plotted_values, color=colors, width=0.7)
+
+        # Dashed line: historical mean TDD at this point in the year
+        current_idx = len(full_year_range) - 1
+        if expected_tdd is not None and current_year in tdd_by_year:
+            current_tdd_val = tdd_by_year[current_year]
+            # Red if current year is below average (line sits above the bar),
+            # white if above average (line sits inside the bar for contrast)
+            line_color = NOTION_RED if expected_tdd > current_tdd_val else "white"
+            bar_hw = 0.35  # half of width=0.7
+            ax.plot(
+                [current_idx - bar_hw, current_idx + bar_hw],
+                [expected_tdd, expected_tdd],
+                color=line_color, linewidth=2.5, linestyle="--", zorder=5,
+            )
 
         for spine in ["top", "right", "left"]:
             ax.spines[spine].set_visible(False)

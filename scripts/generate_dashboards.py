@@ -336,8 +336,11 @@ def update_community(community, now_utc):
     # GEM forecast (weather + 10-day strip + charts)                      #
     # ------------------------------------------------------------------ #
     gem_forecast = None
+    gem_cloud_cover = []
     if "gem_forecast" in enabled or "weather" in enabled:
         gem_forecast = lib.fetch_gem_forecast(lat, lon, now_utc, tz_name)
+    if "gem_forecast" in enabled:
+        gem_cloud_cover = lib.fetch_gem_cloud_cover(lat, lon, now_utc, tz_name)
 
     # ------------------------------------------------------------------ #
     # Current weather conditions (for the Today's Conditions card)        #
@@ -753,7 +756,7 @@ def update_community(community, now_utc):
         blocks += lib.build_active_alerts_section(active_alerts)
 
     if "gem_forecast" in enabled:
-        blocks += lib.build_gem_forecast_section(gem_forecast, tz_name, now_utc=now_utc)
+        blocks += lib.build_gem_forecast_section(gem_forecast, tz_name, now_utc=now_utc, cloud_cover_vals=gem_cloud_cover)
 
     if "marine" in enabled and marine_text is not None:
         blocks += lib.build_marine_forecast_section(

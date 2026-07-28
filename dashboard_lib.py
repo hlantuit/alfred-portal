@@ -2720,18 +2720,25 @@ def build_tdd_histogram(lat, lon, now_utc, temp_cache, num_years=25):
         x = range(len(full_year_range))
         ax.bar(x, plotted_values, color=colors, width=0.7)
 
-        # Dashed line: historical mean TDD at this point in the year
+        # Solid line + label: historical mean TDD at this point in the year
         current_idx = len(full_year_range) - 1
         if expected_tdd is not None and current_year in tdd_by_year:
             current_tdd_val = tdd_by_year[current_year]
-            # Red if current year is below average (line sits above the bar),
-            # white if above average (line sits inside the bar for contrast)
-            line_color = NOTION_RED if expected_tdd > current_tdd_val else "white"
+            below_avg = expected_tdd > current_tdd_val
+            line_color = NOTION_RED if below_avg else "white"
             bar_hw = 0.35  # half of width=0.7
             ax.plot(
                 [current_idx - bar_hw, current_idx + bar_hw],
                 [expected_tdd, expected_tdd],
-                color=line_color, linewidth=2.5, linestyle="--", zorder=5,
+                color=line_color, linewidth=2.5, linestyle="-", zorder=5,
+            )
+            # Label centered on the bar, just above the line
+            label_color = NOTION_RED if below_avg else "white"
+            ax.text(
+                current_idx, expected_tdd, "25yr avg",
+                ha="center", va="bottom", fontsize=9, color=label_color,
+                fontweight="bold", zorder=6,
+                bbox=dict(boxstyle="round,pad=0.15", facecolor="white", edgecolor="none", alpha=0.7),
             )
 
         for spine in ["top", "right", "left"]:

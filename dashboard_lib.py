@@ -1299,6 +1299,49 @@ def fetch_gem_forecast(lat, lon, now_utc, tz_name="UTC"):
     return None
 
 
+def fetch_gem_cloud_cover(lat, lon, now_utc, tz_name="UTC"):
+    """
+    Fetches cloud cover separately from the main GEM forecast so that
+    a model that doesn't support it never breaks the core forecast fetch.
+    Returns a list of hourly cloud-cover values (0–100 %) in the site's
+    local timezone, sliced to start from now_utc, or [] on any failure.
+    Tries ECMWF IFS first (reliable cloud cover), then GEM seamless,
+    then the Open-Meteo default as a last resort.
+    """
+    for model in ("ecmwf_ifs025", "gem_seamless", None):
+        try:
+            model_param = f"&models={model}" if model else ""
+            url = (
+                "https://api.open-meteo.com/v1/forecast"
+                f"?latitude={lat}&longitude={lon}"
+                f"&hourly=cloud_cover"
+                f"{model_param}&forecast_days=10&timezone={tz_name}"
+            )
+            resp = get_with_retry(url, timeout=20, retries=1, backoff_seconds=5)
+            data = resp.json()
+            if data.get("error"):
+                print(f"CLOUD COVER [{model or 'default'}] API error: {data.get('reason', '')}")
+                continue
+            h = data.get("hourly", {})
+            times  = h.get("time", [])
+            values = h.get("cloud_cover") or h.get("cloudcover") or []
+            if not times or not values:
+                print(f"CLOUD COVER [{model or 'default'}]: empty response")
+                continue
+            try:
+                now_local = now_utc.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(tz_name))
+                now_str = now_local.strftime("%Y-%m-%dT%H:00")
+                idx = next((i for i, t in enumerate(times) if t >= now_str), 0)
+            except Exception:
+                idx = 0
+            label = model or "default"
+            print(f"CLOUD COVER: {len(values) - idx} hourly steps via {label}")
+            return [v if v is not None else 0.0 for v in values[idx:]]
+        except Exception as e:
+            print(f"CLOUD COVER [{model or 'default'}] FAILED: {e}")
+    return []
+
+
 def gem_daily_to_land_forecast_days(daily):
     """
     Converts GEM daily dict → the list-of-dicts format expected by
@@ -1608,21 +1651,27 @@ def build_gem_day_strip(daily, tz_name, n_days=10):
         return None
 
 
-def _gem_chart(hours, values, color, ylabel, t0, bar=False, ymin=None, ymax=None):
+def _gem_chart(hours, values, color, ylabel, t0, bar=False, ymin=None, ymax=None,
+               strip_trailing_zeros=True):
     """
     Render one GEM forecast curve (or bar chart for precip) as PNG bytes.
     hours[0] == 0 corresponds to "now". t0 is a naive local datetime (the
     API returns times in the site's local timezone, not UTC).
+    strip_trailing_zeros: set False for variables where 0.0 is valid data
+      (e.g. cloud cover = 0% means clear sky).
     """
     try:
         # Strip trailing None/NaN/0.0 from line charts — GEM pads the end of the
         # 10-day window with 0.0, causing a cliff-drop. For bar charts (precipitation)
-        # 0.0 is a valid "no rain" value so we leave those alone.
+        # or variables where 0 is valid, skip the zero stripping.
         import math as _math
         def _bad_tail(v):
             return v is None or (isinstance(v, float) and (_math.isnan(v) or v == 0.0))
+        def _bad_tail_nonzero(v):
+            return v is None or (isinstance(v, float) and _math.isnan(v))
         if not bar:
-            while values and _bad_tail(values[-1]):
+            tail_check = _bad_tail if strip_trailing_zeros else _bad_tail_nonzero
+            while values and tail_check(values[-1]):
                 values = values[:-1]
                 hours  = hours[:-1]
         else:
@@ -1639,10 +1688,16 @@ def _gem_chart(hours, values, color, ylabel, t0, bar=False, ymin=None, ymax=None
         fig.patch.set_alpha(0)
         ax.set_facecolor("none")
 
+        if not values:
+            plt.close(fig)
+            return None
+
         if bar:
             ax.bar(hours, values, color=color + "99", width=1.0, linewidth=0)
         else:
-            ax.fill_between(hours, values, min(v for v in values if v is not None),
+            finite_vals = [v for v in values if v is not None]
+            baseline = min(finite_vals) if finite_vals else 0
+            ax.fill_between(hours, values, baseline,
                             color=color, alpha=0.12, linewidth=0, zorder=1)
             ax.plot(hours, values, color=color, linewidth=2.5, zorder=2)
 
@@ -1773,17 +1828,17 @@ def _gem_precip_chart(hours, rain_vals, snow_vals, t0):
         return None
 
 
-def build_gem_forecast_charts(hourly, tz_name, now_utc=None):
+def build_gem_forecast_charts(hourly, tz_name, now_utc=None, cloud_cover_vals=None):
     """
-    Build the four GEM forecast curves (wind, temperature, pressure, precip).
+    Build the GEM forecast curves (wind, temperature, pressure, precip, cloud cover).
     Slices all series to start from now_utc so the "now" dot aligns with
     the same moment as the wind mini-chart in the upper block.
-    Returns (temp_bytes, wind_bytes, press_bytes, precip_bytes) — any may be None.
+    Returns (temp_bytes, wind_bytes, press_bytes, precip_bytes, cloud_bytes) — any may be None.
     """
     try:
         times = list(hourly.get("time", []))
         if not times:
-            return None, None, None, None
+            return None, None, None, None, None
 
         # Slice to start from the current hour (times are in local tz)
         idx = 0
@@ -1801,7 +1856,7 @@ def build_gem_forecast_charts(hourly, tz_name, now_utc=None):
             return [v if v is not None else 0.0 for v in vals]
 
         t0    = datetime.fromisoformat(times[0])      # naive local datetime
-        hours = list(range(len(times)))               # 0, 1, 2, â€¦ hours from now
+        hours = list(range(len(times)))               # 0, 1, 2, … hours from now
 
         temp_b  = _gem_chart(hours, _safe("temperature"), "#E8A838", "Temperature (°C)",  t0)
         wind_b  = _gem_chart(hours, _safe("windspeed"),   "#4F9768", "Wind speed (km/h)", t0, ymin=0)
@@ -1813,11 +1868,18 @@ def build_gem_forecast_charts(hourly, tz_name, now_utc=None):
         total_vals = _safe("precipitation")
         snow_vals  = [max(0.0, round(t - r, 4)) for t, r in zip(total_vals, rain_vals)]
         precip_b   = _gem_precip_chart(hours[:], rain_vals[:], snow_vals[:], t0)
-        return temp_b, wind_b, press_b, precip_b
+
+        if cloud_cover_vals:
+            cc = (cloud_cover_vals + [0.0] * len(hours))[:len(hours)]
+            cloud_b = _gem_chart(hours, cc, "#7B9EC0", "Cloud cover (%)", t0,
+                                 ymin=0, ymax=100, strip_trailing_zeros=False)
+        else:
+            cloud_b = None
+        return temp_b, wind_b, press_b, precip_b, cloud_b
 
     except Exception as e:
         print("GEM FORECAST CHARTS FAILED:", e)
-        return None, None, None, None
+        return None, None, None, None, None
 
 
 # =========================================================
@@ -6351,11 +6413,11 @@ def build_disclaimer_section(sources):
     return [disclaimer_paragraph(text)]
 
 
-def build_gem_forecast_section(gem_forecast, tz_name, now_utc=None):
+def build_gem_forecast_section(gem_forecast, tz_name, now_utc=None, cloud_cover_vals=None):
     """
     Assembles all GEM-based forecast Notion blocks:
       - Day icon strip (10 days)
-      - Temperature, wind speed, pressure, precipitation charts
+      - Temperature, wind speed, pressure, precipitation, cloud cover charts
     Returns a list of Notion blocks; empty on failure.
     """
     if not gem_forecast:
@@ -6377,13 +6439,16 @@ def build_gem_forecast_section(gem_forecast, tz_name, now_utc=None):
 
     blocks.append(divider())
 
-    # build_gem_forecast_charts returns (temp, wind, press, precip)
-    temp_b, wind_b, press_b, precip_b = build_gem_forecast_charts(hourly, tz_name, now_utc=now_utc)
+    # build_gem_forecast_charts returns (temp, wind, press, precip, cloud)
+    temp_b, wind_b, press_b, precip_b, cloud_b = build_gem_forecast_charts(
+        hourly, tz_name, now_utc=now_utc, cloud_cover_vals=cloud_cover_vals
+    )
     for chart_b, fname, caption_text in [
         (temp_b,   "gem_temp.png",   "GEM temperature forecast unavailable."),
         (wind_b,   "gem_wind.png",   "GEM wind forecast unavailable."),
         (press_b,  "gem_press.png",  "GEM pressure forecast unavailable."),
         (precip_b, "gem_precip.png", "GEM precipitation forecast unavailable."),
+        (cloud_b,  "gem_cloud.png",  "GEM cloud cover forecast unavailable."),
     ]:
         blk, cap = _upload_chart_or_caption(chart_b, fname, caption_text)
         blocks.append(blk if blk else paragraph(cap))

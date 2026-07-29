@@ -2762,7 +2762,13 @@ def build_tdd_histogram(lat, lon, now_utc, temp_cache, num_years=25):
             f"Annual thawing degree days (sum of mean daily temperatures above 0°C, Jan 1–Dec 31), "
             f"{full_year_range[0]}–{full_year_range[-2]}. "
             f"Current year ({current_year}, in red) is partial: Jan 1 through {current_end.strftime('%b %d')} only, "
-            f"not directly comparable to complete-year totals.{gap_note} Source: Open-Meteo (ERA5)."
+            f"not directly comparable to complete-year totals.{gap_note} "
+            + (
+                f"The horizontal line on the {current_year} bar shows the 25-year average TDD accumulated "
+                f"to the same date ({current_end.strftime('%b %d')}), for direct comparison with the current year. "
+                if expected_tdd is not None and current_year in tdd_by_year else ""
+            )
+            + f"Source: Open-Meteo (ERA5)."
         )
         return png_bytes, caption
 

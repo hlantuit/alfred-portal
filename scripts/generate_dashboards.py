@@ -568,6 +568,7 @@ def update_community(community, now_utc):
         map_pts    = community.get("map_points", [])
         ref_lines  = community.get("map_reference_lines", [])
         hydro_stations = community.get("hydrometric_stations", [])
+        map_pts = list(map_pts) + lib.hydrometric_map_points(hydro_stations)
 
         extra = 1 if "water_level" in needs_parallel else 0
         workers = max(len(needs_parallel) + len(hydro_stations) + extra, 1)

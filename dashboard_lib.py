@@ -3411,22 +3411,28 @@ def annotate_modis_image(png_bytes, points, center_x, center_y, rotation_deg,
 
         # --- Label markers ---
         for point in points:
-            if len(point) == 5:
+            if len(point) >= 6:
+                lat, lon, label_text, text_dy, text_dx, fill_color = point[:6]
+                fill_color = tuple(fill_color)
+            elif len(point) == 5:
                 lat, lon, label_text, text_dy, text_dx = point
+                fill_color = (255, 60, 60)
             elif len(point) == 4:
                 lat, lon, label_text, text_dy = point
                 text_dx = 12
+                fill_color = (255, 60, 60)
             else:
                 lat, lon, label_text = point
                 text_dy = -10
                 text_dx = 12
+                fill_color = (255, 60, 60)
 
             x_px, y_px = project_point(lat, lon)
 
             marker_radius = 6
             draw.ellipse(
                 [x_px - marker_radius, y_px - marker_radius, x_px + marker_radius, y_px + marker_radius],
-                fill=(255, 60, 60), outline=(255, 255, 255), width=2,
+                fill=fill_color, outline=(255, 255, 255), width=2,
             )
 
             text_x, text_y = x_px + text_dx, y_px + text_dy
@@ -3613,22 +3619,28 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
 
         # --- Label markers ---
         for point in points:
-            if len(point) == 5:
+            if len(point) >= 6:
+                plat, plon, label_text, text_dy, text_dx, fill_color = point[:6]
+                fill_color = tuple(fill_color)
+            elif len(point) == 5:
                 plat, plon, label_text, text_dy, text_dx = point
+                fill_color = (255, 60, 60)
             elif len(point) == 4:
                 plat, plon, label_text, text_dy = point
                 text_dx = 12
+                fill_color = (255, 60, 60)
             else:
                 plat, plon, label_text = point
                 text_dy = -10
                 text_dx = 12
+                fill_color = (255, 60, 60)
 
             x_px, y_px = project_point(plat, plon)
 
             marker_radius = 6
             draw.ellipse(
                 [x_px - marker_radius, y_px - marker_radius, x_px + marker_radius, y_px + marker_radius],
-                fill=(255, 60, 60), outline=(255, 255, 255), width=2,
+                fill=fill_color, outline=(255, 255, 255), width=2,
             )
 
             text_x, text_y = x_px + text_dx, y_px + text_dy
@@ -5455,6 +5467,78 @@ def build_water_level_chart(times, values, tz_name, yearly_mean=None,
 # station's Discharge column can come back empty for every row). Check
 # which this station provides before assuming.
 # =========================================================
+
+RIVER_TEAL_RGB = (42, 157, 143)  # matches RIVER_TEAL = "#2A9D8F" in build_hydrometric_chart
+
+_wsc_coords_cache: dict = {}
+
+
+def fetch_wsc_station_latlon(station_id):
+    """
+    Returns (lat, lon) for a WSC hydrometric station via the GeoMet OGC API,
+    or None if the station cannot be resolved. Results cached in memory per run.
+    """
+    if station_id in _wsc_coords_cache:
+        return _wsc_coords_cache[station_id]
+    try:
+        url = (
+            "https://api.weather.gc.ca/collections/hydrometric-stations/items"
+            f"?STATION_NUMBER={station_id}&f=json"
+        )
+        resp = get_with_retry(url, timeout=15, retries=1, backoff_seconds=3)
+        data = resp.json()
+        features = data.get("features", [])
+        if not features:
+            print(f"WSC STATION COORDS [{station_id}]: no feature returned")
+            _wsc_coords_cache[station_id] = None
+            return None
+        coords = features[0].get("geometry", {}).get("coordinates", [])
+        if len(coords) < 2:
+            _wsc_coords_cache[station_id] = None
+            return None
+        lon, lat = coords[0], coords[1]
+        result = (lat, lon)
+        _wsc_coords_cache[station_id] = result
+        print(f"WSC STATION COORDS [{station_id}]: {lat:.4f}, {lon:.4f}")
+        return result
+    except Exception as e:
+        print(f"WSC STATION COORDS [{station_id}] FAILED: {e}")
+        _wsc_coords_cache[station_id] = None
+        return None
+
+
+def hydrometric_map_points(stations):
+    """
+    Builds teal-colored map point tuples for hydrometric stations.
+
+    Each returned point is a 6-tuple (lat, lon, label, text_dy, text_dx, fill_rgb)
+    compatible with annotate_modis_image and annotate_plain_image when those
+    functions support the optional 6th color element.
+
+    Station dicts may include 'lat'/'lon' to skip the WSC API lookup, and
+    'map_label' to override the auto-shortened river name.
+    """
+    pts = []
+    for stn in stations:
+        station_id = stn.get("station_id")
+        if not station_id:
+            continue
+        if "lat" in stn and "lon" in stn:
+            lat, lon = stn["lat"], stn["lon"]
+        else:
+            result = fetch_wsc_station_latlon(station_id)
+            if result is None:
+                continue
+            lat, lon = result
+        label = stn.get("map_label") or stn.get("river_name", station_id)
+        for sep in [" — ", " at ", " near ", ", "]:
+            if sep in label:
+                label = label.split(sep)[0]
+                break
+        pts.append((lat, lon, label, -10, 12, RIVER_TEAL_RGB))
+    return pts
+
+
 def fetch_hydrometric_water_level(station_id, provterr):
     """
     Fetches the last ~30 days of daily water level (m) for the given WSC

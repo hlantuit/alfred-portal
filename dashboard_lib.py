@@ -6068,6 +6068,22 @@ def build_header_blocks(now_local, logo_url=None, logo_png_bytes=None, instituti
         blocks.append(columns(logo_column, attribution_column, width_ratios=[0.2, 0.8]))
     else:
         blocks.append(paragraph(header_text))
+    blocks.append({
+        "object": "block",
+        "type": "callout",
+        "callout": {
+            "rich_text": [
+                {"type": "text", "text": {"content": "View all Arctic monitoring sites  →  "},
+                 "annotations": {}},
+                {"type": "text",
+                 "text": {"content": "Alfred Portal",
+                          "link": {"url": "https://hlantuit.github.io/alfred-portal/index.html"}},
+                 "annotations": {"bold": True}},
+            ],
+            "icon": {"type": "emoji", "emoji": "🗺️"},
+            "color": "gray_background",
+        },
+    })
     blocks.append(divider())
     return blocks
 

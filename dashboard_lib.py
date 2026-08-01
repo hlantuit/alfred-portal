@@ -6073,7 +6073,7 @@ def build_header_blocks(now_local, logo_url=None, logo_png_bytes=None, instituti
         "type": "callout",
         "callout": {
             "rich_text": [
-                {"type": "text", "text": {"content": "Explore other Arctic sites  →"},
+                {"type": "text", "text": {"content": "Explore other sites  →"},
                  "annotations": {}},
                 {"type": "text",
                  "text": {"content": "Alfred Portal",

@@ -1653,7 +1653,7 @@ def build_gem_day_strip(daily, tz_name, n_days=10):
 
 
 def _gem_chart(hours, values, color, ylabel, t0, bar=False, ymin=None, ymax=None,
-               strip_trailing_zeros=True):
+               strip_trailing_zeros=True, fill_baseline=None):
     """
     Render one GEM forecast curve (or bar chart for precip) as PNG bytes.
     hours[0] == 0 corresponds to "now". t0 is a naive local datetime (the
@@ -1697,7 +1697,7 @@ def _gem_chart(hours, values, color, ylabel, t0, bar=False, ymin=None, ymax=None
             ax.bar(hours, values, color=color + "99", width=1.0, linewidth=0)
         else:
             finite_vals = [v for v in values if v is not None]
-            baseline = min(finite_vals) if finite_vals else 0
+            baseline = fill_baseline if fill_baseline is not None else (min(finite_vals) if finite_vals else 0)
             ax.fill_between(hours, values, baseline,
                             color=color, alpha=0.12, linewidth=0, zorder=1)
             ax.plot(hours, values, color=color, linewidth=2.5, zorder=2)
@@ -1873,7 +1873,7 @@ def build_gem_forecast_charts(hourly, tz_name, now_utc=None, cloud_cover_vals=No
         if cloud_cover_vals:
             cc = (cloud_cover_vals + [0.0] * len(hours))[:len(hours)]
             cloud_b = _gem_chart(hours, cc, "#9B9B9B", "Cloud cover (%)", t0,
-                                 ymin=0, ymax=100, strip_trailing_zeros=False)
+                                 ymin=0, ymax=100, strip_trailing_zeros=False, fill_baseline=0)
         else:
             cloud_b = None
         return temp_b, wind_b, press_b, precip_b, cloud_b
@@ -7217,6 +7217,131 @@ def build_wildfire_section(fires, site_lat, site_lon, now_utc, tz_name,
     if map_block:
         blocks.append(map_block)
     blocks.append(gray_caption(fallback or map_caption))
+    blocks.append(divider())
+    return blocks
+
+
+# ---------------------------------------------------------------------------
+# HARVESTING PHENOLOGY CHART
+# ---------------------------------------------------------------------------
+
+def _gauss_curve(doys, center, sigma, peak=1.0, threshold=0.01):
+    y = peak * np.exp(-0.5 * ((doys - center) / sigma) ** 2)
+    y[y < threshold] = 0.0
+    return y
+
+
+def _dv_logistic_curve(doys, year):
+    from datetime import date as _date
+    jun1_doy = _date(year, 6, 1).timetuple().tm_yday
+    d = doys - jun1_doy
+    logit = -2.769 + 0.108 * d - 0.0011 * d ** 2
+    p = 1.0 / (1.0 + np.exp(-logit))
+    peak = p.max()
+    return p / peak if peak > 0 else p
+
+
+def build_harvesting_phenology_chart(now_utc):
+    doy_min, doy_max = 140, 300
+    doys = np.linspace(doy_min, doy_max, 1000)
+
+    fig, ax = plt.subplots(figsize=(9, 3.5))
+    fig.patch.set_facecolor("#0f1117")
+    ax.set_facecolor("#0f1117")
+
+    gauss_species = [
+        ("Porcupine caribou (Yukon coast)", 188, 18, "#E76F51"),
+        # Beluga: Scharffenberg et al. 2025 (Arctic Science), TNMPA passive acoustics 2015-2022.
+        # Shingle Pt recorder (Niaqunnaq parcel, 2021-2022): ~50% file presence, low call density throughout summer.
+        # Transit corridor west of Mackenzie Delta; aggregation data from Kugmallit Bay (east of delta) does not apply here.
+        ("Beluga whale",                    188, 30, "#457B9D"),
+        ("Arctic cisco",                    230, 22, "#F4A261"),
+    ]
+    for label, center, sigma, color in gauss_species:
+        y = _gauss_curve(doys, center, sigma)
+        ax.fill_between(doys, y, alpha=0.25, color=color)
+        ax.plot(doys, y, color=color, linewidth=2.0, label=label)
+
+    goose_color = "#8ECAE6"
+    gy = _gauss_curve(doys, 148, 10) + _gauss_curve(doys, 255, 18)
+    gy = gy / gy.max()
+    ax.fill_between(doys, gy, alpha=0.25, color=goose_color)
+    ax.plot(doys, gy, color=goose_color, linewidth=2.0,
+            label="Geese (spring passage + fall staging)")
+
+    dv_color = "#2A9D8F"
+    dv_y = _dv_logistic_curve(doys, now_utc.year)
+    ax.fill_between(doys, dv_y, alpha=0.25, color=dv_color)
+    ax.plot(doys, dv_y, color=dv_color, linewidth=2.0,
+            label="Dolly Varden (fitted model, HIQ 2011–2019)")
+
+    today_doy = now_utc.timetuple().tm_yday
+    if doy_min <= today_doy <= doy_max:
+        ax.axvline(today_doy, color="white", linewidth=1.5, linestyle="--", alpha=0.85, label="Today")
+        ax.text(today_doy + 1.5, 0.97, "Today", color="white", fontsize=8, va="top", ha="left", alpha=0.85)
+
+    import calendar
+    month_ticks, month_labels = [], []
+    for m in range(5, 11):
+        from datetime import date as _date
+        d = _date(now_utc.year, m, 1)
+        doy = d.timetuple().tm_yday
+        if doy_min <= doy <= doy_max:
+            month_ticks.append(doy)
+            month_labels.append(calendar.month_abbr[m])
+    ax.set_xticks(month_ticks)
+    ax.set_xticklabels(month_labels, color="#aaaaaa", fontsize=9)
+    ax.set_xlim(doy_min, doy_max)
+    ax.set_yticks([0, 0.5, 1.0])
+    ax.set_yticklabels(["", "moderate", "peak"], color="#aaaaaa", fontsize=8)
+    ax.set_ylim(0, 1.15)
+    ax.tick_params(colors="#555555", length=3)
+    for spine in ax.spines.values():
+        spine.set_edgecolor("#333333")
+    ax.grid(axis="x", color="#222222", linewidth=0.5)
+    ax.legend(loc="upper left", fontsize=8, framealpha=0.15, labelcolor="white",
+              edgecolor="#444444", facecolor="#1a1a2e")
+    ax.set_title("Seasonal harvest presence — Shingle Point – Tapqaq", color="#cccccc", fontsize=10, pad=6)
+
+    plt.tight_layout(pad=0.6)
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", dpi=150, facecolor=fig.get_facecolor())
+    plt.close(fig)
+    buf.seek(0)
+    caption = (
+        "Dolly Varden: logistic regression on Herschel Island daily harvest records 2011–2019 "
+        "(Schmidt et al. in prep.; AUC = 0.65; Shingle Point window Jul 8–Aug 6, DFO 2026). "
+        "Arctic cisco: DFO 2026 + Craig & McCart 1976. "
+        "Porcupine caribou: PCH post-calving aggregation on Yukon coastal plain (PCMB); "
+        "Shingle Point is east of core summer range — presence there is less certain. "
+        "Beluga: TNMPA passive acoustics 2021–2022, Niaqunnaq parcel (Scharffenberg et al., Arctic Science 2025); "
+        "Shingle Pt recorder: ~50% of files contained at least one vocalization throughout summer, with low call density — "
+        "consistent with a transit corridor west of the Mackenzie Delta, not an aggregation site. "
+        "Geese (Lesser Snow, Greater White-fronted, Black Brant): spring passage late May + "
+        "fall staging late Aug–Sep (Mackenzie Delta IBA NT016, BirdLife / IBA Canada). "
+        "All curves normalized to relative presence (0–1) — not population counts."
+    )
+    return buf.read(), caption
+
+
+def build_harvesting_section(now_utc):
+    chart_bytes, caption = build_harvesting_phenology_chart(now_utc)
+    chart_block, fallback = _upload_chart_or_caption(
+        chart_bytes, "harvesting_phenology.png",
+        "Harvesting phenology chart could not be generated."
+    )
+    blocks = [
+        heading("🦌 Seasonal Harvest Presence", level=2),
+        callout(
+            ["Approximate seasonal availability of key harvested species at Shingle Point – Tapqaq. "
+             "Curves represent relative presence based on monitoring data and published literature. "
+             "The dashed line marks today's date."],
+            color="gray_background",
+        ),
+    ]
+    if chart_block:
+        blocks.append(chart_block)
+    blocks.append(gray_caption(fallback or caption))
     blocks.append(divider())
     return blocks
 

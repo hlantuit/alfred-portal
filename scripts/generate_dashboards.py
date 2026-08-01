@@ -342,6 +342,10 @@ def update_community(community, now_utc):
     if "gem_forecast" in enabled:
         gem_cloud_cover = lib.fetch_gem_cloud_cover(lat, lon, now_utc, tz_name)
 
+    aurora_kp = lib.fetch_aurora_kp(lat) if "weather" in enabled else None
+    aqhi      = lib.fetch_aqhi(lat, lon, now_utc) if "wildfire" in enabled or "weather" in enabled else None
+    uv_today  = (gem_forecast["daily"]["uv_index"] or [None])[0] if gem_forecast else None
+
     # ------------------------------------------------------------------ #
     # Current weather conditions (for the Today's Conditions card)        #
     # ------------------------------------------------------------------ #
@@ -751,6 +755,7 @@ def update_community(community, now_utc):
             tide_text, tide_chart_bytes, tide_chart_caption, tide_station_code or None,
             sun_text, sun_chart_bytes, sun_chart_caption,
             extra_card=snow_card, tide_url=tide_url,
+            uv_index=uv_today, aurora_kp=aurora_kp,
         )
 
     if "alerts" in enabled:
@@ -773,6 +778,7 @@ def update_community(community, now_utc):
             center_x=modis_cx,
             center_y=modis_cy,
             rotation_deg=community.get("modis_rotation_deg", 0.0),
+            aqhi=aqhi,
         )
 
     if "wave_forecast" in enabled:

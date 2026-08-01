@@ -1254,7 +1254,7 @@ def fetch_gem_forecast(lat, lon, now_utc, tz_name="UTC"):
     daily min/max aggregation in the API matches local calendar days.
     """
     hourly_vars = "temperature_2m,windspeed_10m,winddirection_10m,pressure_msl,precipitation,rain"
-    daily_vars  = "weathercode,temperature_2m_max,temperature_2m_min,windspeed_10m_max,winddirection_10m_dominant,precipitation_sum"
+    daily_vars  = "weathercode,temperature_2m_max,temperature_2m_min,windspeed_10m_max,winddirection_10m_dominant,precipitation_sum,uv_index_max"
 
     for model in ("gem_seamless", "best_match"):
         try:
@@ -1292,6 +1292,7 @@ def fetch_gem_forecast(lat, lon, now_utc, tz_name="UTC"):
                     "windspeed":   d.get("windspeed_10m_max", []),
                     "winddir":     d.get("winddirection_10m_dominant", []),
                     "precip":      d.get("precipitation_sum", []),
+                    "uv_index":    d.get("uv_index_max", []),
                 },
             }
         except Exception as e:
@@ -6094,7 +6095,8 @@ def build_todays_conditions_section(weather_text, weather_source_text, weather_i
                                       wind_forecast_chart_block,
                                       tide_text, tide_chart_bytes, tide_chart_caption, station_code,
                                       sun_text, sun_chart_bytes, sun_chart_caption,
-                                      extra_card=None, tide_url=None):
+                                      extra_card=None, tide_url=None,
+                                      uv_index=None, aurora_kp=None):
     """
     Builds the 2x2 "Today's Conditions" card grid (Weather, Wind, Tide,
     Sun) — the most important, fastest-scanning part of the page, with
@@ -6104,6 +6106,17 @@ def build_todays_conditions_section(weather_text, weather_source_text, weather_i
     of Notion blocks) to fill the tide slot with a custom card instead.
     """
     blocks = [heading("📍 Today's Conditions")]
+
+    # Append UV index to weather text
+    if uv_index is not None:
+        uv_label = _uv_label(uv_index)
+        uv_line = f"☀️ UV index (today's max): {uv_index:.0f} — {uv_label}"
+        weather_text = ([weather_text] if isinstance(weather_text, str) else list(weather_text)) + [uv_line]
+
+    # Append aurora forecast to sun text
+    if aurora_kp is not None:
+        aurora_line = aurora_kp["text"]
+        sun_text = ([sun_text] if isinstance(sun_text, str) else list(sun_text)) + [aurora_line]
 
     weather_card = [
         heading("Weather", level=3),
@@ -6797,6 +6810,116 @@ def build_lake_ice_section(ice_bytes, ice_caption, site_label):
 # them as a colour-coded map based on Fire Weather Index (FWI).
 # =========================================================
 
+def _uv_label(uv):
+    """Return a plain-English risk label for a UV index value."""
+    if uv is None:
+        return None
+    if uv <= 2:
+        return "Low"
+    if uv <= 5:
+        return "Moderate"
+    if uv <= 7:
+        return "High"
+    if uv <= 10:
+        return "Very High"
+    return "Extreme"
+
+
+def fetch_aurora_kp(lat):
+    """
+    Fetches the NOAA planetary Kp-index 3-day forecast and returns a dict:
+      { 'current_kp': float, 'max_kp_24h': float, 'visible': bool, 'text': str }
+    or None on failure.
+    Visibility threshold is estimated from the site's latitude:
+    aurora is generally visible when Kp >= (90 - lat) / 5.
+    """
+    try:
+        url = "https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json"
+        resp = get_with_retry(url, timeout=15, retries=1, backoff_seconds=3)
+        rows = resp.json()
+        data_rows = rows[1:]
+        if not data_rows:
+            return None
+        now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        current_kp = None
+        for row in reversed(data_rows):
+            if row[0] <= now_str:
+                current_kp = float(row[1])
+                break
+        if current_kp is None:
+            current_kp = float(data_rows[0][1])
+        cutoff = (datetime.utcnow() + timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+        future_kps = [float(r[1]) for r in data_rows if now_str <= r[0] <= cutoff]
+        max_kp_24h = max(future_kps) if future_kps else current_kp
+        threshold = max(0.0, (90.0 - lat) / 5.0)
+        visible = max_kp_24h >= threshold
+        kp_display = f"Kp {max_kp_24h:.0f}"
+        if visible:
+            text = f"🌌 Aurora: {kp_display} — likely visible tonight"
+        elif max_kp_24h >= threshold - 1:
+            text = f"🌌 Aurora: {kp_display} — possible on horizon"
+        else:
+            text = f"🌌 Aurora: {kp_display} — unlikely tonight"
+        print(f"AURORA: current Kp {current_kp}, max 24h Kp {max_kp_24h}, threshold {threshold:.1f}, visible={visible}")
+        return {"current_kp": current_kp, "max_kp_24h": max_kp_24h, "visible": visible, "text": text}
+    except Exception as e:
+        print(f"AURORA FETCH FAILED: {e}")
+        return None
+
+
+def fetch_aqhi(lat, lon, now_utc):
+    """
+    Fetches current air quality index from Open-Meteo's air-quality API
+    (US AQI scale). Returns a dict:
+      { 'aqi': int, 'label': str, 'text': str }
+    or None on failure.
+    """
+    try:
+        url = (
+            "https://air-quality-api.open-meteo.com/v1/air-quality"
+            f"?latitude={lat}&longitude={lon}"
+            "&hourly=us_aqi&forecast_days=2&timezone=UTC"
+        )
+        resp = get_with_retry(url, timeout=15, retries=1, backoff_seconds=3)
+        data = resp.json()
+        if data.get("error"):
+            print(f"AQHI: API error — {data.get('reason', '')}")
+            return None
+        h = data.get("hourly", {})
+        times = h.get("time", [])
+        values = h.get("us_aqi", [])
+        if not times or not values:
+            return None
+        now_str = now_utc.strftime("%Y-%m-%dT%H:00")
+        idx = 0
+        for i, t in enumerate(times):
+            if t >= now_str:
+                idx = i
+                break
+        aqi = values[idx]
+        if aqi is None:
+            return None
+        aqi = int(aqi)
+        if aqi <= 50:
+            label = "Good"
+        elif aqi <= 100:
+            label = "Moderate"
+        elif aqi <= 150:
+            label = "Unhealthy for sensitive groups"
+        elif aqi <= 200:
+            label = "Unhealthy"
+        elif aqi <= 300:
+            label = "Very Unhealthy"
+        else:
+            label = "Hazardous"
+        text = f"💨 Air quality: AQI {aqi} — {label}"
+        print(f"AQHI: AQI {aqi} ({label})")
+        return {"aqi": aqi, "label": label, "text": text}
+    except Exception as e:
+        print(f"AQHI FETCH FAILED: {e}")
+        return None
+
+
 def fetch_cwfis_wildfires(lat, lon, radius_km=600, now_utc=None):
     """
     Fetches satellite fire hotspots from the CWFIS GeoServer WFS endpoint
@@ -7023,26 +7146,31 @@ def build_wildfire_map(fires, site_lat, site_lon, now_utc, tz_name,
 
 def build_wildfire_section(fires, site_lat, site_lon, now_utc, tz_name,
                            bbox_3413=None, center_x=None, center_y=None,
-                           rotation_deg=0.0, half_width_m=150_000):
+                           rotation_deg=0.0, half_width_m=150_000, aqhi=None):
     """
     Builds Notion blocks for the wildfire hotspot section.
     fires: list returned by fetch_cwfis_wildfires (may be empty).
     When bbox_3413/center_x/center_y are supplied, the map uses a Blue
     Marble satellite basemap at the same extent as the MODIS image.
+    aqhi: optional dict from fetch_aqhi — appended to the summary callout.
     """
-    section_heading = heading("🔥 Wildfire Activity — CWFIS Hotspots (7-day)", level=2)
+    section_heading = heading("🔥 Wildfire Activity & Air Quality", level=2)
 
     if fires is None:
+        aqhi_lines = [aqhi["text"]] if aqhi else []
         return [
             section_heading,
-            callout("Wildfire data unavailable — fetch failed. Check Action logs.", color="gray_background"),
+            callout(["Wildfire data unavailable — fetch failed. Check Action logs."] + aqhi_lines,
+                    color="gray_background"),
             divider(),
         ]
 
     if not fires:
+        aqhi_lines = [aqhi["text"]] if aqhi else []
         return [
             section_heading,
-            callout("No active fire hotspots detected within 600 km in the past 7 days.", color="green_background"),
+            callout(["No active fire hotspots detected within 600 km in the past 7 days."] + aqhi_lines,
+                    color="green_background"),
             divider(),
         ]
 
@@ -7068,6 +7196,8 @@ def build_wildfire_section(fires, site_lat, site_lon, now_utc, tz_name,
         ("Nearest hotspot: ", f"{nearest_km:.0f} km"),
         (fwi_label, ""),
     ]
+    if aqhi:
+        summary.append((aqhi["text"], ""))
     callout_color = (
         "red_background"    if (max_fwi or 0) >= 20 else
         "orange_background" if (max_fwi or 0) >= 12 else

@@ -867,6 +867,7 @@ def update_community(community, now_utc):
         sources.append("wildfire")
     blocks += lib.build_disclaimer_section(sources)
 
+    print(f"[{sid}] PRE-PUBLISH: {len(blocks)} blocks; last 6 types: {[b.get('type') for b in blocks[-6:]]}")
     lib.publish_blocks_to_notion(blocks)
     print(f"[{sid}] Done — {len(blocks)} blocks written")
 

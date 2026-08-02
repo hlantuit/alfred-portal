@@ -7400,10 +7400,16 @@ def publish_blocks_to_notion(blocks):
     for b in all_existing:
         notion.blocks.delete(block_id=b["id"])
 
-    response = notion.blocks.children.append(block_id=PAGE_ID, children=blocks)
-    print("APPEND RESPONSE BLOCK COUNT:", len(response.get("results", [])))
+    # Notion's children.append is limited to 100 blocks per call — chunk if needed.
+    total_appended = 0
+    last_response = None
+    for i in range(0, len(blocks), 100):
+        chunk = blocks[i:i + 100]
+        last_response = notion.blocks.children.append(block_id=PAGE_ID, children=chunk)
+        total_appended += len(last_response.get("results", []))
+    print("APPEND RESPONSE BLOCK COUNT:", total_appended)
     print("Dashboard updated successfully")
-    return response
+    return last_response
 
 
 

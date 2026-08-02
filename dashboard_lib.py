@@ -7270,7 +7270,7 @@ def _dv_logistic_curve(doys, year):
     return p / peak if peak > 0 else p
 
 
-def build_harvesting_phenology_chart(now_utc):
+def build_harvesting_phenology_chart(now_utc, site_id="shingle-point"):
     doy_min, doy_max = 140, 300
     doys = np.linspace(doy_min, doy_max, 1000)
 
@@ -7278,14 +7278,26 @@ def build_harvesting_phenology_chart(now_utc):
     fig.patch.set_facecolor("#0f1117")
     ax.set_facecolor("#0f1117")
 
-    gauss_species = [
-        ("Porcupine caribou (Yukon coast)", 188, 18, "#E76F51"),
+    if site_id == "herschel":
+        # Herschel Island (Qikiqtaruk) — western Beaufort, Yukon coast
+        # Beluga: Scharffenberg et al. 2025 (Arctic Science), TNMPA passive acoustics 2015-2022.
+        # Kugmallit Bay aggregation timing applies here (first detect ~Jun 21-23, peak Jul 2-13, end Jul 27–Aug 6).
+        # Herschel is an important beluga summer habitat in the same western Beaufort sector.
+        # No Arctic cisco (they migrate east from Mackenzie; Herschel is on the western side).
+        gauss_species = [
+            ("Porcupine caribou (Yukon coast)", 188, 18, "#E76F51"),
+            ("Beluga whale",                    190, 22, "#457B9D"),
+        ]
+    else:
+        # Shingle Point / Niaqunnaq parcel (default)
         # Beluga: Scharffenberg et al. 2025 (Arctic Science), TNMPA passive acoustics 2015-2022.
         # Shingle Pt recorder (Niaqunnaq parcel, 2021-2022): ~50% file presence, low call density throughout summer.
         # Transit corridor west of Mackenzie Delta; aggregation data from Kugmallit Bay (east of delta) does not apply here.
-        ("Beluga whale",                    188, 30, "#457B9D"),
-        ("Arctic cisco",                    230, 22, "#F4A261"),
-    ]
+        gauss_species = [
+            ("Porcupine caribou (Yukon coast)", 188, 18, "#E76F51"),
+            ("Beluga whale",                    188, 30, "#457B9D"),
+            ("Arctic cisco",                    230, 22, "#F4A261"),
+        ]
     for label, center, sigma, color in gauss_species:
         y = _gauss_curve(doys, center, sigma)
         ax.fill_between(doys, y, alpha=0.25, color=color)
@@ -7330,32 +7342,47 @@ def build_harvesting_phenology_chart(now_utc):
     ax.grid(axis="x", color="#222222", linewidth=0.5)
     ax.legend(loc="upper left", fontsize=8, framealpha=0.15, labelcolor="white",
               edgecolor="#444444", facecolor="#1a1a2e")
-    ax.set_title("Seasonal harvest presence — Shingle Point – Tapqaq", color="#cccccc", fontsize=10, pad=6)
+    if site_id == "herschel":
+        title = "Seasonal harvest presence — Qikiqtaruk – Herschel Island"
+        caption = (
+            "Dolly Varden: logistic regression on Herschel Island daily harvest records 2011–2019 "
+            "(Schmidt et al. in prep.; AUC = 0.65; harvest window Jul 8–Aug 6, DFO 2026). "
+            "Porcupine caribou: PCH post-calving aggregation on Yukon coastal plain (PCMB); "
+            "Herschel Island is within the core summer coastal range. "
+            "Beluga: TNMPA passive acoustics 2015–2022 (Scharffenberg et al., Arctic Science 2025); "
+            "western Beaufort summer distribution — Herschel area is an important aggregation habitat. "
+            "Geese (Lesser Snow, Greater White-fronted, Black Brant): spring passage late May + "
+            "fall staging late Aug–Sep (Mackenzie Delta IBA NT016, BirdLife / IBA Canada). "
+            "All curves normalized to relative presence (0–1) — not population counts."
+        )
+    else:
+        title = "Seasonal harvest presence — Shingle Point – Tapqaq"
+        caption = (
+            "Dolly Varden: logistic regression on Herschel Island daily harvest records 2011–2019 "
+            "(Schmidt et al. in prep.; AUC = 0.65; Shingle Point window Jul 8–Aug 6, DFO 2026). "
+            "Arctic cisco: DFO 2026 + Craig & McCart 1976. "
+            "Porcupine caribou: PCH post-calving aggregation on Yukon coastal plain (PCMB); "
+            "Shingle Point is east of core summer range — presence there is less certain. "
+            "Beluga: TNMPA passive acoustics 2021–2022, Niaqunnaq parcel (Scharffenberg et al., Arctic Science 2025); "
+            "Shingle Pt recorder: ~50% of files contained at least one vocalization throughout summer, with low call density — "
+            "consistent with a transit corridor west of the Mackenzie Delta, not an aggregation site. "
+            "Geese (Lesser Snow, Greater White-fronted, Black Brant): spring passage late May + "
+            "fall staging late Aug–Sep (Mackenzie Delta IBA NT016, BirdLife / IBA Canada). "
+            "All curves normalized to relative presence (0–1) — not population counts."
+        )
+    ax.set_title(title, color="#cccccc", fontsize=10, pad=6)
 
     plt.tight_layout(pad=0.6)
     buf = io.BytesIO()
     plt.savefig(buf, format="png", dpi=150, facecolor=fig.get_facecolor())
     plt.close(fig)
     buf.seek(0)
-    caption = (
-        "Dolly Varden: logistic regression on Herschel Island daily harvest records 2011–2019 "
-        "(Schmidt et al. in prep.; AUC = 0.65; Shingle Point window Jul 8–Aug 6, DFO 2026). "
-        "Arctic cisco: DFO 2026 + Craig & McCart 1976. "
-        "Porcupine caribou: PCH post-calving aggregation on Yukon coastal plain (PCMB); "
-        "Shingle Point is east of core summer range — presence there is less certain. "
-        "Beluga: TNMPA passive acoustics 2021–2022, Niaqunnaq parcel (Scharffenberg et al., Arctic Science 2025); "
-        "Shingle Pt recorder: ~50% of files contained at least one vocalization throughout summer, with low call density — "
-        "consistent with a transit corridor west of the Mackenzie Delta, not an aggregation site. "
-        "Geese (Lesser Snow, Greater White-fronted, Black Brant): spring passage late May + "
-        "fall staging late Aug–Sep (Mackenzie Delta IBA NT016, BirdLife / IBA Canada). "
-        "All curves normalized to relative presence (0–1) — not population counts."
-    )
     return buf.read(), caption
 
 
-def build_harvesting_section(now_utc):
-    print("HARVESTING: building section")
-    chart_bytes, caption = build_harvesting_phenology_chart(now_utc)
+def build_harvesting_section(now_utc, site_id="shingle-point"):
+    print(f"HARVESTING: building section for {site_id}")
+    chart_bytes, caption = build_harvesting_phenology_chart(now_utc, site_id=site_id)
     chart_block, fallback = _upload_chart_or_caption(
         chart_bytes, "harvesting_phenology.png",
         "Harvesting phenology chart could not be generated."
@@ -7363,9 +7390,10 @@ def build_harvesting_section(now_utc):
     blocks = [
         heading("🦌 Seasonal Harvest Presence", level=2),
         callout(
-            ["Approximate seasonal availability of key harvested species at Shingle Point – Tapqaq. "
-             "Curves represent relative presence based on monitoring data and published literature. "
-             "The dashed line marks today's date."],
+            [("Approximate seasonal availability of key harvested species at "
+              + ("Qikiqtaruk – Herschel Island." if site_id == "herschel" else "Shingle Point – Tapqaq.")
+              + " Curves represent relative presence based on monitoring data and published literature. "
+                "The dashed line marks today's date.")],
             color="gray_background",
         ),
     ]

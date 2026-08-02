@@ -845,7 +845,7 @@ def update_community(community, now_utc):
         blocks += lib.build_wind_chart_section(wind_chart_bytes, wind_chart_caption)
 
     if "harvesting" in enabled:
-        blocks += lib.build_harvesting_section(now_utc)
+        blocks += lib.build_harvesting_section(now_utc, site_id=sid)
 
     # Build disclaimer from active blocks
     sources = []

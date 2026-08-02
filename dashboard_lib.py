@@ -7274,9 +7274,13 @@ def build_harvesting_phenology_chart(now_utc, site_id="shingle-point"):
     doy_min, doy_max = 140, 300
     doys = np.linspace(doy_min, doy_max, 1000)
 
-    fig, ax = plt.subplots(figsize=(9, 3.5))
-    fig.patch.set_facecolor("#0f1117")
-    ax.set_facecolor("#0f1117")
+    NOTION_TEXT_GRAY  = "#787774"
+    NOTION_LIGHT_GRID = "#EDECEC"
+
+    plt.rcParams["font.family"] = "DejaVu Sans"
+    fig, ax = plt.subplots(figsize=(9, 3.5), dpi=150)
+    fig.patch.set_alpha(0)
+    ax.set_facecolor("none")
 
     if site_id == "herschel":
         # Herschel Island (Qikiqtaruk) — western Beaufort, Yukon coast
@@ -7303,7 +7307,7 @@ def build_harvesting_phenology_chart(now_utc, site_id="shingle-point"):
         ax.fill_between(doys, y, alpha=0.25, color=color)
         ax.plot(doys, y, color=color, linewidth=2.0, label=label)
 
-    goose_color = "#8ECAE6"
+    goose_color = "#5BA4C7"
     gy = _gauss_curve(doys, 148, 10) + _gauss_curve(doys, 255, 18)
     gy = gy / gy.max()
     ax.fill_between(doys, gy, alpha=0.25, color=goose_color)
@@ -7317,9 +7321,12 @@ def build_harvesting_phenology_chart(now_utc, site_id="shingle-point"):
             label="Dolly Varden (fitted model, HIQ 2011–2019)")
 
     today_doy = now_utc.timetuple().tm_yday
+    NOTION_RED = "#E16259"
     if doy_min <= today_doy <= doy_max:
-        ax.axvline(today_doy, color="white", linewidth=1.5, linestyle="--", alpha=0.85, label="Today")
-        ax.text(today_doy + 1.5, 0.97, "Today", color="white", fontsize=8, va="top", ha="left", alpha=0.85)
+        ax.axvline(today_doy, color=NOTION_RED, linewidth=1.5, linestyle="--", alpha=0.85, label="Today")
+        ax.text(today_doy + 1.5, 0.97, "Today", color=NOTION_RED, fontsize=9,
+                va="top", ha="left", alpha=0.9,
+                bbox=dict(boxstyle="round,pad=0.15", facecolor="white", edgecolor="none", alpha=0.7))
 
     import calendar
     month_ticks, month_labels = [], []
@@ -7331,17 +7338,21 @@ def build_harvesting_phenology_chart(now_utc, site_id="shingle-point"):
             month_ticks.append(doy)
             month_labels.append(calendar.month_abbr[m])
     ax.set_xticks(month_ticks)
-    ax.set_xticklabels(month_labels, color="#aaaaaa", fontsize=9)
+    ax.set_xticklabels(month_labels, color=NOTION_TEXT_GRAY, fontsize=13)
     ax.set_xlim(doy_min, doy_max)
     ax.set_yticks([0, 0.5, 1.0])
-    ax.set_yticklabels(["", "moderate", "peak"], color="#aaaaaa", fontsize=8)
+    ax.set_yticklabels(["", "moderate", "peak"], color=NOTION_TEXT_GRAY, fontsize=11)
     ax.set_ylim(0, 1.15)
-    ax.tick_params(colors="#555555", length=3)
-    for spine in ax.spines.values():
-        spine.set_edgecolor("#333333")
-    ax.grid(axis="x", color="#222222", linewidth=0.5)
-    ax.legend(loc="upper left", fontsize=8, framealpha=0.15, labelcolor="white",
-              edgecolor="#444444", facecolor="#1a1a2e")
+    ax.tick_params(axis="x", length=6, color="#555555", width=1.2, bottom=True, direction="out")
+    ax.tick_params(axis="y", length=0, labelsize=11, colors=NOTION_TEXT_GRAY)
+    for spine in ["top", "right", "left"]:
+        ax.spines[spine].set_visible(False)
+    ax.spines["bottom"].set_color(NOTION_LIGHT_GRID)
+    ax.yaxis.grid(True, color=NOTION_LIGHT_GRID, linewidth=1, zorder=0)
+    ax.xaxis.grid(False)
+    ax.set_axisbelow(True)
+    ax.legend(loc="upper left", fontsize=11, framealpha=0.0, labelcolor=NOTION_TEXT_GRAY,
+              edgecolor="none")
     if site_id == "herschel":
         title = "Seasonal harvest presence — Qikiqtaruk – Herschel Island"
         caption = (
@@ -7370,14 +7381,11 @@ def build_harvesting_phenology_chart(now_utc, site_id="shingle-point"):
             "fall staging late Aug–Sep (Mackenzie Delta IBA NT016, BirdLife / IBA Canada). "
             "All curves normalized to relative presence (0–1) — not population counts."
         )
-    ax.set_title(title, color="#cccccc", fontsize=10, pad=6)
+    ax.set_title(title, color=NOTION_TEXT_GRAY, fontsize=13, pad=6)
 
-    plt.tight_layout(pad=0.6)
-    buf = io.BytesIO()
-    plt.savefig(buf, format="png", dpi=150, facecolor=fig.get_facecolor())
-    plt.close(fig)
-    buf.seek(0)
-    return buf.read(), caption
+    fig.tight_layout()
+    png = fig_to_png_bytes(fig, white_bg=True)
+    return png, caption
 
 
 def build_harvesting_section(now_utc, site_id="shingle-point"):

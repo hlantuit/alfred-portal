@@ -1300,6 +1300,35 @@ def fetch_gem_forecast(lat, lon, now_utc, tz_name="UTC"):
     return None
 
 
+def fetch_uv_index(lat, lon, now_utc, tz_name="UTC"):
+    """
+    Fetches today's max UV index from Open-Meteo using ECMWF or best_match
+    (fallback for when the GEM model doesn't provide uv_index_max).
+    Returns a float or None on failure.
+    """
+    for model in ("ecmwf_ifs025", None):
+        try:
+            model_param = f"&models={model}" if model else ""
+            tz_enc = tz_name.replace("/", "%2F")
+            url = (
+                f"https://api.open-meteo.com/v1/forecast"
+                f"?latitude={lat}&longitude={lon}"
+                f"&daily=uv_index_max&timezone={tz_enc}{model_param}"
+            )
+            resp = get_with_retry(url, timeout=20, retries=2, backoff_seconds=5)
+            data = resp.json()
+            if "error" in data:
+                continue
+            vals = data.get("daily", {}).get("uv_index_max", [])
+            if vals and vals[0] is not None:
+                label = "ecmwf_ifs025" if model else "best_match"
+                print(f"UV INDEX: {vals[0]:.1f} via {label}")
+                return float(vals[0])
+        except Exception as e:
+            print(f"UV INDEX [{model or 'best_match'}] FAILED: {e}")
+    return None
+
+
 def fetch_gem_cloud_cover(lat, lon, now_utc, tz_name="UTC"):
     """
     Fetches cloud cover separately from the main GEM forecast so that
@@ -7325,6 +7354,7 @@ def build_harvesting_phenology_chart(now_utc):
 
 
 def build_harvesting_section(now_utc):
+    print("HARVESTING: building section")
     chart_bytes, caption = build_harvesting_phenology_chart(now_utc)
     chart_block, fallback = _upload_chart_or_caption(
         chart_bytes, "harvesting_phenology.png",

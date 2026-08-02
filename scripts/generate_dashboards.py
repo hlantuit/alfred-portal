@@ -345,6 +345,8 @@ def update_community(community, now_utc):
     aurora_kp = lib.fetch_aurora_kp(lat) if "weather" in enabled else None
     aqhi      = lib.fetch_aqhi(lat, lon, now_utc) if "wildfire" in enabled or "weather" in enabled else None
     uv_today  = (gem_forecast["daily"]["uv_index"] or [None])[0] if gem_forecast else None
+    if uv_today is None and ("weather" in enabled or "uv" in enabled):
+        uv_today = lib.fetch_uv_index(lat, lon, now_utc, tz_name)
 
     # ------------------------------------------------------------------ #
     # Current weather conditions (for the Today's Conditions card)        #
@@ -841,6 +843,9 @@ def update_community(community, now_utc):
 
     if "wind_chart" in enabled:
         blocks += lib.build_wind_chart_section(wind_chart_bytes, wind_chart_caption)
+
+    if "harvesting" in enabled:
+        blocks += lib.build_harvesting_section(now_utc)
 
     # Build disclaimer from active blocks
     sources = []

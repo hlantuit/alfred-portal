@@ -7351,8 +7351,8 @@ def build_harvesting_phenology_chart(now_utc, site_id="shingle-point"):
     ax.yaxis.grid(True, color=NOTION_LIGHT_GRID, linewidth=1, zorder=0)
     ax.xaxis.grid(False)
     ax.set_axisbelow(True)
-    ax.legend(loc="upper left", fontsize=11, framealpha=0.0, labelcolor=NOTION_TEXT_GRAY,
-              edgecolor="none")
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=2,
+              fontsize=11, framealpha=0.0, labelcolor=NOTION_TEXT_GRAY, edgecolor="none")
     if site_id == "herschel":
         title = "Seasonal harvest presence — Qikiqtaruk – Herschel Island"
         caption = (
@@ -7384,6 +7384,7 @@ def build_harvesting_phenology_chart(now_utc, site_id="shingle-point"):
     ax.set_title(title, color=NOTION_TEXT_GRAY, fontsize=13, pad=6)
 
     fig.tight_layout()
+    fig.subplots_adjust(bottom=0.28)
     png = fig_to_png_bytes(fig, white_bg=True)
     return png, caption
 

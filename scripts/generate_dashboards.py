@@ -20,6 +20,7 @@ appear. Available block names:
   hydrometric     Hydrometric river/lake station water level
   wildfire        CWFIS wildfire hotspot map
   snow_depth      Snow depth time series
+  snow_cover      Sentinel-2 NDSI snow cover map (only shown when snow detected)
 
 Usage:
   python scripts/generate_dashboards.py
@@ -530,6 +531,8 @@ def update_community(community, now_utc):
     sea_ice_bytes = sea_ice_caption = None
     sea_ice_zoom_bytes = sea_ice_zoom_caption = None
     lake_ice_bytes = lake_ice_caption = None
+    snow_cover_bytes = snow_cover_date = None
+    snow_cover_fraction = 0.0
     wave_data = None
     fires = []
     hydrometric_results = []
@@ -537,6 +540,7 @@ def update_community(community, now_utc):
     needs_parallel = enabled & {
         "modis", "water_level", "sentinel1", "sea_ice", "sea_ice_zoom",
         "lake_river_ice", "wave_forecast", "wildfire", "hydrometric",
+        "snow_cover",
     }
     if needs_parallel:
         utm_zone = community.get("utm_zone")
@@ -581,7 +585,7 @@ def update_community(community, now_utc):
         with ThreadPoolExecutor(max_workers=workers) as ex:
             fut_modis = fut_wl = fut_topaz = fut_s1 = None
             fut_ice = fut_ice_zoom = fut_lake_ice = None
-            fut_wave = fut_fire = None
+            fut_wave = fut_fire = fut_snow = None
 
             if "modis" in enabled:
                 # Build bbox from computed center; use config rotation_deg
@@ -667,6 +671,15 @@ def update_community(community, now_utc):
                     water_bodies_geojson_path=water_bod, now_utc=now_utc,
                 )
 
+            if "snow_cover" in enabled and utm_zone and utm_center_x is not None:
+                _sh_token_snow = lib.get_sentinel_hub_token()
+                if _sh_token_snow:
+                    fut_snow = ex.submit(
+                        lib.fetch_sentinel2_snow_cover,
+                        _sh_token_snow, lat, lon, utm_epsg,
+                        utm_center_x, utm_center_y,
+                    )
+
             if "wave_forecast" in enabled:
                 wave_lat = community.get("wave_lat", lat)
                 wave_lon = community.get("wave_lon", lon)
@@ -716,6 +729,11 @@ def update_community(community, now_utc):
                     lake_ice_bytes, lake_ice_caption = fut_lake_ice.result(timeout=240)
                 except Exception as e:
                     print(f"[{sid}] LAKE ICE FAILED: {e}")
+            if fut_snow:
+                try:
+                    snow_cover_bytes, snow_cover_date, snow_cover_fraction = fut_snow.result(timeout=120)
+                except Exception as e:
+                    print(f"[{sid}] SNOW COVER FAILED: {e}")
             if fut_wave:
                 try:
                     wave_data = fut_wave.result(timeout=120)
@@ -833,6 +851,12 @@ def update_community(community, now_utc):
             title="🧊 Sea Ice — Sentinel-1 Classification — Zoom",
             filename="sea_ice_zoom.png",
         )
+
+    if "snow_cover" in enabled and snow_cover_fraction >= 0.01:
+        print(f"[{sid}] SNOW COVER: fraction={snow_cover_fraction:.3f} — publishing block")
+        blocks += lib.build_snow_cover_section(snow_cover_bytes, snow_cover_date, site_label)
+    elif "snow_cover" in enabled:
+        print(f"[{sid}] SNOW COVER: fraction={snow_cover_fraction:.3f} — below 1% threshold, skipping block")
 
     if "lake_river_ice" in enabled:
         blocks += lib.build_lake_ice_section(lake_ice_bytes, lake_ice_caption, site_label)

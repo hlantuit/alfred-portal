@@ -4696,6 +4696,185 @@ def build_sea_ice_section(ice_bytes, ice_caption, site_label, title="🧊 Sea Ic
 
 
 # =========================================================
+# MODULE — SNOW COVER (Sentinel-2 NDSI)
+# NDSI = (B03 − B11) / (B03 + B11); threshold ≥ 0.40 for snow.
+# SCL band used to mask water (class 6) and cloud (classes 8–10).
+# Only published when ≥ 1 % of valid land pixels are snow-covered.
+# =========================================================
+
+def fetch_sentinel2_snow_cover(token, lat, lon, utm_epsg,
+                                center_x, center_y,
+                                half_width_m=75_000,
+                                output_size_px=MODIS_FINAL_SIZE_PX,
+                                max_age_days=30):
+    """
+    Fetches a Sentinel-2 L2A NDSI snow cover image via the Sentinel Hub
+    Process API (Copernicus Data Space Ecosystem).
+
+    Returns (png_bytes, date_str, snow_fraction) or (None, None, 0) on
+    failure or when no suitable scene is found within max_age_days.
+
+    snow_fraction is the fraction of valid (non-water, non-cloud) land
+    pixels that are classified as snow (NDSI >= 0.40).  The caller uses
+    this to decide whether to publish the block.
+    """
+    import datetime as _dt
+
+    try:
+        now = _dt.datetime.utcnow()
+        date_to   = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        date_from = (now - _dt.timedelta(days=max_age_days)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        minx = center_x - half_width_m
+        maxx = center_x + half_width_m
+        miny = center_y - half_width_m
+        maxy = center_y + half_width_m
+
+        # EvalScript returns 4 channels:
+        #   R, G, B  — NDSI-classified colour (for display)
+        #   A        — snow flag: 255 = snow pixel, 128 = valid land non-snow,
+        #              0 = masked (water / cloud / no-data)
+        # This lets us compute snow_fraction from the alpha channel.
+        evalscript = """
+//VERSION=3
+function setup() {
+  return {
+    input: [{bands: ["B03", "B11", "SCL", "dataMask"]}],
+    output: {bands: 4, sampleType: "UINT8"},
+    mosaicking: "ORBIT"
+  };
+}
+function preProcessScenes(collections) {
+  // Keep the most recent scene with < 60 % cloud cover
+  collections.scenes.orbits.sort((a, b) =>
+    new Date(b.dateFrom) - new Date(a.dateFrom)
+  );
+  return collections;
+}
+function evaluatePixel(samples) {
+  // Use the most recent sample
+  var s = samples[0];
+  if (!s || s.dataMask === 0) return [20, 30, 60, 0];
+
+  var scl = s.SCL;
+  // Water (6): dark blue, masked out of snow count
+  if (scl === 6) return [13, 22, 60, 0];
+  // Cloud shadow (3), cloud medium (8), cloud high (9), thin cirrus (10):
+  if (scl === 3 || scl === 8 || scl === 9 || scl === 10) return [200, 200, 200, 0];
+  // Saturated (1) or defective (2): skip
+  if (scl === 1 || scl === 2) return [20, 30, 60, 0];
+
+  var ndsi = (s.B03 - s.B11) / (s.B03 + s.B11 + 1e-6);
+
+  if (ndsi >= 0.40) {
+    // Snow: blue-white gradient keyed to NDSI strength
+    var t = Math.min(1.0, (ndsi - 0.40) / 0.50);   // 0 at NDSI=0.40, 1 at NDSI=0.90
+    var r = Math.round(140 + t * 115);   // 140 → 255
+    var g = Math.round(184 + t * 71);    // 184 → 255
+    var b = Math.round(224 + t * 31);    // 224 → 255
+    return [r, g, b, 255];              // alpha=255: snow pixel
+  }
+  // Non-snow land: olive-brown tundra tone
+  return [148, 133, 107, 128];           // alpha=128: valid land, no snow
+}
+"""
+
+        request_body = {
+            "input": {
+                "bounds": {
+                    "bbox": [minx, miny, maxx, maxy],
+                    "properties": {"crs": f"http://www.opengis.net/def/crs/EPSG/0/{utm_epsg}"},
+                },
+                "data": [{
+                    "type": "sentinel-2-l2a",
+                    "dataFilter": {
+                        "timeRange": {"from": date_from, "to": date_to},
+                        "maxCloudCoverage": 60,
+                        "mosaickingOrder": "mostRecent",
+                    },
+                }],
+            },
+            "output": {
+                "width": output_size_px,
+                "height": output_size_px,
+                "responses": [{"identifier": "default", "format": {"type": "image/png"}}],
+            },
+            "evalscript": evalscript,
+        }
+
+        resp = requests.post(
+            "https://sh.dataspace.copernicus.eu/api/v1/process",
+            json=request_body,
+            headers={"Authorization": f"Bearer {token}", "Accept": "image/png"},
+            timeout=90,
+        )
+        resp.raise_for_status()
+
+        if resp.content[:8] != b"\x89PNG\r\n\x1a\n":
+            print("SNOW COVER: response was not a valid PNG")
+            return None, None, 0.0
+
+        # Decode alpha channel to compute snow_fraction
+        import io as _io
+        import struct as _struct
+        try:
+            from PIL import Image as _Image
+            img = _Image.open(_io.BytesIO(resp.content)).convert("RGBA")
+            import numpy as _np
+            arr = _np.array(img)
+            alpha = arr[:, :, 3]
+            snow_px  = int((alpha == 255).sum())
+            land_px  = int((alpha >= 128).sum())
+            snow_frac = snow_px / land_px if land_px > 0 else 0.0
+            print(f"SNOW COVER: snow={snow_px} land={land_px} fraction={snow_frac:.3f}")
+        except Exception as e:
+            print(f"SNOW COVER: alpha decode failed ({e}), defaulting fraction=1.0")
+            snow_frac = 1.0
+
+        # Determine actual scene date from Sentinel Hub headers if available
+        scene_date = resp.headers.get("x-processingtimestamp", "")[:10] or now.strftime("%Y-%m-%d")
+
+        return resp.content, scene_date, snow_frac
+
+    except Exception as e:
+        print("SNOW COVER FETCH FAILED:", e)
+        return None, None, 0.0
+
+
+def build_snow_cover_section(snow_bytes, snow_date, site_label):
+    """Builds Notion blocks for the Sentinel-2 NDSI snow cover frame."""
+    blocks = [
+        heading("❄️ Snow Cover — Sentinel-2 NDSI", level=2),
+        callout(
+            [f"Most recent cloud-free Sentinel-2 acquisition showing snow cover at "
+             f"{site_label}. White/blue = snow (NDSI ≥ 0.40); brown = snow-free land; "
+             f"dark blue = open water (masked). Date: {snow_date or 'unknown'}."],
+            color="gray_background",
+        ),
+    ]
+    if snow_bytes:
+        try:
+            uid = upload_image_to_notion(snow_bytes, "snow_cover.png")
+            blocks.append(image_block_from_upload(uid))
+        except Exception as e:
+            print("SNOW COVER NOTION UPLOAD FAILED:", e)
+            blocks.append(paragraph(f"Snow cover image could not be uploaded: {e}"))
+    else:
+        blocks.append(paragraph(
+            f"Snow cover image unavailable for {site_label}. "
+            "Check that SENTINEL_HUB_CLIENT_ID/SECRET are set and that a "
+            "cloud-free Sentinel-2 scene exists within the last 30 days."
+        ))
+    blocks.append(gray_caption(
+        f"Sentinel-2 L2A · ESA / Copernicus Data Space · "
+        f"NDSI = (B03−B11)/(B03+B11) · Water and cloud masked via SCL · "
+        f"Snow threshold NDSI ≥ 0.40 · 20 m resolution · {snow_date or ''}"
+    ))
+    blocks.append(divider())
+    return blocks
+
+
+# =========================================================
 # MODULE — TIDES & SEA LEVEL (DFO Canadian Hydrographic Service, IWLS API)
 # Unlike the old SPINE API (which only covers the St. Lawrence and never
 # had Arctic coverage), IWLS hosts real tide-table stations across

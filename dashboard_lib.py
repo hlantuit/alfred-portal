@@ -5957,93 +5957,87 @@ def _date_to_clim_doy(date):
 def _fetch_wateroffice_year(station_id, year):
     """
     Fetch water-level data for a full year from the Water Office real-time
-    download endpoint (wateroffice.ec.gc.ca).  Returns {date: float} of
-    daily means or an empty dict on failure.
+    table view (wateroffice.ec.gc.ca).  Returns {date: float} of daily means
+    or an empty dict on failure.
+
+    The site shows a disclaimer page on the first visit; we accept it with a
+    session POST so subsequent requests receive actual data.
     """
-    import datetime as _dt, re as _re
+    import datetime as _dt, re as _re, csv as _csv
 
     end_date = _dt.date.today().strftime("%Y-%m-%d")
+    session = requests.Session()
+    session.headers["User-Agent"] = "Mozilla/5.0 (compatible; alfred-portal/1.0)"
 
-    # Try the direct download CSV endpoint first; fall back to table-mode HTML.
-    for url, params, label in [
-        (
-            "https://wateroffice.ec.gc.ca/download/real_time_e.html",
-            {
-                "stn": station_id,
-                "startDate": f"{year}-01-01",
-                "endDate": end_date,
-                "prm1": 46,   # Stage / Water Level (m)
-                "prm2": 47,   # Discharge (m³/s)
-                "type": "csv",
-            },
-            "download/csv",
-        ),
-        (
-            "https://wateroffice.ec.gc.ca/report/real_time_e.html",
-            {
-                "stn": station_id,
-                "startDate": f"{year}-01-01",
-                "endDate": end_date,
-                "prm1": 46,
-                "prm2": 47,
-                "mode": "Table",
-            },
-            "report/table",
-        ),
-    ]:
-        try:
-            resp = requests.get(url, params=params, timeout=45,
-                                headers={"User-Agent": "Mozilla/5.0 (compatible; alfred-portal/1.0)"})
-            resp.raise_for_status()
-            # Log snippet to help diagnose if parsing fails
-            snippet = resp.text[:300].replace("\n", " ")
-            print(f"HYDROMETRIC CLIM [{station_id}]: WO [{label}] status={resp.status_code} "
-                  f"len={len(resp.text)} snippet={snippet!r}")
+    # Step 1 — accept the disclaimer so the session gets the required cookie.
+    try:
+        disc = session.get("https://wateroffice.ec.gc.ca/disclaimer_e.html", timeout=20)
+        # Extract any hidden form fields, then post acceptance
+        hidden = dict(_re.findall(
+            r'<input[^>]+type=["\']hidden["\'][^>]+name=["\']([^"\']+)["\'][^>]+value=["\']([^"\']*)["\']',
+            disc.text,
+        ))
+        # Try reverse attribute order too
+        hidden.update(dict(_re.findall(
+            r'<input[^>]+name=["\']([^"\']+)["\'][^>]+type=["\']hidden["\'][^>]+value=["\']([^"\']*)["\']',
+            disc.text,
+        )))
+        form_action = _re.search(r'<form[^>]+action=["\']([^"\']+)["\']', disc.text)
+        post_url = (form_action.group(1) if form_action else "/disclaimer_e.html").strip()
+        if not post_url.startswith("http"):
+            post_url = "https://wateroffice.ec.gc.ca" + post_url
+        hidden["disclaimer"] = "1"
+        session.post(post_url, data=hidden, timeout=20, allow_redirects=True)
+        print(f"HYDROMETRIC CLIM [{station_id}]: WO disclaimer accepted, cookies={list(session.cookies.keys())}")
+    except Exception as _e:
+        print(f"HYDROMETRIC CLIM [{station_id}]: WO disclaimer step failed: {_e}")
 
-            # Try CSV parse first (Content-Type text/csv or starts with station ID or date header)
-            daily = {}
-            lines = resp.text.splitlines()
-            # CSV: rows like  "10MC003,2026-01-15 01:00:00-07:00,10.234,..."
-            #  or header line followed by data
-            csv_hits = 0
-            import csv as _csv
-            for row in _csv.reader(lines):
-                if len(row) < 3:
-                    continue
-                # Try col 1 as date, col 2 as value  (standard Water Office CSV layout)
-                for date_col, val_col in [(1, 2), (0, 1)]:
-                    try:
-                        d = _dt.date.fromisoformat(row[date_col].strip()[:10])
-                        if d.year == year:
-                            v = float(row[val_col].strip())
-                            daily.setdefault(d, []).append(v)
-                            csv_hits += 1
-                            break
-                    except Exception:
-                        continue
+    # Step 2 — fetch the data table for the full year
+    data_url = "https://wateroffice.ec.gc.ca/report/real_time_e.html"
+    params = {
+        "stn": station_id,
+        "startDate": f"{year}-01-01",
+        "endDate": end_date,
+        "prm1": 46,   # Stage / Water Level (m)
+        "prm2": 47,   # Discharge (m³/s)
+        "mode": "Table",
+    }
+    resp = session.get(data_url, params=params, timeout=60)
+    resp.raise_for_status()
+    snippet = resp.text[:200].replace("\n", " ")
+    print(f"HYDROMETRIC CLIM [{station_id}]: WO data status={resp.status_code} "
+          f"len={len(resp.text)} snippet={snippet!r}")
 
-            if not daily:
-                # Fall back to regex scan for date+value pairs in HTML
-                rows = _re.findall(
-                    r'(\d{4}-\d{2}-\d{2})[^<"]*?[<",]\s*([0-9]+\.[0-9]+)',
-                    resp.text,
-                )
-                for date_str, val_str in rows:
-                    try:
-                        d = _dt.date.fromisoformat(date_str)
-                        if d.year == year:
-                            daily.setdefault(d, []).append(float(val_str))
-                    except Exception:
-                        continue
+    # Parse: try CSV reader first, then HTML regex
+    daily = {}
+    lines = resp.text.splitlines()
+    for row in _csv.reader(lines):
+        if len(row) < 3:
+            continue
+        for date_col, val_col in [(1, 2), (0, 1)]:
+            try:
+                d = _dt.date.fromisoformat(row[date_col].strip()[:10])
+                if d.year == year:
+                    daily.setdefault(d, []).append(float(row[val_col].strip()))
+                    break
+            except Exception:
+                continue
 
-            result = {d: sum(vs) / len(vs) for d, vs in daily.items()}
-            print(f"HYDROMETRIC CLIM [{station_id}]: WO [{label}] gave {len(result)} days for {year}")
-            if result:
-                return result
-        except Exception as _e:
-            print(f"HYDROMETRIC CLIM [{station_id}]: WO [{label}] failed: {_e}")
+    if not daily:
+        for date_str, val_str in _re.findall(
+            r'(\d{4}-\d{2}-\d{2})[^<"]*?[<",\s]+([0-9]+\.[0-9]+)',
+            resp.text,
+        ):
+            try:
+                d = _dt.date.fromisoformat(date_str)
+                if d.year == year:
+                    daily.setdefault(d, []).append(float(val_str))
+            except Exception:
+                continue
 
-    return {}
+    result = {d: sum(vs) / len(vs) for d, vs in daily.items()}
+    print(f"HYDROMETRIC CLIM [{station_id}]: WO gave {len(result)} days for {year}")
+    return result
 
 
 def fetch_hydrometric_climatology(station_id, clim_years=30, provterr=None):

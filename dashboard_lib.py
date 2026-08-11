@@ -6007,8 +6007,9 @@ def fetch_hydrometric_climatology(station_id, clim_years=30):
             out = []
             for f in features:
                 p = f.get("properties", {})
+                date_str = p.get("DATE") or p.get("DATETIME", "")
                 try:
-                    date = _dt.date.fromisoformat(p.get("DATE", "")[:10])
+                    date = _dt.date.fromisoformat(date_str[:10])
                 except Exception:
                     continue
                 level    = p.get("LEVEL")

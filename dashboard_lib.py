@@ -181,17 +181,22 @@ def callout(lines, emoji=None, color="gray_background", children=None):
 
 
 def disclaimer_paragraph(text):
-    """Gray, italicized paragraph block — used for the page's bottom disclaimer."""
+    """Gray, italicized paragraph block — used for the page's bottom disclaimer.
+    Splits text into ≤1990-char chunks to stay within Notion's 2000-char limit."""
+    chunk_size = 1990
+    chunks = [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+    rich_text = [
+        {
+            "type": "text",
+            "text": {"content": chunk},
+            "annotations": {"color": "gray", "italic": True},
+        }
+        for chunk in chunks
+    ]
     return {
         "object": "block",
         "type": "paragraph",
-        "paragraph": {
-            "rich_text": [{
-                "type": "text",
-                "text": {"content": text},
-                "annotations": {"color": "gray", "italic": True},
-            }]
-        },
+        "paragraph": {"rich_text": rich_text},
     }
 
 

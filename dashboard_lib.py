@@ -7171,23 +7171,74 @@ def build_wind_chart_section(wind_chart_bytes, wind_chart_caption, rose_bytes=No
 
 
 DISCLAIMER_SOURCES = {
-    "gem":         "Environment and Climate Change Canada (ECCC) GEM/GDPS numerical weather prediction",
-    "open_meteo":  "Open-Meteo (ERA5 reanalysis, ECMWF)",
-    "modis":       "NASA MODIS Terra (true-colour satellite imagery)",
-    "sentinel1":   "ESA Sentinel-1 SAR (Copernicus Sentinel-1 via Sentinel Hub)",
-    "cmems":       "Copernicus Marine Service (CMEMS / TOPAZ6 total water level)",
-    "waves":       "Open-Meteo Marine API (GFS Wave / ERA5-Ocean wave forecast)",
-    "tides":       "Fisheries and Oceans Canada (DFO/IWLS tidal predictions)",
-    "marine":      "Environment and Climate Change Canada (marine weather forecasts)",
-    "alerts":      "Environment and Climate Change Canada (public weather alerts)",
-    "hydrometric": "Water Survey of Canada (ECCC hydrometric gauges)",
-    "snow":        "Open-Meteo (ERA5-Land snow depth reanalysis)",
-    "wildfire":    "Canadian Wildland Fire Information System (CWFIS / Natural Resources Canada, satellite hotspots)",
+    "gem":         (
+        "Weather forecasts: Environment and Climate Change Canada (ECCC) — GEM/GDPS numerical weather "
+        "prediction model, delivered via Open-Meteo (CC BY 4.0). © His Majesty the King in Right of "
+        "Canada, as represented by the Minister of Environment and Climate Change"
+    ),
+    "open_meteo":  (
+        "Historical climate and reanalysis: ERA5 and ERA5-Land, produced by the Copernicus Climate "
+        "Change Service (C3S) at ECMWF, served via Open-Meteo (CC BY 4.0). Neither the European "
+        "Commission nor ECMWF is responsible for any use of these data"
+    ),
+    "modis":       (
+        "True-colour satellite imagery: NASA MODIS Terra, courtesy NASA Worldview / GIBS "
+        "(Goddard Space Flight Center). Data are in the public domain"
+    ),
+    "sentinel1":   (
+        "Synthetic aperture radar (SAR) imagery and sea/lake ice classification: ESA Copernicus "
+        "Sentinel-1, accessed via Sentinel Hub. Contains modified Copernicus Sentinel data. "
+        "© European Space Agency (ESA)"
+    ),
+    "cmems":       (
+        "Water level and sea-state forecasts: Copernicus Marine Service (CMEMS) — Arctic Ocean "
+        "Physics Analysis and Forecast (TOPAZ6). © European Union — Copernicus Marine Service"
+    ),
+    "waves":       (
+        "Wave forecasts: GFS-Wave / ERA5-Ocean served via Open-Meteo Marine API (CC BY 4.0)"
+    ),
+    "tides":       (
+        "Tidal predictions: Fisheries and Oceans Canada (DFO) — Integrated Water Level System "
+        "(IWLS). © His Majesty the King in Right of Canada, as represented by the Minister of "
+        "Fisheries and Oceans"
+    ),
+    "marine":      (
+        "Marine weather forecasts and warnings: Environment and Climate Change Canada (ECCC). "
+        "© His Majesty the King in Right of Canada, as represented by the Minister of Environment "
+        "and Climate Change"
+    ),
+    "alerts":      (
+        "Public weather alerts: Environment and Climate Change Canada (ECCC). © His Majesty the "
+        "King in Right of Canada, as represented by the Minister of Environment and Climate Change"
+    ),
+    "hydrometric": (
+        "River and lake water levels: Water Survey of Canada (WSC / ECCC) hydrometric network, "
+        "accessed via the ECCC Datamart and National Hydrological Service OGC API. © His Majesty "
+        "the King in Right of Canada, as represented by the Minister of Environment and Climate Change"
+    ),
+    "snow":        (
+        "Snow depth: ERA5-Land reanalysis served via Open-Meteo (CC BY 4.0). Contains modified "
+        "Copernicus Climate Change Service data"
+    ),
+    "wildfire":    (
+        "Active wildfire hotspots: Canadian Wildland Fire Information System (CWFIS), Natural "
+        "Resources Canada (NRCan). © His Majesty the King in Right of Canada, as represented by "
+        "the Minister of Natural Resources"
+    ),
+    "aurora":      (
+        "Aurora / geomagnetic activity: NOAA Space Weather Prediction Center (SWPC) — "
+        "planetary Kp-index 3-day forecast. Data are in the public domain"
+    ),
+    "uv":          (
+        "UV index: Open-Meteo (ECMWF forecast, CC BY 4.0)"
+    ),
 }
 
 DISCLAIMER_FOOTER = (
-    "We hold no responsibility for the accuracy, completeness, or timeliness of this data, and this page "
-    "is not a substitute for official sources. Do not use this information for navigation, "
+    "Coastline data: © OpenStreetMap contributors (ODbL). "
+    "This dashboard is provided for general informational purposes only. "
+    "We hold no responsibility for the accuracy, completeness, or timeliness of the data displayed. "
+    "This page is not a substitute for official sources. Do not use this information for navigation, "
     "safety-critical decisions, or any other purpose where inaccurate or delayed data could cause harm."
 )
 
@@ -7197,12 +7248,13 @@ def build_disclaimer_section(sources):
     sources: list of keys from DISCLAIMER_SOURCES (e.g. ["gem", "open_meteo", "modis", "sentinel1"]).
     Only the listed sources appear in the disclaimer — keeps it accurate per site.
     """
-    source_lines = "; ".join(
+    source_lines = " — ".join(
         DISCLAIMER_SOURCES[k] for k in sources if k in DISCLAIMER_SOURCES
     )
     text = (
-        "Disclaimer: All data and imagery on this page are collated from external third-party sources "
-        f"and are displayed here for general informational purposes only. Data sources include: {source_lines}. "
+        "Data sources and licences: "
+        + source_lines
+        + ". "
         + DISCLAIMER_FOOTER
     )
     return [disclaimer_paragraph(text)]

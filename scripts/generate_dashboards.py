@@ -901,6 +901,12 @@ def update_community(community, now_utc):
         sources.append("hydrometric")
     if "wildfire" in enabled:
         sources.append("wildfire")
+    if "uv" in enabled:
+        sources.append("uv")
+    if "aurora" in enabled:
+        sources.append("aurora")
+    if community.get("tide_station_code"):
+        sources.append("tides")
     blocks += lib.build_disclaimer_section(sources)
 
     print(f"[{sid}] PRE-PUBLISH: {len(blocks)} blocks; last 6 types: {[b.get('type') for b in blocks[-6:]]}")

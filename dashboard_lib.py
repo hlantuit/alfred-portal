@@ -1825,7 +1825,8 @@ def _gem_precip_chart(hours, rain_vals, snow_vals, t0):
         ax.spines["bottom"].set_color(NOTION_LIGHT_GRID)
 
         ax.set_xlim(0, max(hours))
-        ax.set_ylim(bottom=0)
+        y_max = max(max(r + s for r, s in zip(rain_vals, snow_vals)), 5.0)
+        ax.set_ylim(bottom=0, top=y_max)
 
         tick_hours, tick_labels = [], []
         minor_tick_hours = []

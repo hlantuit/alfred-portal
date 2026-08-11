@@ -2345,6 +2345,10 @@ def build_sun_curve_chart(lat, lon, now_utc, now_local, tz_name):
             ax.spines[spine].set_visible(False)
         ax.spines["bottom"].set_color(NOTION_LIGHT_GRID)
 
+        # Ensure the y-axis bottom is low enough that a dot at 0° isn't clipped
+        y_min = min(min(elevations), current_elevation, 0)
+        ax.set_ylim(bottom=y_min - 4)
+
         ax.set_xlim(0, 24)
         ax.set_xticks(range(0, 25, 6))
         ax.set_xticklabels([f"{h:02d}:00" for h in range(0, 25, 6)], fontsize=16, color=NOTION_TEXT_GRAY)

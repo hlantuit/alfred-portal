@@ -2037,6 +2037,13 @@ def format_marine_forecast_text(marine_entries, zone_name, exclude_title_pattern
         title = _strip_zone_suffix(e["title"].strip())
         summary = e["summary"].strip() if e["summary"] else ""
         summary, found_issued = _extract_and_strip_issued(summary)
+        # Collapse any embedded newlines / carriage returns into spaces so that
+        # a single forecast period (e.g. "Wind light becoming east 15 knots late
+        # in the day") renders on one continuous line in the Notion callout
+        # rather than being split across two short lines by hard-coded breaks
+        # baked into the Environment Canada RSS feed.
+        summary = re.sub(r"[\r\n]+", " ", summary).strip()
+        summary = re.sub(r" {2,}", " ", summary)
         if found_issued and not issued_line:
             issued_line = found_issued
         if summary and summary != title:
@@ -3355,6 +3362,64 @@ def fetch_modis_image(bbox_3413, now_utc, max_days_back=10, fetch_size_px=MODIS_
     return None, None
 
 
+def _draw_clamped_label(draw, x_px, y_px, text_dx, text_dy,
+                        label_text, font, width_px, height_px,
+                        text_color=(255, 255, 255), shadow_color=(0, 0, 0),
+                        max_line_px=160):
+    """
+    Draw a label near (x_px, y_px) with (text_dx, text_dy) offset, but:
+    - wraps the label onto two lines if it is wider than max_line_px
+    - clamps the text box so it never bleeds outside the image boundary
+    - draws a 1-px shadow on all 4 diagonal pixels for legibility
+
+    Returns nothing; draws directly onto `draw`.
+    """
+    from PIL import ImageFont as _IF
+    # Measure the label width
+    try:
+        bb = draw.textbbox((0, 0), label_text, font=font)
+        tw = bb[2] - bb[0]
+        th = bb[3] - bb[1]
+    except Exception:
+        tw, th = len(label_text) * 10, 16
+
+    # Wrap to two lines if too wide (split at the last space before midpoint)
+    lines = [label_text]
+    if tw > max_line_px and " " in label_text:
+        mid = len(label_text) // 2
+        # find nearest space to the midpoint
+        left  = label_text.rfind(" ", 0, mid)
+        right = label_text.find(" ", mid)
+        if left == -1 and right == -1:
+            pass  # no space at all — leave as one line
+        elif left == -1:
+            split = right
+        elif right == -1:
+            split = left
+        else:
+            split = left if (mid - left) <= (right - mid) else right
+        lines = [label_text[:split].strip(), label_text[split:].strip()]
+        try:
+            bb2 = draw.textbbox((0, 0), lines[0], font=font)
+            tw = bb2[2] - bb2[0]
+            th = (bb2[3] - bb2[1]) * 2 + 2
+        except Exception:
+            tw, th = tw, th * 2 + 2
+
+    margin = 4
+    text_x = x_px + text_dx
+    text_y = y_px + text_dy
+    # Clamp so the text box stays inside the image
+    text_x = max(margin, min(width_px  - tw - margin, text_x))
+    text_y = max(margin, min(height_px - th - margin, text_y))
+
+    for line_idx, line in enumerate(lines):
+        ly = text_y + line_idx * (th // len(lines) + 2)
+        for tdx, tdy in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
+            draw.text((text_x + tdx, ly + tdy), line, font=font, fill=shadow_color)
+        draw.text((text_x, ly), line, font=font, fill=text_color)
+
+
 def annotate_modis_image(png_bytes, points, center_x, center_y, rotation_deg,
                           half_width_m=150_000, scale_km=50, reference_lines=None,
                           final_size_px=MODIS_FINAL_SIZE_PX, coastline_geojson_path=None):
@@ -3465,10 +3530,8 @@ def annotate_modis_image(png_bytes, points, center_x, center_y, rotation_deg,
                 fill=fill_color, outline=(255, 255, 255), width=2,
             )
 
-            text_x, text_y = x_px + text_dx, y_px + text_dy
-            for tdx, tdy in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
-                draw.text((text_x + tdx, text_y + tdy), label_text, font=font, fill=(0, 0, 0))
-            draw.text((text_x, text_y), label_text, font=font, fill=(255, 255, 255))
+            _draw_clamped_label(draw, x_px, y_px, text_dx, text_dy,
+                                label_text, font, width_px, height_px)
 
         # --- Optional reference lines (e.g. an international border) ---
         for line in (reference_lines or []):
@@ -3673,10 +3736,8 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
                 fill=fill_color, outline=(255, 255, 255), width=2,
             )
 
-            text_x, text_y = x_px + text_dx, y_px + text_dy
-            for tdx, tdy in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
-                draw.text((text_x + tdx, text_y + tdy), label_text, font=font, fill=(0, 0, 0))
-            draw.text((text_x, text_y), label_text, font=font, fill=(255, 255, 255))
+            _draw_clamped_label(draw, x_px, y_px, text_dx, text_dy,
+                                label_text, font, width_px, height_px)
 
         # --- Optional reference lines (e.g. an international border) ---
         for line in (reference_lines or []):
@@ -6944,6 +7005,79 @@ def fetch_aqhi(lat, lon, now_utc):
         text = f"💨 Air quality: AQI {aqi} — {label}"
         print(f"AQHI: AQI {aqi} ({label})")
         return {"aqi": aqi, "label": label, "text": text}
+
+
+def build_aqi_gauge_png(aqi, label):
+    """
+    Renders a horizontal AQI gauge bar as a PNG (white background, Notion-style).
+    The bar shows the 6 official US AQI categories; a dot marks the current value.
+    Returns PNG bytes, or None on failure.
+    """
+    try:
+        import io as _io
+        import numpy as _np
+        import matplotlib.pyplot as _plt
+        import matplotlib.patches as _patches
+
+        # Official US AQI bands: (max_aqi, label, hex_color)
+        BANDS = [
+            (50,  "Good",                          "#00E400"),
+            (100, "Moderate",                      "#FFFF00"),
+            (150, "Unhealthy for\nSensitive Groups","#FF7E00"),
+            (200, "Unhealthy",                     "#FF0000"),
+            (300, "Very\nUnhealthy",               "#8F3F97"),
+            (500, "Hazardous",                     "#7E0023"),
+        ]
+        BREAKPOINTS = [0, 50, 100, 150, 200, 300, 500]
+
+        NOTION_GRAY = "#787774"
+        fig, ax = _plt.subplots(figsize=(7, 1.4), dpi=150)
+        fig.patch.set_facecolor("white")
+        ax.set_facecolor("white")
+        ax.set_xlim(0, 500)
+        ax.set_ylim(0, 1)
+        ax.axis("off")
+
+        # Draw the coloured band segments
+        for i, (bp_max, blabel, color) in enumerate(BANDS):
+            bp_min = BREAKPOINTS[i]
+            width = bp_max - bp_min
+            rect = _patches.FancyBboxPatch(
+                (bp_min, 0.30), width, 0.40,
+                boxstyle="square,pad=0",
+                facecolor=color, edgecolor="white", linewidth=0.8,
+            )
+            ax.add_patch(rect)
+            # Category label below bar — centered in each segment
+            cx = (bp_min + bp_max) / 2
+            ax.text(cx, 0.18, blabel, ha="center", va="top", fontsize=5.8,
+                    color=NOTION_GRAY, multialignment="center")
+
+        # Dot indicator — clamp AQI to [0, 500] for positioning
+        dot_x = max(0, min(500, aqi))
+        dot_y = 0.50
+        ax.plot(dot_x, dot_y, "o", markersize=13, color="white",
+                markeredgecolor="#333333", markeredgewidth=1.5, zorder=5)
+        # AQI value inside the dot
+        ax.text(dot_x, dot_y, str(aqi), ha="center", va="center",
+                fontsize=6, color="#222222", fontweight="bold", zorder=6)
+        # Label above the dot
+        ax.text(dot_x, 0.76, label, ha="center", va="bottom",
+                fontsize=7.5, color=NOTION_GRAY, fontweight="bold")
+
+        # Section label on the left
+        ax.text(-8, 0.50, "Air\nquality", ha="right", va="center",
+                fontsize=7.5, color=NOTION_GRAY, multialignment="center")
+
+        _plt.tight_layout(pad=0.1)
+        buf = _io.BytesIO()
+        fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="white")
+        _plt.close(fig)
+        buf.seek(0)
+        return buf.read()
+    except Exception as e:
+        print(f"AQI GAUGE PNG FAILED: {e}")
+        return None
     except Exception as e:
         print(f"AQHI FETCH FAILED: {e}")
         return None
@@ -7181,27 +7315,51 @@ def build_wildfire_section(fires, site_lat, site_lon, now_utc, tz_name,
     fires: list returned by fetch_cwfis_wildfires (may be empty).
     When bbox_3413/center_x/center_y are supplied, the map uses a Blue
     Marble satellite basemap at the same extent as the MODIS image.
-    aqhi: optional dict from fetch_aqhi — appended to the summary callout.
+    aqhi: optional dict from fetch_aqhi — shown as a gauge image below the
+    callout instead of a plain text line.
     """
     section_heading = heading("🔥 Wildfire Activity & Air Quality", level=2)
 
+    # Build AQI gauge image block once (reused in all code paths below)
+    aqi_gauge_block = None
+    aqi_caption_block = None
+    if aqhi:
+        gauge_bytes = build_aqi_gauge_png(aqhi["aqi"], aqhi["label"])
+        if gauge_bytes:
+            aqi_gauge_block, _ = _upload_chart_or_caption(
+                gauge_bytes, "aqi_gauge.png",
+                f"Air quality: AQI {aqhi['aqi']} — {aqhi['label']}"
+            )
+        aqi_caption_block = gray_caption(
+            f"US AQI {aqhi['aqi']} — {aqhi['label']}. "
+            "Source: Open-Meteo Air Quality API."
+        )
+
+    def _aqhi_blocks():
+        out = []
+        if aqi_gauge_block:
+            out.append(aqi_gauge_block)
+        if aqi_caption_block:
+            out.append(aqi_caption_block)
+        return out
+
     if fires is None:
-        aqhi_lines = [aqhi["text"]] if aqhi else []
-        return [
-            section_heading,
-            callout(["Wildfire data unavailable — fetch failed. Check Action logs."] + aqhi_lines,
-                    color="gray_background"),
-            divider(),
-        ]
+        return (
+            [section_heading,
+             callout(["Wildfire data unavailable — fetch failed. Check Action logs."],
+                     color="gray_background")]
+            + _aqhi_blocks()
+            + [divider()]
+        )
 
     if not fires:
-        aqhi_lines = [aqhi["text"]] if aqhi else []
-        return [
-            section_heading,
-            callout(["No active fire hotspots detected within 600 km in the past 7 days."] + aqhi_lines,
-                    color="green_background"),
-            divider(),
-        ]
+        return (
+            [section_heading,
+             callout(["No active fire hotspots detected within 600 km in the past 7 days."],
+                     color="green_background")]
+            + _aqhi_blocks()
+            + [divider()]
+        )
 
     # Summary statistics
     fwi_vals = [f["fwi"] for f in fires if f["fwi"] is not None]
@@ -7225,8 +7383,6 @@ def build_wildfire_section(fires, site_lat, site_lon, now_utc, tz_name,
         ("Nearest hotspot: ", f"{nearest_km:.0f} km"),
         (fwi_label, ""),
     ]
-    if aqhi:
-        summary.append((aqhi["text"], ""))
     callout_color = (
         "red_background"    if (max_fwi or 0) >= 20 else
         "orange_background" if (max_fwi or 0) >= 12 else
@@ -7246,6 +7402,7 @@ def build_wildfire_section(fires, site_lat, site_lon, now_utc, tz_name,
     if map_block:
         blocks.append(map_block)
     blocks.append(gray_caption(fallback or map_caption))
+    blocks += _aqhi_blocks()
     blocks.append(divider())
     return blocks
 

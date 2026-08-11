@@ -6104,24 +6104,38 @@ def fetch_hydrometric_climatology(station_id, clim_years=30, provterr=None):
         # Datamart rolling CSV (~30 days).
         cur_daily = {}  # date -> float (daily mean)
 
-        # Source 1: OGC daily-mean for current year (covers Jan–<lag cutoff>)
+        # Source 1: Water Office graph JSON API (no disclaimer gate, full year)
         try:
-            cur_year_features = _fetch_range(f"{current_year}-01-01", str(_dt.date.today()))
-            for f in cur_year_features:
-                p = f.get("properties", {})
-                date_str = (p.get("DATE") or p.get("DATETIME", ""))[:10]
+            wo_url = (
+                f"https://wateroffice.ec.gc.ca/services/real_time_graph/json/inline"
+                f"?station={station_id}&start_date={current_year}-01-01"
+                f"&end_date={_dt.date.today()}&param1=46&param2=47"
+            )
+            wo_resp = get_with_retry(wo_url, timeout=60, retries=2, backoff_seconds=5)
+            wo_data = wo_resp.json()
+            # Combine approved + provisional for param 46 (water level)
+            raw_points = []
+            series = wo_data.get("46", {})
+            raw_points.extend(series.get("approved", []))
+            raw_points.extend(series.get("provisional", []))
+            from collections import defaultdict as _defdict
+            daily_sums = _defdict(list)
+            for pt in raw_points:
+                if len(pt) < 2 or pt[1] is None:
+                    continue
                 try:
-                    d = _dt.date.fromisoformat(date_str)
-                    val = p.get("LEVEL") or p.get("DISCHARGE")
-                    if val is not None and d.year == current_year:
-                        cur_daily[d] = float(val)
+                    d = _dt.date.fromtimestamp(pt[0] / 1000)
+                    if d.year == current_year:
+                        daily_sums[d].append(float(pt[1]))
                 except Exception:
                     continue
+            for d, vs in daily_sums.items():
+                cur_daily[d] = sum(vs) / len(vs)
             if cur_daily:
-                print(f"HYDROMETRIC CLIM [{station_id}]: OGC gave {len(cur_daily)} current-year days "
+                print(f"HYDROMETRIC CLIM [{station_id}]: WO graph API gave {len(cur_daily)} current-year days "
                       f"(up to {max(cur_daily)})")
         except Exception as _e:
-            print(f"HYDROMETRIC CLIM [{station_id}]: OGC current-year fetch failed: {_e}")
+            print(f"HYDROMETRIC CLIM [{station_id}]: WO graph API fetch failed: {_e}")
 
         # Source 2: Datamart rolling CSV fills any gap at the recent end
         if provterr:

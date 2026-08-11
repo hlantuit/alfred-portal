@@ -7450,7 +7450,7 @@ def build_aqi_gauge_png(aqi, label):
         DOT_Y   = BAR_Y
         LABEL_Y = BAR_Y + 0.22  # label above dot
 
-        fig, ax = _plt.subplots(figsize=(7, 1.20), dpi=150)
+        fig, ax = _plt.subplots(figsize=(7, 1.45), dpi=150)
         fig.patch.set_facecolor("white")
         ax.set_facecolor("white")
         ax.set_xlim(0, 500)
@@ -7482,11 +7482,11 @@ def build_aqi_gauge_png(aqi, label):
 
         # Dot indicator — larger than bar, white outline, fill = category color
         dot_x = max(0, min(500, aqi))
-        ax.plot(dot_x, DOT_Y, "o", markersize=15, color=dot_fill,
-                markeredgecolor="white", markeredgewidth=2.5, zorder=5)
+        ax.plot(dot_x, DOT_Y, "o", markersize=26, color=dot_fill,
+                markeredgecolor="white", markeredgewidth=3, zorder=5)
         # AQI value inside the dot
         ax.text(dot_x, DOT_Y, str(aqi), ha="center", va="center",
-                fontsize=6, color="#787774",
+                fontsize=9, color="#787774",
                 fontweight="bold", zorder=6)
         # Label above the dot
         ax.text(dot_x, LABEL_Y, label, ha="center", va="bottom",

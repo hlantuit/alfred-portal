@@ -2768,13 +2768,16 @@ def build_tdd_histogram(lat, lon, now_utc, temp_cache, num_years=25):
         if expected_tdd is not None and current_year in tdd_by_year:
             current_tdd_val = tdd_by_year[current_year]
             below_avg = expected_tdd > current_tdd_val
+            # Line sits above the bar when below average (red against white bg),
+            # or on the bar when above average (white against red bar).
+            line_color = NOTION_RED if below_avg else "white"
             bar_hw = 0.35  # half of width=0.7
             ax.plot(
                 [current_idx - bar_hw, current_idx + bar_hw],
                 [expected_tdd, expected_tdd],
-                color="white", linewidth=2.5, linestyle="-", zorder=5,
+                color=line_color, linewidth=2.5, linestyle="-", zorder=5,
             )
-            # Label centered on the bar, just above the line
+            # Label colored to match the line
             label_color = NOTION_RED if below_avg else NOTION_TEXT_GRAY
             ax.text(
                 current_idx, expected_tdd, "25yr avg",

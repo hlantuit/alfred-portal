@@ -566,11 +566,20 @@ def update_community(community, now_utc):
             if _coastline_rel else None
         )
         if coastline and not os.path.exists(coastline):
-            pts = community.get("map_points", [])
-            lats = [p[0] for p in pts] + [lat]
-            lons = [p[1] for p in pts] + [lon]
-            pad = 2.0
-            bbox_ll = (min(lats) - pad, min(lons) - pad, max(lats) + pad, max(lons) + pad)
+            # Derive the bbox from the largest image frame that uses this
+            # coastline (sea_ice at half_width_m=150 km), so the Overpass
+            # query covers the full image extent and coastlines that cross
+            # the frame boundary are included rather than clipped mid-frame.
+            _hw_m = 150_000  # must match the sea_ice half_width_m in the calls below
+            _lat_pad_deg = (_hw_m / 111_000) * 1.2
+            import math as _math
+            _lon_pad_deg = (_hw_m / (111_000 * _math.cos(_math.radians(lat)))) * 1.2
+            bbox_ll = (
+                lat - _lat_pad_deg,
+                lon - _lon_pad_deg,
+                lat + _lat_pad_deg,
+                lon + _lon_pad_deg,
+            )
             ensure_coastline_geojson(sid, bbox_ll, coastline)
         map_pts    = community.get("map_points", [])
         ref_lines  = community.get("map_reference_lines", [])

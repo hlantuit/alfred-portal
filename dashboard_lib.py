@@ -6009,55 +6009,40 @@ def _fetch_wateroffice_year(station_id, year):
     daily = _parse_data(resp.text)
 
     if not daily:
+        import urllib.parse as _urlparse
+        report_url = data_url + "?" + _urlparse.urlencode(params)
         phpsessid0 = session.cookies.get("PHPSESSID", "none")
-        # Log Set-Cookie from first GET to understand session mechanism
-        set_cookie_hdr = resp.headers.get("Set-Cookie", "none")[:120]
-        # Log a middle slice of the disclaimer HTML to find any form/token/link
-        mid = resp.text[4000:5000].replace("\n", " ")
         print(f"HYDROMETRIC CLIM [{station_id}]: WO disclaimer len={len(resp.text)} "
-              f"PHPSESSID={phpsessid0} Set-Cookie={set_cookie_hdr!r}")
-        print(f"HYDROMETRIC CLIM [{station_id}]: WO disclaimer mid={mid[:300]!r}")
+              f"PHPSESSID={phpsessid0}")
 
-        # Attempt 1: second GET with same PHPSESSID (some PHP apps accept on 2nd visit)
-        resp2 = session.get(data_url, params=params, timeout=60)
-        resp2.raise_for_status()
-        daily = _parse_data(resp2.text)
-        print(f"HYDROMETRIC CLIM [{station_id}]: WO attempt1 len={len(resp2.text)} "
-              f"PHPSESSID={session.cookies.get('PHPSESSID','none')} found={len(daily)}")
+        # POST to disclaimer_e.html with Referer set to the report URL.
+        # PHP typically checks HTTP_REFERER and uses $_SESSION['disclaimer_return_url']
+        # (set when the report page first showed the disclaimer) to redirect back.
+        # allow_redirects=True: if redirect goes to the report page, parse data directly.
+        try:
+            pr = session.post(
+                "https://wateroffice.ec.gc.ca/disclaimer_e.html",
+                data={"agree": "1"},
+                headers={"Referer": report_url},
+                timeout=30,
+                allow_redirects=True,
+            )
+            loc = pr.url  # final URL after redirect chain
+            print(f"HYDROMETRIC CLIM [{station_id}]: WO post status={pr.status_code} "
+                  f"final_url={loc!r} PHPSESSID={session.cookies.get('PHPSESSID','none')}")
+            # If the redirect landed on the report page, try parsing it directly
+            daily = _parse_data(pr.text)
+            if daily:
+                print(f"HYDROMETRIC CLIM [{station_id}]: WO got {len(daily)} days from redirect response")
+        except Exception as _pe:
+            print(f"HYDROMETRIC CLIM [{station_id}]: WO post failed: {_pe}")
 
         if not daily:
-            # Attempt 2: GET disclaimer_info page first (may mark session accepted),
-            # then retry
-            try:
-                session.get("https://wateroffice.ec.gc.ca/disclaimer_info_e.html",
-                            timeout=20)
-            except Exception:
-                pass
-            resp3 = session.get(data_url, params=params, timeout=60)
-            resp3.raise_for_status()
-            daily = _parse_data(resp3.text)
-            print(f"HYDROMETRIC CLIM [{station_id}]: WO attempt2 len={len(resp3.text)} "
-                  f"PHPSESSID={session.cookies.get('PHPSESSID','none')} found={len(daily)}")
-
-        if not daily:
-            # Attempt 3: POST to disclaimer_e.html with allow_redirects=False,
-            # capture the redirect, then GET data
-            try:
-                pr = session.post(
-                    "https://wateroffice.ec.gc.ca/disclaimer_e.html",
-                    data={"agree": "1"},
-                    timeout=20,
-                    allow_redirects=False,
-                )
-                loc = pr.headers.get("Location", "")
-                print(f"HYDROMETRIC CLIM [{station_id}]: WO post3 status={pr.status_code} "
-                      f"Location={loc!r} PHPSESSID={session.cookies.get('PHPSESSID','none')}")
-            except Exception as _pe:
-                print(f"HYDROMETRIC CLIM [{station_id}]: WO post3 failed: {_pe}")
-            resp4 = session.get(data_url, params=params, timeout=60)
-            resp4.raise_for_status()
-            daily = _parse_data(resp4.text)
-            print(f"HYDROMETRIC CLIM [{station_id}]: WO attempt3 len={len(resp4.text)} "
+            # Retry GET to report URL with the now-established session
+            resp2 = session.get(data_url, params=params, timeout=60)
+            resp2.raise_for_status()
+            daily = _parse_data(resp2.text)
+            print(f"HYDROMETRIC CLIM [{station_id}]: WO retry len={len(resp2.text)} "
                   f"PHPSESSID={session.cookies.get('PHPSESSID','none')} found={len(daily)}")
 
     result = {d: sum(vs) / len(vs) for d, vs in daily.items()}

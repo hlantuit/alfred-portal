@@ -7382,7 +7382,7 @@ def build_aqi_gauge_png(aqi, label):
                 markeredgecolor="white", markeredgewidth=2.5, zorder=5)
         # AQI value inside the dot
         ax.text(dot_x, DOT_Y, str(aqi), ha="center", va="center",
-                fontsize=6, color="white" if dot_fill not in ("#FFFF00",) else "#333333",
+                fontsize=6, color="#787774",
                 fontweight="bold", zorder=6)
         # Label above the dot
         ax.text(dot_x, LABEL_Y, label, ha="center", va="bottom",

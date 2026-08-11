@@ -7034,45 +7034,59 @@ def build_aqi_gauge_png(aqi, label):
         BREAKPOINTS = [0, 50, 100, 150, 200, 300, 500]
 
         NOTION_GRAY = "#787774"
-        fig, ax = _plt.subplots(figsize=(7, 1.4), dpi=150)
+        # Thin bar: height 0.12 of axis unit; dot radius larger than bar height
+        BAR_Y   = 0.42   # bar centre (bottom of figure space)
+        BAR_H   = 0.10   # thin bar height
+        DOT_Y   = BAR_Y  # dot sits on bar centre
+        LABEL_Y = BAR_Y + 0.26  # label above dot
+
+        fig, ax = _plt.subplots(figsize=(7, 0.90), dpi=150)
         fig.patch.set_facecolor("white")
         ax.set_facecolor("white")
         ax.set_xlim(0, 500)
         ax.set_ylim(0, 1)
         ax.axis("off")
 
-        # Draw the coloured band segments
+        # Draw the thin coloured band segments
         for i, (bp_max, blabel, color) in enumerate(BANDS):
             bp_min = BREAKPOINTS[i]
             width = bp_max - bp_min
             rect = _patches.FancyBboxPatch(
-                (bp_min, 0.30), width, 0.40,
+                (bp_min, BAR_Y - BAR_H / 2), width, BAR_H,
                 boxstyle="square,pad=0",
-                facecolor=color, edgecolor="white", linewidth=0.8,
+                facecolor=color, edgecolor="white", linewidth=0.6,
             )
             ax.add_patch(rect)
-            # Category label below bar — centered in each segment
+            # Category label below bar
             cx = (bp_min + bp_max) / 2
-            ax.text(cx, 0.18, blabel, ha="center", va="top", fontsize=5.8,
+            ax.text(cx, BAR_Y - BAR_H / 2 - 0.03, blabel,
+                    ha="center", va="top", fontsize=5.5,
                     color=NOTION_GRAY, multialignment="center")
 
-        # Dot indicator — clamp AQI to [0, 500] for positioning
+        # Determine dot fill color from the band the AQI falls in
+        dot_fill = BANDS[-1][2]
+        for bp_max, _blabel, color in BANDS:
+            if aqi <= bp_max:
+                dot_fill = color
+                break
+
+        # Dot indicator — larger than bar, white outline, fill = category color
         dot_x = max(0, min(500, aqi))
-        dot_y = 0.50
-        ax.plot(dot_x, dot_y, "o", markersize=13, color="white",
-                markeredgecolor="#333333", markeredgewidth=1.5, zorder=5)
+        ax.plot(dot_x, DOT_Y, "o", markersize=15, color=dot_fill,
+                markeredgecolor="white", markeredgewidth=2.5, zorder=5)
         # AQI value inside the dot
-        ax.text(dot_x, dot_y, str(aqi), ha="center", va="center",
-                fontsize=6, color="#222222", fontweight="bold", zorder=6)
+        ax.text(dot_x, DOT_Y, str(aqi), ha="center", va="center",
+                fontsize=6, color="white" if dot_fill not in ("#FFFF00",) else "#333333",
+                fontweight="bold", zorder=6)
         # Label above the dot
-        ax.text(dot_x, 0.76, label, ha="center", va="bottom",
-                fontsize=7.5, color=NOTION_GRAY, fontweight="bold")
+        ax.text(dot_x, LABEL_Y, label, ha="center", va="bottom",
+                fontsize=7.0, color=NOTION_GRAY, fontweight="bold")
 
-        # Section label on the left
-        ax.text(-8, 0.50, "Air\nquality", ha="right", va="center",
-                fontsize=7.5, color=NOTION_GRAY, multialignment="center")
+        # "Air quality" label on the left
+        ax.text(-8, BAR_Y, "Air\nquality", ha="right", va="center",
+                fontsize=7.0, color=NOTION_GRAY, multialignment="center")
 
-        _plt.tight_layout(pad=0.1)
+        _plt.tight_layout(pad=0.05)
         buf = _io.BytesIO()
         fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", facecolor="white")
         _plt.close(fig)

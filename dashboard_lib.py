@@ -6000,7 +6000,20 @@ def fetch_hydrometric_climatology(station_id, clim_years=30):
 
         print(f"HYDROMETRIC CLIM [{station_id}]: fetching {clim_start_year}–{clim_end_year} + current year")
         clim_features = _fetch_range(f"{clim_start_year}-01-01", f"{clim_end_year}-12-31")
-        cur_features  = _fetch_range(f"{current_year}-01-01", now.strftime("%Y-%m-%d"))
+
+        # The OGC API datetime filter doesn't reliably return the current (incomplete)
+        # year — fetch recent records by date-sort and filter to current year in Python.
+        base = "https://api.weather.gc.ca/collections/hydrometric-daily-mean/items"
+        cur_resp = get_with_retry(
+            base,
+            params={"STATION_NUMBER": station_id, "sortby": "-DATE", "limit": 400, "f": "json"},
+            timeout=30, retries=2, backoff_seconds=5,
+        )
+        all_recent = cur_resp.json().get("features", [])
+        cur_features = [
+            f for f in all_recent
+            if (f.get("properties", {}).get("DATE") or f.get("properties", {}).get("DATETIME", "")).startswith(str(current_year))
+        ]
         print(f"HYDROMETRIC CLIM [{station_id}]: {len(clim_features)} historical + {len(cur_features)} current-year records")
 
         def _parse(features):

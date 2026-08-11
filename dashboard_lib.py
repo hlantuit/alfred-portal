@@ -6099,17 +6099,29 @@ def fetch_hydrometric_climatology(station_id, clim_years=30, provterr=None):
         print(f"HYDROMETRIC CLIM [{station_id}]: fetching {clim_start_year}–{clim_end_year} + current year")
         clim_features = _fetch_range(f"{clim_start_year}-01-01", f"{clim_end_year}-12-31")
 
-        # The OGC hydrometric-daily-mean collection lags by months and has no
-        # current-year data.  Try two sources in order of preference:
-        #   1. Water Office table view — full year from Jan 1
-        #   2. Datamart rolling CSV — last ~30 days (fallback / gap-fill)
+        # The OGC hydrometric-daily-mean collection lags by ~6 months.  Fetch
+        # any current-year data it has, then fill the recent end with the
+        # Datamart rolling CSV (~30 days).
         cur_daily = {}  # date -> float (daily mean)
 
-        # Source 1: Water Office full-year table
+        # Source 1: OGC daily-mean for current year (covers Jan–<lag cutoff>)
         try:
-            cur_daily = _fetch_wateroffice_year(station_id, current_year)
+            cur_year_features = _fetch_range(f"{current_year}-01-01", str(_dt.date.today()))
+            for f in cur_year_features:
+                p = f.get("properties", {})
+                date_str = (p.get("DATE") or p.get("DATETIME", ""))[:10]
+                try:
+                    d = _dt.date.fromisoformat(date_str)
+                    val = p.get("LEVEL") or p.get("DISCHARGE")
+                    if val is not None and d.year == current_year:
+                        cur_daily[d] = float(val)
+                except Exception:
+                    continue
+            if cur_daily:
+                print(f"HYDROMETRIC CLIM [{station_id}]: OGC gave {len(cur_daily)} current-year days "
+                      f"(up to {max(cur_daily)})")
         except Exception as _e:
-            print(f"HYDROMETRIC CLIM [{station_id}]: Water Office fetch failed: {_e}")
+            print(f"HYDROMETRIC CLIM [{station_id}]: OGC current-year fetch failed: {_e}")
 
         # Source 2: Datamart rolling CSV fills any gap at the recent end
         if provterr:

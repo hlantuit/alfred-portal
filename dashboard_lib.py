@@ -5953,68 +5953,6 @@ def _date_to_clim_doy(date):
     return min(doy, 365)
 
 
-_HYDAT_DB_PATH = None  # module-level: set once per process after first download
-
-
-def _ensure_hydat_db():
-    """Download Hydat.zip once per process, extract the SQLite file, return its path."""
-    global _HYDAT_DB_PATH
-    if _HYDAT_DB_PATH is not None:
-        return _HYDAT_DB_PATH
-    import tempfile, zipfile, os
-    hydat_url = (
-        "https://collaboration.canda.ca/eng/water/services/"
-        "hydrometric_data/data/Format/SQLite/Hydat.zip"
-    )
-    print(f"HYDAT: downloading {hydat_url}")
-    resp = requests.get(hydat_url, stream=True, timeout=180)
-    resp.raise_for_status()
-    tmp_zip = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
-    for chunk in resp.iter_content(chunk_size=2 * 1024 * 1024):
-        tmp_zip.write(chunk)
-    tmp_zip.close()
-    tmp_dir = tempfile.mkdtemp()
-    with zipfile.ZipFile(tmp_zip.name, "r") as zf:
-        names = zf.namelist()
-        sqlite_name = next(
-            n for n in names if n.lower().endswith((".sqlite3", ".db", ".sqlite"))
-        )
-        zf.extract(sqlite_name, tmp_dir)
-    os.unlink(tmp_zip.name)
-    _HYDAT_DB_PATH = os.path.join(tmp_dir, sqlite_name)
-    print(f"HYDAT: extracted to {_HYDAT_DB_PATH}")
-    return _HYDAT_DB_PATH
-
-
-def _fetch_hydat_daily(station_id, year):
-    """Return {date: float} of daily water-level (or discharge) from HYDAT for a given year."""
-    import sqlite3, datetime as _dt
-    db = _ensure_hydat_db()
-    conn = sqlite3.connect(db)
-    try:
-        for table, col in [("DLY_LEVELS", "LEVEL"), ("DLY_FLOWS", "FLOW")]:
-            day_cols = ", ".join(f"{col}{i}" for i in range(1, 32))
-            rows = conn.execute(
-                f"SELECT YEAR, MONTH, {day_cols} FROM {table} "
-                f"WHERE STATION_NUMBER=? AND YEAR=?",
-                (station_id, year),
-            ).fetchall()
-            if not rows:
-                continue
-            result = {}
-            for row in rows:
-                yr, mo = row[0], row[1]
-                for day_idx, val in enumerate(row[2:], 1):
-                    if val is not None:
-                        try:
-                            result[_dt.date(yr, mo, day_idx)] = float(val)
-                        except ValueError:
-                            pass
-            return result
-        return {}
-    finally:
-        conn.close()
-
 
 def fetch_hydrometric_climatology(station_id, clim_years=30, provterr=None):
     """
@@ -6065,24 +6003,11 @@ def fetch_hydrometric_climatology(station_id, clim_years=30, provterr=None):
         clim_features = _fetch_range(f"{clim_start_year}-01-01", f"{clim_end_year}-12-31")
 
         # The OGC hydrometric-daily-mean collection lags by months and has no
-        # current-year data.  Build current-year daily means from two sources:
-        #   1. HYDAT SQLite — QC'd daily means, usually through ~6 months ago
-        #   2. Datamart rolling CSV — provisional sub-daily data, last ~30 days
-        # Rolling CSV wins for any day where both sources have a value.
-
-        # Source 1: HYDAT
-        cur_daily = {}  # date -> float (daily mean)
-        try:
-            hydat_daily = _fetch_hydat_daily(station_id, current_year)
-            cur_daily.update(hydat_daily)
-            print(f"HYDROMETRIC CLIM [{station_id}]: HYDAT gave {len(hydat_daily)} current-year days")
-        except Exception as _e:
-            print(f"HYDROMETRIC CLIM [{station_id}]: HYDAT skipped: {_e}")
-
-        # Source 2: Datamart rolling CSV (aggregated to daily means)
+        # current-year data.  Fetch the Datamart rolling CSV (~30 days of
+        # sub-daily readings) and aggregate to daily means.
+        cur_daily = {}  # date -> [sub-daily readings]
         if provterr:
             import csv as _csv
-            csv_daily = {}  # date -> [sub-daily readings]
             for csv_url in [
                 f"https://dd.weather.gc.ca/hydrometric/csv/{provterr}/daily/{provterr}_{station_id}_daily_hydrometric.csv",
                 f"https://dd.weather.gc.ca/today/hydrometric/csv/{provterr}/daily/{provterr}_{station_id}_daily_hydrometric.csv",
@@ -6101,19 +6026,16 @@ def fetch_hydrometric_climatology(station_id, clim_years=30, provterr=None):
                         try:
                             d = _dt.date.fromisoformat(date_str[:10])
                             if d.year == current_year:
-                                csv_daily.setdefault(d, []).append(float(level_str))
+                                cur_daily.setdefault(d, []).append(float(level_str))
                         except Exception:
                             continue
                     break
                 except Exception as _e:
                     print(f"HYDROMETRIC CLIM [{station_id}]: CSV fetch failed ({csv_url}): {_e}")
-            for d, vs in csv_daily.items():
-                cur_daily[d] = sum(vs) / len(vs)  # CSV overwrites HYDAT for recent days
 
-        # Synthesise feature list so _parse() can handle cur_records uniformly
         cur_features = [
-            {"properties": {"DATE": str(d), "LEVEL": v}}
-            for d, v in sorted(cur_daily.items())
+            {"properties": {"DATE": str(d), "LEVEL": sum(vs) / len(vs)}}
+            for d, vs in sorted(cur_daily.items())
         ]
         print(f"HYDROMETRIC CLIM [{station_id}]: {len(clim_features)} historical + {len(cur_features)} current-year records")
 

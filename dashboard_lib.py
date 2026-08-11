@@ -3370,19 +3370,27 @@ def _rect_overlaps_dot(rx, ry, rw, rh, dx, dy, dr, pad=4):
     return (cx - dx) ** 2 + (cy - dy) ** 2 < r * r
 
 
+def _rects_overlap(ax, ay, aw, ah, bx, by, bw, bh, pad=3):
+    """True if two axis-aligned rectangles overlap (with padding)."""
+    return (ax < bx + bw + pad and ax + aw + pad > bx and
+            ay < by + bh + pad and ay + ah + pad > by)
+
+
 def _draw_clamped_label(draw, x_px, y_px, text_dx, text_dy,
                         label_text, font, width_px, height_px,
                         text_color=(255, 255, 255), shadow_color=(0, 0, 0),
-                        max_line_px=160, avoid_dots=None):
+                        max_line_px=160, avoid_dots=None, placed_labels=None):
     """
     Draw a label near (x_px, y_px) with (text_dx, text_dy) offset, but:
     - wraps the label onto two lines if it is wider than max_line_px
     - clamps the text box so it never bleeds outside the image boundary
     - nudges the offset to avoid overlapping any dot in avoid_dots
+    - nudges the offset to avoid overlapping any already-placed label in placed_labels
     - draws a 1-px shadow on all 4 diagonal pixels for legibility
+    - appends the final label rect (x, y, w, h) to placed_labels (mutated in place)
 
-    avoid_dots: optional list of (cx, cy, radius) tuples for all marker dots.
-    Returns nothing; draws directly onto `draw`.
+    avoid_dots:    list of (cx, cy, radius) tuples for all marker dots.
+    placed_labels: list of (rx, ry, rw, rh) tuples accumulated as labels are drawn.
     """
     # Measure the label
     try:
@@ -3421,29 +3429,40 @@ def _draw_clamped_label(draw, x_px, y_px, text_dx, text_dy,
         ty = max(margin, min(height_px - th - margin, y_px + dy))
         return tx, ty
 
+    def _collides(tx, ty):
+        if avoid_dots and any(_rect_overlaps_dot(tx, ty, tw, th, dx, dy, dr)
+                              for dx, dy, dr in avoid_dots):
+            return True
+        if placed_labels and any(_rects_overlap(tx, ty, tw, th, rx, ry, rw, rh)
+                                 for rx, ry, rw, rh in placed_labels):
+            return True
+        return False
+
     text_x, text_y = _place(text_dx, text_dy)
 
-    # If the label overlaps any dot, try candidate offsets in priority order
-    if avoid_dots:
-        def _collides(tx, ty):
-            return any(_rect_overlaps_dot(tx, ty, tw, th, dx, dy, dr)
-                       for dx, dy, dr in avoid_dots)
+    if _collides(text_x, text_y):
+        abs_dx, abs_dy = abs(text_dx) or 12, abs(text_dy) or 10
+        sign_x = 1 if text_dx >= 0 else -1
+        sign_y = 1 if text_dy >= 0 else -1
+        candidates = [
+            (-sign_x * abs_dx, text_dy),                    # flip x
+            (text_dx, -sign_y * abs_dy),                    # flip y
+            (-sign_x * abs_dx, -sign_y * abs_dy),           # flip both
+            (sign_x * abs_dx * 2, text_dy),                 # double x
+            (text_dx, sign_y * abs_dy * 2),                 # double y
+            (-sign_x * abs_dx * 2, text_dy),                # double x, opposite
+            (text_dx, -sign_y * abs_dy * 2),                # double y, opposite
+            (sign_x * abs_dx, sign_y * (abs_dy + th + 4)),  # just below/above
+        ]
+        for cdx, cdy in candidates:
+            cx, cy = _place(cdx, cdy)
+            if not _collides(cx, cy):
+                text_x, text_y = cx, cy
+                break
 
-        if _collides(text_x, text_y):
-            abs_dx, abs_dy = abs(text_dx), abs(text_dy)
-            # Candidates: flip x, flip y, flip both, push further in original dir
-            candidates = [
-                (-abs_dx if text_dx >= 0 else abs_dx, text_dy),
-                (text_dx, -abs_dy if text_dy >= 0 else abs_dy),
-                (-abs_dx if text_dx >= 0 else abs_dx, -abs_dy if text_dy >= 0 else abs_dy),
-                (text_dx * 2, text_dy),
-                (text_dx, text_dy * 2),
-            ]
-            for cdx, cdy in candidates:
-                cx, cy = _place(cdx, cdy)
-                if not _collides(cx, cy):
-                    text_x, text_y = cx, cy
-                    break
+    # Record the placed rect so subsequent labels can avoid it
+    if placed_labels is not None:
+        placed_labels.append((text_x, text_y, tw, th))
 
     for line_idx, line in enumerate(lines):
         ly = text_y + line_idx * (th // len(lines) + 2)
@@ -3537,13 +3556,13 @@ def annotate_modis_image(png_bytes, points, center_x, center_y, rotation_deg,
                 print(f"MODIS COASTLINE OVERLAY FAILED: {e}")
 
         # --- Label markers ---
-        # Pre-compute all dot positions for collision avoidance
         marker_radius = 6
         _dot_positions = []
         for point in points:
             lat, lon = point[0], point[1]
             px, py = project_point(lat, lon)
             _dot_positions.append((px, py, marker_radius))
+        _placed_labels = []
 
         for point in points:
             if len(point) >= 6:
@@ -3571,7 +3590,8 @@ def annotate_modis_image(png_bytes, points, center_x, center_y, rotation_deg,
 
             _draw_clamped_label(draw, x_px, y_px, text_dx, text_dy,
                                 label_text, font, width_px, height_px,
-                                avoid_dots=_dot_positions)
+                                avoid_dots=_dot_positions,
+                                placed_labels=_placed_labels)
 
         # --- Optional reference lines (e.g. an international border) ---
         for line in (reference_lines or []):
@@ -3753,6 +3773,7 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
         # --- Label markers ---
         marker_radius = 6
         _dot_positions = []
+        _placed_labels = []
         for point in points:
             plat, plon = point[0], point[1]
             px, py = project_point(plat, plon)
@@ -3784,7 +3805,8 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
 
             _draw_clamped_label(draw, x_px, y_px, text_dx, text_dy,
                                 label_text, font, width_px, height_px,
-                                avoid_dots=_dot_positions)
+                                avoid_dots=_dot_positions,
+                                placed_labels=_placed_labels)
 
         # --- Optional reference lines (e.g. an international border) ---
         for line in (reference_lines or []):

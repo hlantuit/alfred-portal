@@ -683,6 +683,7 @@ def update_community(community, now_utc):
             hydrometric_clim_futures = [
                 (st, ex.submit(lib.fetch_hydrometric_climatology, st["station_id"]))
                 for st in hydro_stations
+                if st.get("climatology", True)
             ]
 
             # Collect results — all with timeouts to prevent indefinite hangs

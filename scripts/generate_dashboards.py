@@ -533,6 +533,7 @@ def update_community(community, now_utc):
     wave_data = None
     fires = []
     hydrometric_results = []
+    hydrometric_clim_results = []
 
     needs_parallel = enabled & {
         "modis", "water_level", "sentinel1", "sea_ice", "sea_ice_zoom",
@@ -679,6 +680,10 @@ def update_community(community, now_utc):
                 (st, ex.submit(lib.fetch_hydrometric_water_level, st["station_id"], st["provterr"]))
                 for st in hydro_stations
             ]
+            hydrometric_clim_futures = [
+                (st, ex.submit(lib.fetch_hydrometric_climatology, st["station_id"]))
+                for st in hydro_stations
+            ]
 
             # Collect results — all with timeouts to prevent indefinite hangs
             if fut_modis:
@@ -733,6 +738,13 @@ def update_community(community, now_utc):
                     print(f"[{sid}] HYDROMETRIC[{st['station_id']}] FAILED: {e}")
                     h_times, h_values, h_unit = None, None, "level"
                 hydrometric_results.append((st, h_times, h_values, h_unit))
+            for st, fut in hydrometric_clim_futures:
+                try:
+                    doy_vals, cur_list, clim_unit = fut.result(timeout=120)
+                except Exception as e:
+                    print(f"[{sid}] HYDROMETRIC CLIM[{st['station_id']}] FAILED: {e}")
+                    doy_vals, cur_list, clim_unit = None, None, "level"
+                hydrometric_clim_results.append((st, doy_vals, cur_list, clim_unit))
 
         if modis_bytes:
             modis_block_obj, _ = lib._upload_chart_or_caption(modis_bytes, "modis.png", None)
@@ -843,6 +855,18 @@ def update_community(community, now_utc):
 
     if "wind_chart" in enabled:
         blocks += lib.build_wind_chart_section(wind_chart_bytes, wind_chart_caption)
+
+    if "hydrometric" in enabled:
+        for st, doy_vals, cur_list, clim_unit in hydrometric_clim_results:
+            clim_bytes, clim_caption = lib.build_hydrometric_climatology_chart(
+                doy_vals, cur_list, st["station_id"], st["river_name"],
+                unit=clim_unit, now_utc=now_utc,
+            )
+            if clim_bytes:
+                clim_block, _ = lib._upload_chart_or_caption(clim_bytes, "hydrometric_clim.png", clim_caption)
+                if clim_block:
+                    blocks.append(clim_block)
+                blocks.append(lib.gray_caption(clim_caption))
 
     if "harvesting" in enabled:
         blocks += lib.build_harvesting_section(now_utc, site_id=sid)

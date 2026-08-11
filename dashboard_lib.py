@@ -5937,6 +5937,243 @@ def build_hydrometric_chart(times, values_m, station_id, river_name, tz_name="Am
         return None, f"{river_name} water level chart could not be generated — see Action logs."
 
 
+def _is_leap_year(year):
+    return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+
+
+def _date_to_clim_doy(date):
+    """Day-of-year 1-365, mapping Feb 29 → 59 and shifting Mar 1+ back by 1 in leap years."""
+    doy = date.timetuple().tm_yday
+    if _is_leap_year(date.year) and doy >= 60:
+        doy -= 1
+    return min(doy, 365)
+
+
+def fetch_hydrometric_climatology(station_id, clim_years=30):
+    """
+    Fetches daily historical water level (or discharge) for a WSC station
+    via the ECCC OGC API over the last `clim_years` years, plus the
+    current year to date.
+
+    Returns:
+        doy_values        — dict {doy 1-365: [float, …]} of historical values
+        current_year_list — sorted list of (doy, value) for the current year
+        unit              — "level" or "discharge"
+    or (None, None, "level") on failure.
+    """
+    import datetime as _dt
+    from collections import defaultdict
+
+    try:
+        now = _dt.datetime.utcnow()
+        current_year = now.year
+        clim_start_year = max(1970, current_year - clim_years)
+        clim_end_year = current_year - 1
+
+        def _fetch_range(date_from, date_to):
+            base = "https://api.weather.gc.ca/collections/hydrometric-daily-mean/items"
+            records = []
+            offset = 0
+            limit = 10000
+            while True:
+                r = get_with_retry(
+                    base,
+                    params={
+                        "STATION_NUMBER": station_id,
+                        "datetime": f"{date_from}/{date_to}",
+                        "limit": limit,
+                        "offset": offset,
+                        "f": "json",
+                    },
+                    timeout=40, retries=2, backoff_seconds=5,
+                )
+                features = r.json().get("features", [])
+                records.extend(features)
+                if len(features) < limit:
+                    break
+                offset += limit
+            return records
+
+        print(f"HYDROMETRIC CLIM [{station_id}]: fetching {clim_start_year}–{clim_end_year} + current year")
+        clim_features = _fetch_range(f"{clim_start_year}-01-01", f"{clim_end_year}-12-31")
+        cur_features  = _fetch_range(f"{current_year}-01-01", now.strftime("%Y-%m-%d"))
+        print(f"HYDROMETRIC CLIM [{station_id}]: {len(clim_features)} historical + {len(cur_features)} current-year records")
+
+        def _parse(features):
+            out = []
+            for f in features:
+                p = f.get("properties", {})
+                try:
+                    date = _dt.date.fromisoformat(p.get("DATE", "")[:10])
+                except Exception:
+                    continue
+                level    = p.get("LEVEL")
+                discharge = p.get("DISCHARGE")
+                out.append((date, level, discharge))
+            return out
+
+        clim_records = _parse(clim_features)
+        cur_records  = _parse(cur_features)
+
+        use_level = any(r[1] is not None for r in clim_records + cur_records)
+        unit = "level" if use_level else "discharge"
+
+        def _val(r):
+            return r[1] if use_level else r[2]
+
+        doy_values = defaultdict(list)
+        for r in clim_records:
+            v = _val(r)
+            if v is not None:
+                doy_values[_date_to_clim_doy(r[0])].append(float(v))
+
+        current_year_list = sorted(
+            (_date_to_clim_doy(r[0]), float(_val(r)))
+            for r in cur_records if _val(r) is not None
+        )
+
+        if not doy_values and not current_year_list:
+            print(f"HYDROMETRIC CLIM [{station_id}]: no data returned")
+            return None, None, unit
+
+        years_covered = len({r[0].year for r in clim_records})
+        print(f"HYDROMETRIC CLIM [{station_id}]: {years_covered} years in climatology, "
+              f"{len(current_year_list)} current-year points, unit={unit}")
+        return dict(doy_values), current_year_list, unit
+
+    except Exception as e:
+        print(f"HYDROMETRIC CLIM [{station_id}] FAILED: {e}")
+        return None, None, "level"
+
+
+def build_hydrometric_climatology_chart(doy_values, current_year_list, station_id,
+                                        river_name, unit="level", now_utc=None):
+    """
+    Climatological water level chart — Jan to Dec x-axis.
+    Grey band = historical mean ± 1σ.  Grey line = historical mean.
+    Teal line = current year to date.  Dashed vertical = today.
+    """
+    if not doy_values and not current_year_list:
+        return None, f"{river_name} climatology unavailable — no historical data."
+    try:
+        import numpy as _np
+        from matplotlib.lines import Line2D as _L2D
+        from matplotlib.patches import Patch as _Patch
+        import datetime as _dt
+
+        RIVER_TEAL      = "#2A9D8F"
+        NOTION_TEXT_GRAY = "#787774"
+        NOTION_LIGHT_GRID = "#EDECEC"
+        CLIM_GRAY       = "#AAAAAA"
+        CLIM_FILL       = "#DDDDDD"
+
+        doys = _np.arange(1, 366)
+        means = _np.full(365, _np.nan)
+        stds  = _np.full(365, _np.nan)
+        for i, doy in enumerate(doys):
+            vals = doy_values.get(doy, [])
+            if len(vals) >= 2:
+                means[i] = _np.mean(vals)
+                stds[i]  = _np.std(vals, ddof=1)
+            elif len(vals) == 1:
+                means[i] = vals[0]
+                stds[i]  = 0.0
+
+        # Smooth the envelope slightly (7-day rolling) to reduce noise
+        def _smooth(arr, w=7):
+            out = _np.full_like(arr, _np.nan)
+            for i in range(len(arr)):
+                seg = arr[max(0, i - w // 2): i + w // 2 + 1]
+                seg = seg[~_np.isnan(seg)]
+                if len(seg):
+                    out[i] = _np.mean(seg)
+            return out
+
+        means_s = _smooth(means)
+        stds_s  = _smooth(stds)
+
+        # Current year
+        if current_year_list:
+            cur_doys = _np.array([r[0] for r in current_year_list])
+            cur_vals = _np.array([r[1] for r in current_year_list])
+        else:
+            cur_doys = cur_vals = _np.array([])
+
+        # "now" day-of-year
+        now_doy = None
+        current_year = _dt.datetime.utcnow().year
+        if now_utc:
+            now_doy = _date_to_clim_doy(now_utc.date())
+
+        plt.rcParams["font.family"] = "DejaVu Sans"
+        fig, ax = plt.subplots(figsize=(8, 3.0), dpi=150)
+        fig.patch.set_alpha(0)
+        ax.set_facecolor("none")
+
+        valid = ~_np.isnan(means_s)
+        if valid.any():
+            lo = (means_s - stds_s)[valid]
+            hi = (means_s + stds_s)[valid]
+            ax.fill_between(doys[valid], lo, hi, color=CLIM_FILL, alpha=0.7, linewidth=0, zorder=1)
+            ax.plot(doys[valid], means_s[valid], color=CLIM_GRAY, linewidth=1.5, zorder=2)
+
+        if len(cur_doys):
+            ax.plot(cur_doys, cur_vals, color=RIVER_TEAL, linewidth=2.0, zorder=3)
+
+        if now_doy:
+            ax.axvline(now_doy, color=NOTION_TEXT_GRAY, linewidth=1.0,
+                       linestyle="--", alpha=0.65, zorder=4)
+            ylims = ax.get_ylim()
+            ax.text(now_doy + 2, ylims[1], "now",
+                    fontsize=10, color=NOTION_TEXT_GRAY, va="top")
+
+        # X axis: month ticks
+        month_doys  = [_dt.date(2001, m, 1).timetuple().tm_yday for m in range(1, 13)]
+        month_labels = [_dt.date(2001, m, 1).strftime("%b") for m in range(1, 13)]
+        ax.set_xlim(1, 365)
+        ax.set_xticks(month_doys)
+        ax.set_xticklabels(month_labels, fontsize=13, color=NOTION_TEXT_GRAY)
+
+        for spine in ["top", "right", "left"]:
+            ax.spines[spine].set_visible(False)
+        ax.spines["bottom"].set_color(NOTION_LIGHT_GRID)
+        ax.tick_params(axis="y", labelsize=13, colors=NOTION_TEXT_GRAY, length=0)
+        ax.tick_params(axis="x", length=6, color="#555555", width=1.0, bottom=True, direction="out")
+        ax.yaxis.grid(True, color=NOTION_LIGHT_GRID, linewidth=1, zorder=0)
+        ax.xaxis.grid(False)
+        ax.set_axisbelow(True)
+        ax.yaxis.get_major_formatter().set_useOffset(False)
+
+        ylabel = "Discharge (m³/s)" if unit == "discharge" else "Water level (m)"
+        ax.set_ylabel(ylabel, fontsize=13, color=NOTION_TEXT_GRAY)
+
+        n_years = len({int(r[0]) for r in [] if False})  # placeholder; caption carries it
+        legend_handles = [
+            _Patch(facecolor=CLIM_FILL, edgecolor=CLIM_GRAY, label="Historical mean ±1σ"),
+            _L2D([0], [0], color=CLIM_GRAY, linewidth=1.5, label="Historical mean"),
+            _L2D([0], [0], color=RIVER_TEAL, linewidth=2.0, label=str(current_year)),
+        ]
+        ax.legend(handles=legend_handles, fontsize=11, frameon=False,
+                  loc="upper left", labelcolor=NOTION_TEXT_GRAY,
+                  handlelength=1.5, handleheight=0.8, handletextpad=0.5)
+
+        fig.tight_layout()
+        png_bytes = fig_to_png_bytes(fig, white_bg=True)
+
+        n_clim_years = max((len(v) for v in doy_values.values()), default=0)
+        caption = (
+            f"{river_name} — seasonal water level climatology. "
+            f"Grey band: historical mean ±1σ (up to {n_clim_years} years of daily data). "
+            f"Teal line: {current_year} to date. "
+            f"Source: ECCC Water Survey of Canada, station {station_id}."
+        )
+        return png_bytes, caption
+
+    except Exception as e:
+        print(f"HYDROMETRIC CLIM CHART FAILED [{station_id}]: {e}")
+        return None, f"{river_name} climatology chart could not be generated."
+
+
 # =========================================================
 # SNOW DEPTH
 # =========================================================

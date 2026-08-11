@@ -3348,16 +3348,23 @@ def fetch_modis_image(bbox_3413, now_utc, max_days_back=10, fetch_size_px=MODIS_
         print(f"MODIS {date_str}: HTTP {resp.status_code}, type={content_type}, bytes={len(resp.content)}")
 
         if resp.status_code == 200 and "image/png" in content_type and is_real_png and len(resp.content) >= 5000:
-            # Reject near-black images (GIBS returns black pixels when no MODIS
-            # data is available for a date — passes size check but is unusable).
+            # Reject near-black images and low-coverage images. GIBS returns
+            # pure-black pixels where no MODIS swath data exists for that date.
             try:
                 from PIL import Image as _PI
                 import io as _io
                 import numpy as _np
                 _img = _PI.open(_io.BytesIO(resp.content)).convert("RGB")
-                _mean_brightness = _np.array(_img).mean()
+                _arr = _np.array(_img)
+                _mean_brightness = _arr.mean()
                 if _mean_brightness < 12:
                     print(f"  -> rejected (mean brightness {_mean_brightness:.1f} — near-black, no MODIS data)")
+                    continue
+                # Reject if more than 20 % of pixels are pure black (no-data
+                # swath gap) — the image covers too small a portion of the frame.
+                _nodata_frac = (_arr.sum(axis=2) == 0).mean()
+                if _nodata_frac > 0.20:
+                    print(f"  -> rejected (no-data fraction {_nodata_frac:.1%} > 20 % — insufficient coverage)")
                     continue
             except Exception:
                 pass
@@ -4602,8 +4609,16 @@ def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_wi
                 geom = feature.get("geometry", {})
                 gt = geom.get("type")
                 coords = geom.get("coordinates", [])
-                lines = ([coords] if gt == "LineString"
-                         else (coords if gt == "MultiLineString" else []))
+                if gt == "LineString":
+                    lines = [coords]
+                elif gt == "MultiLineString":
+                    lines = coords
+                elif gt == "Polygon":
+                    lines = coords  # outer ring + holes, all drawn as closed lines
+                elif gt == "MultiPolygon":
+                    lines = [ring for poly in coords for ring in poly]
+                else:
+                    lines = []
                 for line in lines:
                     pts = [_to_px(c[0], c[1]) for c in line]
                     if len(pts) >= 2:

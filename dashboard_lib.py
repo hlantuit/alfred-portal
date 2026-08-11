@@ -1186,7 +1186,7 @@ def build_wind_forecast_mini_chart(hourly_wind_forecast):
         ax.set_xticks(tick_positions)
         ax.set_xticklabels(tick_labels, fontsize=16, color=NOTION_TEXT_GRAY)
         ax.tick_params(axis="y", labelsize=16, colors=NOTION_TEXT_GRAY, length=0)
-        ax.tick_params(axis="x", length=0)
+        ax.tick_params(axis="x", length=5, color="#555555", width=1.2, bottom=True, direction="out")
         ax.yaxis.grid(True, color=NOTION_LIGHT_GRID, linewidth=1)
         ax.set_axisbelow(True)
         ax.set_ylabel("km/h", fontsize=17, color=NOTION_TEXT_GRAY)
@@ -1825,7 +1825,8 @@ def _gem_precip_chart(hours, rain_vals, snow_vals, t0):
         ax.spines["bottom"].set_color(NOTION_LIGHT_GRID)
 
         ax.set_xlim(0, max(hours))
-        y_max = max(max(r + s for r, s in zip(rain_vals, snow_vals)), 5.0)
+        data_max = max(r + s for r, s in zip(rain_vals, snow_vals))
+        y_max = max(data_max, 3.0)
         ax.set_ylim(bottom=0, top=y_max)
 
         tick_hours, tick_labels = [], []

@@ -820,7 +820,7 @@ def update_community(community, now_utc):
             h_chart_bytes, h_chart_caption = lib.build_hydrometric_chart(
                 h_times, h_values, st["station_id"], st["river_name"], tz_name, unit=h_unit,
             )
-            blocks += lib.build_hydrometric_section(h_chart_bytes, h_chart_caption, st["heading"])
+            blocks += lib.build_hydrometric_section(h_chart_bytes, h_chart_caption, st["heading"], station_id=st["station_id"])
 
     if "modis" in enabled:
         modis_caption_str = (
@@ -867,7 +867,9 @@ def update_community(community, now_utc):
                 clim_block, _ = lib._upload_chart_or_caption(clim_bytes, "hydrometric_clim.png", clim_caption)
                 if clim_block:
                     blocks.append(clim_block)
-                blocks.append(lib.gray_caption(clim_caption))
+                wsc_url = f"https://wateroffice.ec.gc.ca/report/real_time_e.html?stn={st['station_id']}"
+                blocks.append(lib.link_paragraph("→ Station data", wsc_url,
+                                                  prefix=clim_caption + "  ", prefix_gray=True))
 
     if "harvesting" in enabled:
         blocks += lib.build_harvesting_section(now_utc, site_id=sid)

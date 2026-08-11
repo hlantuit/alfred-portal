@@ -6902,9 +6902,9 @@ def build_total_water_level_section(water_level_text, water_level_chart_bytes, w
     return blocks
 
 
-def build_hydrometric_section(chart_bytes, chart_caption, heading_text):
+def build_hydrometric_section(chart_bytes, chart_caption, heading_text, station_id=None):
     """
-    heading_text: e.g. "ðŸ’§ Napoiak Channel Water Level — Mackenzie River
+    heading_text: e.g. "💧 Napoiak Channel Water Level — Mackenzie River
     above Shallow Bay" — written per-site in config.py, since it should
     name the specific gauge/reach, which varies per station.
     """
@@ -6913,7 +6913,13 @@ def build_hydrometric_section(chart_bytes, chart_caption, heading_text):
     blocks = [heading(heading_text)]
     if block:
         blocks.append(block)
-    blocks.append(paragraph(fallback or chart_caption))
+    caption_text = fallback or chart_caption
+    if station_id and not fallback:
+        wsc_url = f"https://wateroffice.ec.gc.ca/report/real_time_e.html?stn={station_id}"
+        blocks.append(link_paragraph("→ Station data", wsc_url,
+                                     prefix=caption_text + "  ", prefix_gray=True))
+    else:
+        blocks.append(paragraph(caption_text))
     blocks.append(divider())
     return blocks
 

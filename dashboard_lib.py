@@ -5957,45 +5957,93 @@ def _date_to_clim_doy(date):
 def _fetch_wateroffice_year(station_id, year):
     """
     Fetch water-level data for a full year from the Water Office real-time
-    table view (wateroffice.ec.gc.ca).  Returns {date: float} of daily means
-    or an empty dict on failure.
-
-    The table view serves data since Jan 1 of the requested year, bridging
-    the gap between the 30-day rolling Datamart CSV and the OGC daily-mean
-    archive which lags by ~6 months.
+    download endpoint (wateroffice.ec.gc.ca).  Returns {date: float} of
+    daily means or an empty dict on failure.
     """
     import datetime as _dt, re as _re
-    url = "https://wateroffice.ec.gc.ca/report/real_time_e.html"
-    params = {
-        "stn": station_id,
-        "startDate": f"{year}-01-01",
-        "endDate": _dt.date.today().strftime("%Y-%m-%d"),
-        "prm1": 46,   # Stage / Water Level (m)
-        "prm2": 47,   # Discharge (m³/s) — included for completeness
-        "mode": "Table",
-    }
-    resp = requests.get(url, params=params, timeout=45,
-                        headers={"User-Agent": "Mozilla/5.0 (compatible; alfred-portal/1.0)"})
-    resp.raise_for_status()
 
-    # The table contains rows like:
-    #   <td>2026-01-15 00:00:00</td><td>10.234</td>...
-    # Match date string then the immediately following numeric cell.
-    rows = _re.findall(
-        r'(\d{4}-\d{2}-\d{2})[^<]*</td>\s*<td[^>]*>\s*([0-9]+(?:\.[0-9]*)?)\s*</td>',
-        resp.text,
-    )
-    daily = {}  # date -> [values] for averaging sub-daily entries
-    for date_str, val_str in rows:
+    end_date = _dt.date.today().strftime("%Y-%m-%d")
+
+    # Try the direct download CSV endpoint first; fall back to table-mode HTML.
+    for url, params, label in [
+        (
+            "https://wateroffice.ec.gc.ca/download/real_time_e.html",
+            {
+                "stn": station_id,
+                "startDate": f"{year}-01-01",
+                "endDate": end_date,
+                "prm1": 46,   # Stage / Water Level (m)
+                "prm2": 47,   # Discharge (m³/s)
+                "type": "csv",
+            },
+            "download/csv",
+        ),
+        (
+            "https://wateroffice.ec.gc.ca/report/real_time_e.html",
+            {
+                "stn": station_id,
+                "startDate": f"{year}-01-01",
+                "endDate": end_date,
+                "prm1": 46,
+                "prm2": 47,
+                "mode": "Table",
+            },
+            "report/table",
+        ),
+    ]:
         try:
-            d = _dt.date.fromisoformat(date_str[:10])
-            if d.year == year:
-                daily.setdefault(d, []).append(float(val_str))
-        except Exception:
-            continue
-    result = {d: sum(vs) / len(vs) for d, vs in daily.items()}
-    print(f"HYDROMETRIC CLIM [{station_id}]: Water Office table gave {len(result)} days for {year}")
-    return result
+            resp = requests.get(url, params=params, timeout=45,
+                                headers={"User-Agent": "Mozilla/5.0 (compatible; alfred-portal/1.0)"})
+            resp.raise_for_status()
+            # Log snippet to help diagnose if parsing fails
+            snippet = resp.text[:300].replace("\n", " ")
+            print(f"HYDROMETRIC CLIM [{station_id}]: WO [{label}] status={resp.status_code} "
+                  f"len={len(resp.text)} snippet={snippet!r}")
+
+            # Try CSV parse first (Content-Type text/csv or starts with station ID or date header)
+            daily = {}
+            lines = resp.text.splitlines()
+            # CSV: rows like  "10MC003,2026-01-15 01:00:00-07:00,10.234,..."
+            #  or header line followed by data
+            csv_hits = 0
+            import csv as _csv
+            for row in _csv.reader(lines):
+                if len(row) < 3:
+                    continue
+                # Try col 1 as date, col 2 as value  (standard Water Office CSV layout)
+                for date_col, val_col in [(1, 2), (0, 1)]:
+                    try:
+                        d = _dt.date.fromisoformat(row[date_col].strip()[:10])
+                        if d.year == year:
+                            v = float(row[val_col].strip())
+                            daily.setdefault(d, []).append(v)
+                            csv_hits += 1
+                            break
+                    except Exception:
+                        continue
+
+            if not daily:
+                # Fall back to regex scan for date+value pairs in HTML
+                rows = _re.findall(
+                    r'(\d{4}-\d{2}-\d{2})[^<"]*?[<",]\s*([0-9]+\.[0-9]+)',
+                    resp.text,
+                )
+                for date_str, val_str in rows:
+                    try:
+                        d = _dt.date.fromisoformat(date_str)
+                        if d.year == year:
+                            daily.setdefault(d, []).append(float(val_str))
+                    except Exception:
+                        continue
+
+            result = {d: sum(vs) / len(vs) for d, vs in daily.items()}
+            print(f"HYDROMETRIC CLIM [{station_id}]: WO [{label}] gave {len(result)} days for {year}")
+            if result:
+                return result
+        except Exception as _e:
+            print(f"HYDROMETRIC CLIM [{station_id}]: WO [{label}] failed: {_e}")
+
+    return {}
 
 
 def fetch_hydrometric_climatology(station_id, clim_years=30, provterr=None):

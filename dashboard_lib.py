@@ -7005,6 +7005,9 @@ def fetch_aqhi(lat, lon, now_utc):
         text = f"💨 Air quality: AQI {aqi} — {label}"
         print(f"AQHI: AQI {aqi} ({label})")
         return {"aqi": aqi, "label": label, "text": text}
+    except Exception as e:
+        print(f"AQHI FETCH FAILED: {e}")
+        return None
 
 
 def build_aqi_gauge_png(aqi, label):
@@ -7077,9 +7080,6 @@ def build_aqi_gauge_png(aqi, label):
         return buf.read()
     except Exception as e:
         print(f"AQI GAUGE PNG FAILED: {e}")
-        return None
-    except Exception as e:
-        print(f"AQHI FETCH FAILED: {e}")
         return None
 
 

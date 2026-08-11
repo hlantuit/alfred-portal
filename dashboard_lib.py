@@ -5953,7 +5953,7 @@ def _date_to_clim_doy(date):
     return min(doy, 365)
 
 
-def fetch_hydrometric_climatology(station_id, clim_years=30):
+def fetch_hydrometric_climatology(station_id, clim_years=30, provterr=None):
     """
     Fetches daily historical water level (or discharge) for a WSC station
     via the ECCC OGC API over the last `clim_years` years, plus the
@@ -6001,18 +6001,41 @@ def fetch_hydrometric_climatology(station_id, clim_years=30):
         print(f"HYDROMETRIC CLIM [{station_id}]: fetching {clim_start_year}–{clim_end_year} + current year")
         clim_features = _fetch_range(f"{clim_start_year}-01-01", f"{clim_end_year}-12-31")
 
-        # The OGC API datetime filter doesn't reliably return the current (incomplete)
-        # year — fetch recent records by date-sort and filter to current year in Python.
-        base = "https://api.weather.gc.ca/collections/hydrometric-daily-mean/items"
-        cur_resp = get_with_retry(
-            base,
-            params={"STATION_NUMBER": station_id, "sortby": "-DATE", "limit": 400, "f": "json"},
-            timeout=30, retries=2, backoff_seconds=5,
-        )
-        all_recent = cur_resp.json().get("features", [])
+        # The OGC hydrometric-daily-mean collection lags by months and has no data
+        # for the current year.  Fetch the Datamart rolling CSV (~30 days of
+        # sub-daily readings) and aggregate to daily means instead.
+        cur_daily = {}  # date -> [values]
+        if provterr:
+            import csv as _csv
+            for csv_url in [
+                f"https://dd.weather.gc.ca/hydrometric/csv/{provterr}/daily/{provterr}_{station_id}_daily_hydrometric.csv",
+                f"https://dd.weather.gc.ca/today/hydrometric/csv/{provterr}/daily/{provterr}_{station_id}_daily_hydrometric.csv",
+            ]:
+                try:
+                    csv_resp = get_with_retry(csv_url, timeout=25, retries=1, backoff_seconds=3)
+                    for row in _csv.reader(csv_resp.text.splitlines()[1:]):
+                        if len(row) < 3:
+                            continue
+                        date_str = row[1].strip()
+                        level_str = row[2].strip()
+                        if not level_str and len(row) >= 4:
+                            level_str = row[3].strip()  # discharge fallback
+                        if not date_str or not level_str:
+                            continue
+                        try:
+                            d = _dt.date.fromisoformat(date_str[:10])
+                            if d.year == current_year:
+                                cur_daily.setdefault(d, []).append(float(level_str))
+                        except Exception:
+                            continue
+                    break  # primary URL succeeded
+                except Exception as _e:
+                    print(f"HYDROMETRIC CLIM [{station_id}]: CSV fetch failed ({csv_url}): {_e}")
+
+        # Synthesise fake "features" list so _parse() can handle cur_records uniformly
         cur_features = [
-            f for f in all_recent
-            if (f.get("properties", {}).get("DATE") or f.get("properties", {}).get("DATETIME", "")).startswith(str(current_year))
+            {"properties": {"DATE": str(d), "LEVEL": sum(vs) / len(vs)}}
+            for d, vs in sorted(cur_daily.items())
         ]
         print(f"HYDROMETRIC CLIM [{station_id}]: {len(clim_features)} historical + {len(cur_features)} current-year records")
 

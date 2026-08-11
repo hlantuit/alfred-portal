@@ -681,7 +681,7 @@ def update_community(community, now_utc):
                 for st in hydro_stations
             ]
             hydrometric_clim_futures = [
-                (st, ex.submit(lib.fetch_hydrometric_climatology, st["station_id"]))
+                (st, ex.submit(lib.fetch_hydrometric_climatology, st["station_id"], provterr=st.get("provterr")))
                 for st in hydro_stations
                 if st.get("climatology", True)
             ]

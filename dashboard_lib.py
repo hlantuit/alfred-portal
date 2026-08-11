@@ -6009,35 +6009,56 @@ def _fetch_wateroffice_year(station_id, year):
     daily = _parse_data(resp.text)
 
     if not daily:
-        # Likely got the disclaimer page — accept it and retry.
-        print(f"HYDROMETRIC CLIM [{station_id}]: WO got disclaimer (len={len(resp.text)}), accepting...")
-        # Parse hidden fields from the disclaimer HTML
-        hidden = {}
-        for pat in [
-            r'<input[^>]+type=["\']hidden["\'][^>]+name=["\']([^"\']+)["\'][^>]+value=["\']([^"\']*)["\']',
-            r'<input[^>]+name=["\']([^"\']+)["\'][^>]+type=["\']hidden["\'][^>]+value=["\']([^"\']*)["\']',
-        ]:
-            hidden.update(_re.findall(pat, resp.text))
-        # Find the "I agree" submit button name/value
-        agree = _re.search(r'<(?:input|button)[^>]+(?:name=["\']([^"\']+)["\'][^>]+value=["\']([^"\']*)["\']|value=["\']([^"\']*)["\'][^>]+name=["\']([^"\']+)["\'])[^>]*(?:agree|submit)[^>]*>', resp.text, _re.I)
-        if agree:
-            groups = [g for g in agree.groups() if g]
-            if len(groups) >= 2:
-                hidden[groups[0]] = groups[1]
-        # POST acceptance — disclaimer_e.html accepts POST only (returns 405 on GET)
-        session.post(
-            "https://wateroffice.ec.gc.ca/disclaimer_e.html",
-            data=hidden,
-            timeout=20,
-            allow_redirects=True,
-        )
-        print(f"HYDROMETRIC CLIM [{station_id}]: WO disclaimer posted, cookies={list(session.cookies.keys())}")
-        # Re-fetch data
+        phpsessid0 = session.cookies.get("PHPSESSID", "none")
+        # Log Set-Cookie from first GET to understand session mechanism
+        set_cookie_hdr = resp.headers.get("Set-Cookie", "none")[:120]
+        # Log a middle slice of the disclaimer HTML to find any form/token/link
+        mid = resp.text[4000:5000].replace("\n", " ")
+        print(f"HYDROMETRIC CLIM [{station_id}]: WO disclaimer len={len(resp.text)} "
+              f"PHPSESSID={phpsessid0} Set-Cookie={set_cookie_hdr!r}")
+        print(f"HYDROMETRIC CLIM [{station_id}]: WO disclaimer mid={mid[:300]!r}")
+
+        # Attempt 1: second GET with same PHPSESSID (some PHP apps accept on 2nd visit)
         resp2 = session.get(data_url, params=params, timeout=60)
         resp2.raise_for_status()
         daily = _parse_data(resp2.text)
-        snippet = resp2.text[:150].replace("\n", " ")
-        print(f"HYDROMETRIC CLIM [{station_id}]: WO retry len={len(resp2.text)} snippet={snippet!r}")
+        print(f"HYDROMETRIC CLIM [{station_id}]: WO attempt1 len={len(resp2.text)} "
+              f"PHPSESSID={session.cookies.get('PHPSESSID','none')} found={len(daily)}")
+
+        if not daily:
+            # Attempt 2: GET disclaimer_info page first (may mark session accepted),
+            # then retry
+            try:
+                session.get("https://wateroffice.ec.gc.ca/disclaimer_info_e.html",
+                            timeout=20)
+            except Exception:
+                pass
+            resp3 = session.get(data_url, params=params, timeout=60)
+            resp3.raise_for_status()
+            daily = _parse_data(resp3.text)
+            print(f"HYDROMETRIC CLIM [{station_id}]: WO attempt2 len={len(resp3.text)} "
+                  f"PHPSESSID={session.cookies.get('PHPSESSID','none')} found={len(daily)}")
+
+        if not daily:
+            # Attempt 3: POST to disclaimer_e.html with allow_redirects=False,
+            # capture the redirect, then GET data
+            try:
+                pr = session.post(
+                    "https://wateroffice.ec.gc.ca/disclaimer_e.html",
+                    data={"agree": "1"},
+                    timeout=20,
+                    allow_redirects=False,
+                )
+                loc = pr.headers.get("Location", "")
+                print(f"HYDROMETRIC CLIM [{station_id}]: WO post3 status={pr.status_code} "
+                      f"Location={loc!r} PHPSESSID={session.cookies.get('PHPSESSID','none')}")
+            except Exception as _pe:
+                print(f"HYDROMETRIC CLIM [{station_id}]: WO post3 failed: {_pe}")
+            resp4 = session.get(data_url, params=params, timeout=60)
+            resp4.raise_for_status()
+            daily = _parse_data(resp4.text)
+            print(f"HYDROMETRIC CLIM [{station_id}]: WO attempt3 len={len(resp4.text)} "
+                  f"PHPSESSID={session.cookies.get('PHPSESSID','none')} found={len(daily)}")
 
     result = {d: sum(vs) / len(vs) for d, vs in daily.items()}
     print(f"HYDROMETRIC CLIM [{station_id}]: WO gave {len(result)} days for {year}")

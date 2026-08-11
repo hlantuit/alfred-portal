@@ -5954,6 +5954,50 @@ def _date_to_clim_doy(date):
 
 
 
+def _fetch_wateroffice_year(station_id, year):
+    """
+    Fetch water-level data for a full year from the Water Office real-time
+    table view (wateroffice.ec.gc.ca).  Returns {date: float} of daily means
+    or an empty dict on failure.
+
+    The table view serves data since Jan 1 of the requested year, bridging
+    the gap between the 30-day rolling Datamart CSV and the OGC daily-mean
+    archive which lags by ~6 months.
+    """
+    import datetime as _dt, re as _re
+    url = "https://wateroffice.ec.gc.ca/report/real_time_e.html"
+    params = {
+        "stn": station_id,
+        "startDate": f"{year}-01-01",
+        "endDate": _dt.date.today().strftime("%Y-%m-%d"),
+        "prm1": 46,   # Stage / Water Level (m)
+        "prm2": 47,   # Discharge (m³/s) — included for completeness
+        "mode": "Table",
+    }
+    resp = requests.get(url, params=params, timeout=45,
+                        headers={"User-Agent": "Mozilla/5.0 (compatible; alfred-portal/1.0)"})
+    resp.raise_for_status()
+
+    # The table contains rows like:
+    #   <td>2026-01-15 00:00:00</td><td>10.234</td>...
+    # Match date string then the immediately following numeric cell.
+    rows = _re.findall(
+        r'(\d{4}-\d{2}-\d{2})[^<]*</td>\s*<td[^>]*>\s*([0-9]+(?:\.[0-9]*)?)\s*</td>',
+        resp.text,
+    )
+    daily = {}  # date -> [values] for averaging sub-daily entries
+    for date_str, val_str in rows:
+        try:
+            d = _dt.date.fromisoformat(date_str[:10])
+            if d.year == year:
+                daily.setdefault(d, []).append(float(val_str))
+        except Exception:
+            continue
+    result = {d: sum(vs) / len(vs) for d, vs in daily.items()}
+    print(f"HYDROMETRIC CLIM [{station_id}]: Water Office table gave {len(result)} days for {year}")
+    return result
+
+
 def fetch_hydrometric_climatology(station_id, clim_years=30, provterr=None):
     """
     Fetches daily historical water level (or discharge) for a WSC station
@@ -6003,11 +6047,21 @@ def fetch_hydrometric_climatology(station_id, clim_years=30, provterr=None):
         clim_features = _fetch_range(f"{clim_start_year}-01-01", f"{clim_end_year}-12-31")
 
         # The OGC hydrometric-daily-mean collection lags by months and has no
-        # current-year data.  Fetch the Datamart rolling CSV (~30 days of
-        # sub-daily readings) and aggregate to daily means.
-        cur_daily = {}  # date -> [sub-daily readings]
+        # current-year data.  Try two sources in order of preference:
+        #   1. Water Office table view — full year from Jan 1
+        #   2. Datamart rolling CSV — last ~30 days (fallback / gap-fill)
+        cur_daily = {}  # date -> float (daily mean)
+
+        # Source 1: Water Office full-year table
+        try:
+            cur_daily = _fetch_wateroffice_year(station_id, current_year)
+        except Exception as _e:
+            print(f"HYDROMETRIC CLIM [{station_id}]: Water Office fetch failed: {_e}")
+
+        # Source 2: Datamart rolling CSV fills any gap at the recent end
         if provterr:
             import csv as _csv
+            csv_daily = {}  # date -> [sub-daily readings]
             for csv_url in [
                 f"https://dd.weather.gc.ca/hydrometric/csv/{provterr}/daily/{provterr}_{station_id}_daily_hydrometric.csv",
                 f"https://dd.weather.gc.ca/today/hydrometric/csv/{provterr}/daily/{provterr}_{station_id}_daily_hydrometric.csv",
@@ -6026,16 +6080,19 @@ def fetch_hydrometric_climatology(station_id, clim_years=30, provterr=None):
                         try:
                             d = _dt.date.fromisoformat(date_str[:10])
                             if d.year == current_year:
-                                cur_daily.setdefault(d, []).append(float(level_str))
+                                csv_daily.setdefault(d, []).append(float(level_str))
                         except Exception:
                             continue
                     break
                 except Exception as _e:
                     print(f"HYDROMETRIC CLIM [{station_id}]: CSV fetch failed ({csv_url}): {_e}")
+            for d, vs in csv_daily.items():
+                if d not in cur_daily:  # only fill days Water Office didn't return
+                    cur_daily[d] = sum(vs) / len(vs)
 
         cur_features = [
-            {"properties": {"DATE": str(d), "LEVEL": sum(vs) / len(vs)}}
-            for d, vs in sorted(cur_daily.items())
+            {"properties": {"DATE": str(d), "LEVEL": v}}
+            for d, v in sorted(cur_daily.items())
         ]
         print(f"HYDROMETRIC CLIM [{station_id}]: {len(clim_features)} historical + {len(cur_features)} current-year records")
 

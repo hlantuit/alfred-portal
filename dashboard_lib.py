@@ -4610,22 +4610,36 @@ def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_wi
                         draw.line(pts, fill=200, width=6)
                         all_lines_px.append(pts)
 
-            # Extend any "hanging" coast endpoint that lies within 15 % of a
-            # sealed frame edge (left / right / bottom) straight to that edge.
-            # OSM natural=coastline data often ends mid-frame for remote Arctic
-            # coasts; without this the flood-fill leaks past the hanging tip.
+            # Extend every "hanging" coast endpoint to the nearest sealed
+            # (non-seed) frame edge.  OSM natural=coastline data often ends
+            # mid-frame for remote Arctic coasts; without this the flood-fill
+            # leaks past the hanging tip into land areas.
             # The extension is drawn only on the mask (not the visual overlay).
-            _ext_thr = int(0.15 * w)
+            # We extend to the nearest non-seed edge so we never draw a line
+            # through open water toward a seed (sea) edge.
+            sealed_edges = {
+                "top":    (lambda ex, ey: (ex, 0),          lambda ex, ey: ey),
+                "bottom": (lambda ex, ey: (ex, h - 1),      lambda ex, ey: h - 1 - ey),
+                "left":   (lambda ex, ey: (0, ey),           lambda ex, ey: ex),
+                "right":  (lambda ex, ey: (w - 1, ey),      lambda ex, ey: w - 1 - ex),
+            }
             for pts in all_lines_px:
-                for ex, ey in (pts[0], pts[-1]):
-                    ex = max(0, min(w - 1, ex))
-                    ey = max(0, min(h - 1, ey))
-                    if ex <= _ext_thr:
-                        draw.line([(0, ey), (ex, ey)], fill=200, width=6)
-                    if ex >= w - 1 - _ext_thr:
-                        draw.line([(ex, ey), (w - 1, ey)], fill=200, width=6)
-                    if ey >= h - 1 - _ext_thr:
-                        draw.line([(ex, ey), (ex, h - 1)], fill=200, width=6)
+                for raw_ex, raw_ey in (pts[0], pts[-1]):
+                    ex = max(0, min(w - 1, raw_ex))
+                    ey = max(0, min(h - 1, raw_ey))
+                    # Find the nearest sealed (non-seed) edge
+                    best_edge = None
+                    best_dist = w  # max possible
+                    for edge_name, (target_fn, dist_fn) in sealed_edges.items():
+                        if edge_name in seed_edges:
+                            continue  # never extend toward the sea edge
+                        d = dist_fn(ex, ey)
+                        if d < best_dist:
+                            best_dist = d
+                            best_edge = (edge_name, target_fn)
+                    if best_edge and best_dist < w * 0.6:
+                        _, target_fn = best_edge
+                        draw.line([(ex, ey), target_fn(ex, ey)], fill=200, width=6)
 
             # Morphological closing: dilate then erode with the same kernel.
             # Permanently bridges inter-island or sub-pixel coastline gaps up to

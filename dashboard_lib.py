@@ -5960,39 +5960,19 @@ def _fetch_wateroffice_year(station_id, year):
     table view (wateroffice.ec.gc.ca).  Returns {date: float} of daily means
     or an empty dict on failure.
 
-    The site shows a disclaimer page on the first visit; we accept it with a
-    session POST so subsequent requests receive actual data.
+    The site gates data behind a disclaimer page on cookie-less requests.
+    Strategy: GET the data URL; if the response is the disclaimer page
+    (short / missing data-order attributes), parse its form fields and POST
+    acceptance to disclaimer_e.html, then re-fetch.
+
+    Table structure confirmed by browser inspection:
+      <td class="sorting_1">2026-01-15 12:00:00</td>
+      <td data-order="10.234">10.234</td>  ← water level column
+    All rows are server-rendered (no AJAX); DataTables paginates client-side.
     """
-    import datetime as _dt, re as _re, csv as _csv
+    import datetime as _dt, re as _re
 
     end_date = _dt.date.today().strftime("%Y-%m-%d")
-    session = requests.Session()
-    session.headers["User-Agent"] = "Mozilla/5.0 (compatible; alfred-portal/1.0)"
-
-    # Step 1 — accept the disclaimer so the session gets the required cookie.
-    try:
-        disc = session.get("https://wateroffice.ec.gc.ca/disclaimer_e.html", timeout=20)
-        # Extract any hidden form fields, then post acceptance
-        hidden = dict(_re.findall(
-            r'<input[^>]+type=["\']hidden["\'][^>]+name=["\']([^"\']+)["\'][^>]+value=["\']([^"\']*)["\']',
-            disc.text,
-        ))
-        # Try reverse attribute order too
-        hidden.update(dict(_re.findall(
-            r'<input[^>]+name=["\']([^"\']+)["\'][^>]+type=["\']hidden["\'][^>]+value=["\']([^"\']*)["\']',
-            disc.text,
-        )))
-        form_action = _re.search(r'<form[^>]+action=["\']([^"\']+)["\']', disc.text)
-        post_url = (form_action.group(1) if form_action else "/disclaimer_e.html").strip()
-        if not post_url.startswith("http"):
-            post_url = "https://wateroffice.ec.gc.ca" + post_url
-        hidden["disclaimer"] = "1"
-        session.post(post_url, data=hidden, timeout=20, allow_redirects=True)
-        print(f"HYDROMETRIC CLIM [{station_id}]: WO disclaimer accepted, cookies={list(session.cookies.keys())}")
-    except Exception as _e:
-        print(f"HYDROMETRIC CLIM [{station_id}]: WO disclaimer step failed: {_e}")
-
-    # Step 2 — fetch the data table for the full year
     data_url = "https://wateroffice.ec.gc.ca/report/real_time_e.html"
     params = {
         "stn": station_id,
@@ -6002,38 +5982,62 @@ def _fetch_wateroffice_year(station_id, year):
         "prm2": 47,   # Discharge (m³/s)
         "mode": "Table",
     }
-    resp = session.get(data_url, params=params, timeout=60)
-    resp.raise_for_status()
-    snippet = resp.text[:200].replace("\n", " ")
-    print(f"HYDROMETRIC CLIM [{station_id}]: WO data status={resp.status_code} "
-          f"len={len(resp.text)} snippet={snippet!r}")
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; alfred-portal/1.0)"}
 
-    # Parse: try CSV reader first, then HTML regex
-    daily = {}
-    lines = resp.text.splitlines()
-    for row in _csv.reader(lines):
-        if len(row) < 3:
-            continue
-        for date_col, val_col in [(1, 2), (0, 1)]:
-            try:
-                d = _dt.date.fromisoformat(row[date_col].strip()[:10])
-                if d.year == year:
-                    daily.setdefault(d, []).append(float(row[val_col].strip()))
-                    break
-            except Exception:
-                continue
+    session = requests.Session()
+    session.headers.update(headers)
 
-    if not daily:
-        for date_str, val_str in _re.findall(
-            r'(\d{4}-\d{2}-\d{2})[^<"]*?[<",\s]+([0-9]+\.[0-9]+)',
-            resp.text,
-        ):
+    def _parse_data(html):
+        """Extract {date: [values]} from the server-rendered table."""
+        # Primary: <td class="sorting_1">DATE</td><td data-order="VALUE">
+        hits = _re.findall(
+            r'sorting_1">\s*(\d{4}-\d{2}-\d{2})[^<]*</td>\s*<td[^>]+data-order="([0-9.]+)"',
+            html,
+        )
+        daily = {}
+        for date_str, val_str in hits:
             try:
                 d = _dt.date.fromisoformat(date_str)
                 if d.year == year:
                     daily.setdefault(d, []).append(float(val_str))
             except Exception:
                 continue
+        return daily
+
+    resp = session.get(data_url, params=params, timeout=60)
+    resp.raise_for_status()
+    daily = _parse_data(resp.text)
+
+    if not daily:
+        # Likely got the disclaimer page — accept it and retry.
+        print(f"HYDROMETRIC CLIM [{station_id}]: WO got disclaimer (len={len(resp.text)}), accepting...")
+        # Parse hidden fields from the disclaimer HTML
+        hidden = {}
+        for pat in [
+            r'<input[^>]+type=["\']hidden["\'][^>]+name=["\']([^"\']+)["\'][^>]+value=["\']([^"\']*)["\']',
+            r'<input[^>]+name=["\']([^"\']+)["\'][^>]+type=["\']hidden["\'][^>]+value=["\']([^"\']*)["\']',
+        ]:
+            hidden.update(_re.findall(pat, resp.text))
+        # Find the "I agree" submit button name/value
+        agree = _re.search(r'<(?:input|button)[^>]+(?:name=["\']([^"\']+)["\'][^>]+value=["\']([^"\']*)["\']|value=["\']([^"\']*)["\'][^>]+name=["\']([^"\']+)["\'])[^>]*(?:agree|submit)[^>]*>', resp.text, _re.I)
+        if agree:
+            groups = [g for g in agree.groups() if g]
+            if len(groups) >= 2:
+                hidden[groups[0]] = groups[1]
+        # POST acceptance — disclaimer_e.html accepts POST only (returns 405 on GET)
+        session.post(
+            "https://wateroffice.ec.gc.ca/disclaimer_e.html",
+            data=hidden,
+            timeout=20,
+            allow_redirects=True,
+        )
+        print(f"HYDROMETRIC CLIM [{station_id}]: WO disclaimer posted, cookies={list(session.cookies.keys())}")
+        # Re-fetch data
+        resp2 = session.get(data_url, params=params, timeout=60)
+        resp2.raise_for_status()
+        daily = _parse_data(resp2.text)
+        snippet = resp2.text[:150].replace("\n", " ")
+        print(f"HYDROMETRIC CLIM [{station_id}]: WO retry len={len(resp2.text)} snippet={snippet!r}")
 
     result = {d: sum(vs) / len(vs) for d, vs in daily.items()}
     print(f"HYDROMETRIC CLIM [{station_id}]: WO gave {len(result)} days for {year}")

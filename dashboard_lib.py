@@ -7024,23 +7024,22 @@ def build_aqi_gauge_png(aqi, label):
 
         # Official US AQI bands: (max_aqi, label, hex_color)
         BANDS = [
-            (50,  "Good",                          "#00E400"),
-            (100, "Moderate",                      "#FFFF00"),
-            (150, "Unhealthy for\nSensitive Groups","#FF7E00"),
-            (200, "Unhealthy",                     "#FF0000"),
-            (300, "Very\nUnhealthy",               "#8F3F97"),
-            (500, "Hazardous",                     "#7E0023"),
+            (50,  "Good",                                    "#00E400"),
+            (100, "Moderate",                                "#FFFF00"),
+            (150, "Unhealthy\nfor Sensitive\nGroups",        "#FF7E00"),
+            (200, "Unhealthy",                               "#FF0000"),
+            (300, "Very\nUnhealthy",                         "#8F3F97"),
+            (500, "Hazardous",                               "#7E0023"),
         ]
         BREAKPOINTS = [0, 50, 100, 150, 200, 300, 500]
 
         NOTION_GRAY = "#787774"
-        # Thin bar: height 0.12 of axis unit; dot radius larger than bar height
-        BAR_Y   = 0.42   # bar centre (bottom of figure space)
-        BAR_H   = 0.10   # thin bar height
-        DOT_Y   = BAR_Y  # dot sits on bar centre
-        LABEL_Y = BAR_Y + 0.26  # label above dot
+        BAR_Y   = 0.55   # bar centre — pushed up to leave room for labels below
+        BAR_H   = 0.08
+        DOT_Y   = BAR_Y
+        LABEL_Y = BAR_Y + 0.22  # label above dot
 
-        fig, ax = _plt.subplots(figsize=(7, 0.90), dpi=150)
+        fig, ax = _plt.subplots(figsize=(7, 1.20), dpi=150)
         fig.patch.set_facecolor("white")
         ax.set_facecolor("white")
         ax.set_xlim(0, 500)
@@ -7057,10 +7056,10 @@ def build_aqi_gauge_png(aqi, label):
                 facecolor=color, edgecolor="white", linewidth=0.6,
             )
             ax.add_patch(rect)
-            # Category label below bar
+            # Category label below bar — extra gap so it clears the dot
             cx = (bp_min + bp_max) / 2
-            ax.text(cx, BAR_Y - BAR_H / 2 - 0.03, blabel,
-                    ha="center", va="top", fontsize=5.5,
+            ax.text(cx, BAR_Y - BAR_H / 2 - 0.08, blabel,
+                    ha="center", va="top", fontsize=7,
                     color=NOTION_GRAY, multialignment="center")
 
         # Determine dot fill color from the band the AQI falls in
@@ -7082,7 +7081,6 @@ def build_aqi_gauge_png(aqi, label):
         ax.text(dot_x, LABEL_Y, label, ha="center", va="bottom",
                 fontsize=7.0, color=NOTION_GRAY, fontweight="bold")
 
-        # "Air quality" label on the left
         ax.text(-8, BAR_Y, "Air\nquality", ha="right", va="center",
                 fontsize=7.0, color=NOTION_GRAY, multialignment="center")
 

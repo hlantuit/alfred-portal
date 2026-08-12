@@ -190,6 +190,7 @@ def main():
             "dashboard": c.get("public_notion_url", f"https://www.notion.so/{c['notion_page_id']}"),
         }
         for c in communities
+        if not c.get("hidden")
     ]
     sites_path = os.path.join(args.out_dir, "sites.json")
     with open(sites_path, "w") as f:

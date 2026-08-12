@@ -4582,210 +4582,89 @@ def add_ice_classification_legend(png_bytes, ice_label="Sea ice"):
 def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_width_m, output_size_px,
                    sea_seed_from="top", sea_seed_points=None):
     """
-    Rasterises the coastline GeoJSON as thick lines on a binary mask, then
-    flood-fills from one or more edge pixels to identify the sea region.
-    Returns a boolean numpy array, True = sea pixel, False = land pixel.
-    On any failure returns all-True (treat everything as sea).
+    Builds a boolean land/sea mask using Natural Earth 10 m land polygons.
+    True = sea pixel, False = land pixel.
+    On any failure returns all-True (treat everything as sea — safe default).
 
-    sea_seed_from: which image edge(s) to seed the flood fill from.
-      Single value or comma-separated string of values:
-      "top"         — north edge (default; sea is north)
-      "bottom"      — south edge (sea is south, e.g. Sachs Harbour)
-      "left"        — west edge
-      "right"       — east edge
-      "bottom,left" — seeds from both south and west edges (Sachs Harbour,
-                      where the western ocean is disconnected from the south)
+    coastline_geojson_path, sea_seed_from, sea_seed_points are accepted for
+    backwards compatibility but ignored — the OSM coastline overlay is drawn
+    separately by annotate_plain_image.
     """
-    import json
     import numpy as np
-    from PIL import Image as _PI, ImageDraw as _PID, ImageFilter as _PIF
-
-    # Normalise to a set of edge names
-    if isinstance(sea_seed_from, (list, tuple)):
-        seed_edges = set(sea_seed_from)
-    else:
-        seed_edges = {s.strip() for s in str(sea_seed_from).split(",")}
+    from PIL import Image as _PI, ImageDraw as _PID
 
     w = h = output_size_px
-    mask = _PI.new("L", (w, h), 0)
-    sea_seed_polygons_px = []
 
-    if coastline_geojson_path:
-        try:
-            def _to_px(lon_val, lat_val):
-                x, y = latlon_to_utm(lat_val, lon_val, zone=utm_zone)
-                px = int((x - (center_x - half_width_m)) / (2 * half_width_m) * w)
-                py = int(h - (y - (center_y - half_width_m)) / (2 * half_width_m) * h)
-                return (max(-10, min(w + 10, px)), max(-10, min(h + 10, py)))
+    try:
+        import cartopy.io.shapereader as _shpreader
+        from shapely.geometry import box as _box
 
-            with open(coastline_geojson_path) as f:
-                geojson = json.load(f)
+        # Frame bounding box in UTM, then convert corners to lon/lat for the
+        # spatial filter.  We add a 10 % margin so polygons that straddle the
+        # frame edge are included.
+        margin = half_width_m * 0.10
+        corners_utm = [
+            (center_x - half_width_m - margin, center_y - half_width_m - margin),
+            (center_x + half_width_m + margin, center_y - half_width_m - margin),
+            (center_x + half_width_m + margin, center_y + half_width_m + margin),
+            (center_x - half_width_m - margin, center_y + half_width_m + margin),
+        ]
+        import pyproj as _pyproj
+        _proj = _pyproj.Proj(proj="utm", zone=utm_zone, ellps="WGS84")
+        corners_ll = [_proj(x, y, inverse=True) for x, y in corners_utm]
+        min_lon = min(c[0] for c in corners_ll)
+        max_lon = max(c[0] for c in corners_ll)
+        min_lat = min(c[1] for c in corners_ll)
+        max_lat = max(c[1] for c in corners_ll)
+        frame_box = _box(min_lon, min_lat, max_lon, max_lat)
 
-            draw = _PID.Draw(mask)
-            all_lines_px = []
-            sea_seed_polygons_px = []  # interior-point seeds from bay/lagoon polygons
-            for feature in geojson.get("features", []):
-                geom = feature.get("geometry", {})
-                props = feature.get("properties", {})
-                is_sea_seed = props.get("sea_seed", False)
-                gt = geom.get("type")
-                coords = geom.get("coordinates", [])
+        # Download (once, cached by cartopy) Natural Earth 10 m land polygons.
+        land_shp = _shpreader.natural_earth(
+            resolution="10m", category="physical", name="land"
+        )
+        land_records = list(_shpreader.Reader(land_shp).geometries())
 
-                if is_sea_seed:
-                    # Sea-body polygon (bay, lagoon, etc.) — record an interior
-                    # point from each ring so we can seed the flood fill from inside.
-                    rings = []
-                    if gt == "Polygon":
-                        rings = coords[:1]   # outer ring only
-                    elif gt == "MultiPolygon":
-                        rings = [poly[0] for poly in coords]
-                    for ring in rings:
-                        if len(ring) >= 3:
-                            # Approximate centroid of the ring
-                            avg_lon = sum(c[0] for c in ring) / len(ring)
-                            avg_lat = sum(c[1] for c in ring) / len(ring)
-                            sea_seed_polygons_px.append(_to_px(avg_lon, avg_lat))
-                    continue  # do NOT draw these as barriers
+        # Filter to polygons that intersect the frame bbox.
+        land_in_frame = [g for g in land_records if g.intersects(frame_box)]
+        print(f"SEA MASK: {len(land_in_frame)} Natural Earth land polygon(s) intersect frame")
 
-                if gt == "LineString":
-                    lines = [coords]
-                elif gt == "MultiLineString":
-                    lines = coords
-                elif gt == "Polygon":
-                    lines = coords  # outer ring + holes, drawn as closed lines (coastline)
-                elif gt == "MultiPolygon":
-                    lines = [ring for poly in coords for ring in poly]
-                else:
-                    lines = []
-                for line in lines:
-                    pts = [_to_px(c[0], c[1]) for c in line]
-                    if len(pts) >= 2:
-                        draw.line(pts, fill=200, width=6)
-                        all_lines_px.append(pts)
+        # Rasterize: for each land polygon, compute pixel coords and fill.
+        mask = _PI.new("L", (w, h), 128)  # start all-sea (128)
+        draw = _PID.Draw(mask)
 
-            # Extend every "hanging" coast endpoint to the nearest sealed
-            # (non-seed) frame edge.  OSM natural=coastline data often ends
-            # mid-frame for remote Arctic coasts; without this the flood-fill
-            # leaks past the hanging tip into land areas.
-            # The extension is drawn only on the mask (not the visual overlay).
-            # We extend to the nearest non-seed edge so we never draw a line
-            # through open water toward a seed (sea) edge.
-            sealed_edges = {
-                "top":    (lambda ex, ey: (ex, 0),          lambda ex, ey: ey),
-                "bottom": (lambda ex, ey: (ex, h - 1),      lambda ex, ey: h - 1 - ey),
-                "left":   (lambda ex, ey: (0, ey),           lambda ex, ey: ex),
-                "right":  (lambda ex, ey: (w - 1, ey),      lambda ex, ey: w - 1 - ex),
-            }
-            for pts in all_lines_px:
-                for raw_ex, raw_ey in (pts[0], pts[-1]):
-                    ex = max(0, min(w - 1, raw_ex))
-                    ey = max(0, min(h - 1, raw_ey))
-                    # Find the nearest sealed (non-seed) edge
-                    best_edge = None
-                    best_dist = w  # max possible
-                    for edge_name, (target_fn, dist_fn) in sealed_edges.items():
-                        if edge_name in seed_edges:
-                            continue  # never extend toward the sea edge
-                        d = dist_fn(ex, ey)
-                        if d < best_dist:
-                            best_dist = d
-                            best_edge = (edge_name, target_fn)
-                    if best_edge and best_dist < w * 0.6:
-                        _, target_fn = best_edge
-                        draw.line([(ex, ey), target_fn(ex, ey)], fill=200, width=6)
+        def _ll_to_px(lon_val, lat_val):
+            x, y = latlon_to_utm(lat_val, lon_val, zone=utm_zone)
+            px = int((x - (center_x - half_width_m)) / (2 * half_width_m) * w)
+            py = int(h - (y - (center_y - half_width_m)) / (2 * half_width_m) * h)
+            return (px, py)
 
-            # Morphological closing: dilate then erode with the same kernel.
-            # Permanently bridges inter-island or sub-pixel coastline gaps up to
-            # ~12 px (~3.5 km at 150 km scale) without thickening the barrier.
-            mask = mask.filter(_PIF.MaxFilter(25))
-            mask = mask.filter(_PIF.MinFilter(25))
-        except Exception as e:
-            print(f"SEA MASK COASTLINE RASTERISE FAILED: {e}")
+        def _rasterize_polygon(poly):
+            from shapely.geometry import Polygon as _SPoly, MultiPolygon as _SMP
+            if isinstance(poly, _SMP):
+                for part in poly.geoms:
+                    _rasterize_polygon(part)
+                return
+            if not isinstance(poly, _SPoly):
+                return
+            # Outer ring
+            exterior = list(poly.exterior.coords)
+            pts = [_ll_to_px(lon, lat) for lon, lat in exterior]
+            if len(pts) >= 3:
+                draw.polygon(pts, fill=0)   # 0 = land
+            # Holes (e.g. lakes inside islands) → restore to sea
+            for interior in poly.interiors:
+                hole_pts = [_ll_to_px(lon, lat) for lon, lat in interior.coords]
+                if len(hole_pts) >= 3:
+                    draw.polygon(hole_pts, fill=128)
 
-    # Seal every non-seed edge so the flood fill can't escape via the border.
-    _draw2 = _PID.Draw(mask)
-    _e = 4
-    _all_edge_rects = {
-        "top":    (0, 0, w - 1, _e),
-        "bottom": (0, h - 1 - _e, w - 1, h - 1),
-        "left":   (0, 0, _e, h - 1),
-        "right":  (w - 1 - _e, 0, w - 1, h - 1),
-    }
-    for edge_name, rect in _all_edge_rects.items():
-        if edge_name not in seed_edges:
-            _draw2.rectangle(rect, fill=200)
+        for land_geom in land_in_frame:
+            _rasterize_polygon(land_geom)
 
-    # Seed points: three per edge (25 %, 50 %, 75 % along the edge) for
-    # robustness when the ocean region is disconnected at the centre point.
-    _edge_seeds = {
-        "top":    [(w // 4, 3), (w // 2, 3), (3 * w // 4, 3)],
-        "bottom": [(w // 4, h - 4), (w // 2, h - 4), (3 * w // 4, h - 4)],
-        "left":   [(3, h // 4), (3, h // 2), (3, 3 * h // 4)],
-        "right":  [(w - 4, h // 4), (w - 4, h // 2), (w - 4, 3 * h // 4)],
-    }
-    any_filled = False
-    for edge in seed_edges:
-        for seed in _edge_seeds.get(edge, []):
-            try:
-                _PID.floodfill(mask, seed, 128)
-                any_filled = True
-            except Exception as e:
-                print(f"SEA MASK FLOOD FILL FAILED ({edge} {seed}): {e}")
+        return np.array(mask) == 128
 
-    if not any_filled:
+    except Exception as e:
+        print(f"SEA MASK (Natural Earth) FAILED: {e} — treating entire frame as sea")
         return np.ones((h, w), dtype=bool)
-
-    # Secondary flood fill: seed from OSM bay/lagoon polygons tagged sea_seed=True,
-    # then from any explicit lat/lon points in sea_seed_points config.
-    # Both reach enclosed coastal water bodies (lagoons behind barrier beaches)
-    # that the edge flood fill cannot access.
-    if sea_seed_points and coastline_geojson_path:
-        # Convert explicit config lat/lon points to pixel coordinates and append
-        try:
-            def _to_px_ll(lat_val, lon_val):
-                import math as _math
-                x, y = latlon_to_utm(lat_val, lon_val, zone=utm_zone)
-                px = int((x - (center_x - half_width_m)) / (2 * half_width_m) * w)
-                py = int(h - (y - (center_y - half_width_m)) / (2 * half_width_m) * h)
-                return (px, py)
-            for pt in sea_seed_points:
-                sea_seed_polygons_px.append(_to_px_ll(pt[0], pt[1]))
-        except Exception as _spe:
-            print(f"SEA MASK explicit seed_points conversion failed: {_spe}")
-    elif sea_seed_points:
-        # No coastline file — _to_px was never defined; define it inline
-        try:
-            _ssf_extra = []
-            for pt in sea_seed_points:
-                x, y = latlon_to_utm(pt[0], pt[1], zone=utm_zone)
-                px = int((x - (center_x - half_width_m)) / (2 * half_width_m) * w)
-                py = int(h - (y - (center_y - half_width_m)) / (2 * half_width_m) * h)
-                _ssf_extra.append((px, py))
-            sea_seed_polygons_px.extend(_ssf_extra)
-        except Exception as _spe:
-            print(f"SEA MASK explicit seed_points conversion failed: {_spe}")
-
-    if sea_seed_polygons_px:
-        _arr = np.array(mask)
-        for _cpx, _cpy in sea_seed_polygons_px:
-            _seeded = False
-            for _r in range(0, min(w, h) // 4, 3):
-                for _dx, _dy in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1),
-                                  (1, 1), (-1, 1), (1, -1), (-1, -1)]:
-                    _sx = int(_cpx) + _dx * _r
-                    _sy = int(_cpy) + _dy * _r
-                    if 0 <= _sx < w and 0 <= _sy < h and _arr[_sy, _sx] == 0:
-                        try:
-                            _PID.floodfill(mask, (_sx, _sy), 128)
-                            _arr = np.array(mask)
-                        except Exception as _fe:
-                            print(f"SEA MASK SECONDARY SEED FAILED at ({_sx},{_sy}): {_fe}")
-                        _seeded = True
-                        break
-                if _seeded:
-                    break
-
-    return np.array(mask) == 128
 
 
 def _nice_scale_km(half_width_m):

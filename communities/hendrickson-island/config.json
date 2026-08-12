@@ -1,70 +1,105 @@
-{
-  "id": "hendrickson-island",
-  "name": "Hendrickson Island",
-  "site_display_name": "Hendrickson Island",
-  "lat": 69.478691,
-  "lon": -133.615599,
-  "tz_name": "America/Inuvik",
-  "type": "coastal",
-  "public_notion_url": "https://snapdragon-hardboard-204.notion.site/hendrickson-island-environmental-dashboard",
-  "notion_page_id": "3b900194631e80338287dc1a4ae65d7e",
-  "logo_url": "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg",
-  "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
-  "tide_station_code": "06485",
-  "tide_station_name": "Tuktoyaktuk",
-  "marine_zone_id": "14600",
-  "marine_zone_name": "Tuktoyaktuk - southern half",
-  "marine_exclude_title_patterns": ["northern half"],
-  "water_level_yearly_mean": null,
-  "wave_lat": 70.0,
-  "wave_lon": -133.6,
-  "hydrometric_stations": [
-    {
-      "station_id": "10LC012",
-      "provterr": "NT",
-      "river_name": "Mackenzie River, Middle Channel at Tununuk Point",
-      "heading": "💧 Mackenzie River — Water Level at Tununuk Point (Middle Channel)",
-      "climatology": true
-    }
-  ],
-  "map_points": [
-    [69.478691, -133.615599, "Hendrickson Island", -28],
-    [69.4541, -133.0374, "Tuktoyaktuk", -10],
-    [68.360741, -133.723022, "Inuvik", -10, -90],
-    [68.226653, -135.003294, "Aklavik", -10]
-  ],
-  "map_reference_lines": [],
-  "coastline_geojson_path": "coastline_data.geojson",
-  "utm_zone": 8,
-  "utm_epsg": "32608",
-  "utm_center_x": 554158,
-  "utm_center_y": 7708353,
-  "modis_center_x": -2245476,
-  "modis_center_y": -54267,
-  "modis_rotation_deg": 92.0,
-  "modis_bbox_3413": "-2425476,-234267,-2065476,125733",
-  "blocks": [
-    "weather",
-    "alerts",
-    "gem_forecast",
-    "uv",
-    "aurora",
-    "marine",
-    "wave_forecast",
-    "water_level",
-    "hydrometric",
-    "modis",
-    "sentinel1",
-    "sea_ice",
-    "sea_ice_zoom",
-    "wildfire",
-    "temperature",
-    "wind_chart"
-  ],
-  "sea_seed_from": "top",
-  "sea_seed_points": [
-    [69.38, -133.70],
-    [69.40, -133.55],
-    [69.38, -133.42]
-  ]
+﻿{
+    "id":  "hendrickson-island",
+    "name":  "Hendrickson Island",
+    "site_display_name":  "Hendrickson Island",
+    "lat":  69.478691,
+    "lon":  -133.615599,
+    "tz_name":  "America/Inuvik",
+    "type":  "coastal",
+    "public_notion_url":  "https://snapdragon-hardboard-204.notion.site/hendrickson-island-environmental-dashboard",
+    "notion_page_id":  "3b900194631e80338287dc1a4ae65d7e",
+    "logo_url":  "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg",
+    "institution_text":  "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
+    "tide_station_code":  "06485",
+    "tide_station_name":  "Tuktoyaktuk",
+    "marine_zone_id":  "14600",
+    "marine_zone_name":  "Tuktoyaktuk - southern half",
+    "marine_exclude_title_patterns":  [
+                                          "northern half"
+                                      ],
+    "water_level_yearly_mean":  null,
+    "wave_lat":  70.0,
+    "wave_lon":  -133.6,
+    "hydrometric_stations":  [
+                                 {
+                                     "station_id":  "10LC012",
+                                     "provterr":  "NT",
+                                     "river_name":  "Mackenzie River, Middle Channel at Tununuk Point",
+                                     "heading":  "ðŸ’§ Mackenzie River â€” Water Level at Tununuk Point (Middle Channel)",
+                                     "climatology":  true
+                                 }
+                             ],
+    "map_points":  [
+                       [
+                           69.478691,
+                           -133.615599,
+                           "Hendrickson Island",
+                           -28
+                       ],
+                       [
+                           69.4541,
+                           -133.0374,
+                           "Tuktoyaktuk",
+                           -10
+                       ],
+                       [
+                           68.360741,
+                           -133.723022,
+                           "Inuvik",
+                           -10,
+                           -90
+                       ],
+                       [
+                           68.226653,
+                           -135.003294,
+                           "Aklavik",
+                           -10
+                       ]
+                   ],
+    "map_reference_lines":  [
+
+                            ],
+    "coastline_geojson_path":  "coastline_data.geojson",
+    "utm_zone":  8,
+    "utm_epsg":  "32608",
+    "utm_center_x":  554158,
+    "utm_center_y":  7708353,
+    "modis_center_x":  -2245476,
+    "modis_center_y":  -54267,
+    "modis_rotation_deg":  92.0,
+    "modis_bbox_3413":  "-2425476,-234267,-2065476,125733",
+    "blocks":  [
+                   "weather",
+                   "alerts",
+                   "gem_forecast",
+                   "uv",
+                   "aurora",
+                   "marine",
+                   "wave_forecast",
+                   "water_level",
+                   "hydrometric",
+                   "mosquito",
+                   "modis",
+                   "sentinel1",
+                   "sea_ice",
+                   "sea_ice_zoom",
+                   "wildfire",
+                   "temperature",
+                   "wind_chart"
+               ],
+    "sea_seed_from":  "top",
+    "sea_seed_points":  [
+                            [
+                                69.38,
+                                -133.70
+                            ],
+                            [
+                                69.40,
+                                -133.55
+                            ],
+                            [
+                                69.38,
+                                -133.42
+                            ]
+                        ]
 }

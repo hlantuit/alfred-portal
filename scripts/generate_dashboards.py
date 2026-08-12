@@ -1031,6 +1031,9 @@ def update_community(community, now_utc):
                 blocks.append(lib.link_paragraph("→ Station data", wsc_url,
                                                   prefix=clim_caption + "  ", prefix_gray=True))
 
+    if "mosquito" in enabled and gem_forecast:
+        blocks += lib.build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label)
+
     if "harvesting" in enabled:
         blocks += lib.build_harvesting_section(now_utc, site_id=sid)
 

@@ -1896,7 +1896,7 @@ def build_gem_forecast_charts(hourly, tz_name, now_utc=None, cloud_cover_vals=No
         hours = list(range(len(times)))               # 0, 1, 2, … hours from now
 
         temp_b  = _gem_chart(hours, _safe("temperature"), "#E8A838", "Temperature (°C)",  t0)
-        wind_b  = _gem_chart(hours, _safe("windspeed"),   "#4F9768", "Wind speed (km/h)", t0, ymin=0)
+        wind_b  = _gem_chart(hours, _safe("windspeed"),   "#337EA9", "Wind speed (km/h)", t0, ymin=0)
         press_b = _gem_chart(hours, _safe("pressure"),    "#C07038", "Pressure (hPa)",    t0, ymin=990)
 
         # Separate rain from snow: rain = API "rain" field (liquid only);
@@ -8168,6 +8168,160 @@ def build_harvesting_section(now_utc, site_id="shingle-point"):
     ]
     if chart_block:
         blocks.append(chart_block)
+    blocks.append(gray_caption(fallback or caption))
+    blocks.append(divider())
+    return blocks
+
+
+def _detect_snowmelt(daily_temps, year):
+    """
+    Returns the estimated snowmelt date as a date object, or None.
+    Rule: first date after May 1 where the 5-day running mean of daily
+    mean temperature exceeds 2 °C (Arctic Aedes emergence trigger).
+    daily_temps: {date_str: temp_c}
+    """
+    from datetime import date as _date, timedelta as _td
+    start = _date(year, 5, 1)
+    end   = _date(year, 9, 1)
+    d = start
+    window = []
+    while d < end:
+        t = daily_temps.get(d.strftime("%Y-%m-%d"))
+        window.append(t if t is not None else None)
+        if len(window) >= 5:
+            last5 = window[-5:]
+            if all(v is not None for v in last5) and sum(last5) / 5 > 2.0:
+                return d - _td(days=4)  # start of the window
+        d += _td(days=1)
+    return None
+
+
+def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label):
+    """
+    10-day mosquito biting activity forecast.
+    Index = seasonal_factor(days since snowmelt) × temp_factor(daily max T)
+            × wind_suppression(daily max wind).
+    Seasonal envelope: Gaussian centred on day 28 post-snowmelt (σ=16),
+    zeroed before day 7 and after day 70 — consistent with Arctic Aedes
+    nigripes / impiger phenology (Culler et al. 2015, Proc R Soc B).
+    """
+    import math as _math
+    from datetime import date as _date, timedelta as _td
+
+    NOTION_TEXT_GRAY  = "#787774"
+    NOTION_LIGHT_GRID = "#EDECEC"
+
+    # ── 1. Snowmelt detection ────────────────────────────────────────────
+    today = now_utc.date()
+    year  = today.year
+    if today < _date(year, 5, 1):
+        snowmelt_date      = None
+        days_since_melt_today = -999        # before season window opens
+    elif today > _date(year, 10, 1):
+        snowmelt_date      = None
+        days_since_melt_today = 999         # past season window
+    else:
+        _temps = fetch_daily_temps(lat, lon, _date(year, 5, 1), today)
+        snowmelt_date = _detect_snowmelt(_temps, year)
+        days_since_melt_today = (today - snowmelt_date).days if snowmelt_date else -1
+
+    # ── 2. Seasonal envelope ─────────────────────────────────────────────
+    def _seasonal(days):
+        if days < 7 or days > 70:
+            return 0.0
+        return _math.exp(-0.5 * ((days - 28) / 16) ** 2)
+
+    # ── 3. Per-day forecast ──────────────────────────────────────────────
+    daily     = gem_forecast.get("daily", {})
+    dates_str = daily.get("dates", [])
+    temp_maxes = daily.get("temp_max",  [])
+    wind_maxes = daily.get("windspeed", [])   # daily max wind km/h
+
+    n = min(10, len(dates_str))
+    activity, labels, colors = [], [], []
+
+    for i in range(n):
+        d = _date.fromisoformat(dates_str[i])
+        labels.append("Today" if i == 0 else d.strftime("%-d %b"))
+
+        days_from_melt = days_since_melt_today + i
+
+        t_max = temp_maxes[i] if i < len(temp_maxes) and temp_maxes[i] is not None else 0.0
+        w_max = wind_maxes[i] if i < len(wind_maxes) and wind_maxes[i] is not None else 0.0
+
+        # Temperature factor: 0 at ≤10 °C → 1.0 at ≥20 °C
+        temp_f = max(0.0, min(1.0, (t_max - 10) / 10))
+        # Wind suppression: 1.0 below 10 km/h → 0 above 18 km/h
+        wind_f = max(0.0, min(1.0, (18 - w_max) / 8))
+        # Seasonal envelope
+        seas_f = _seasonal(days_from_melt)
+
+        idx = round(temp_f * wind_f * seas_f * 100)
+        activity.append(idx)
+
+        if idx < 10:   colors.append("#BBBBBB")
+        elif idx < 30: colors.append("#F5C542")
+        elif idx < 60: colors.append("#E07840")
+        else:          colors.append("#C1440E")
+
+    # ── 4. Chart ─────────────────────────────────────────────────────────
+    try:
+        plt.rcParams["font.family"] = "DejaVu Sans"
+        fig, ax = plt.subplots(figsize=(8, 2.8), dpi=150)
+        fig.patch.set_alpha(0)
+        ax.set_facecolor("none")
+
+        ax.bar(range(n), activity, color=colors, width=0.65, zorder=3)
+        ax.set_ylim(0, 108)
+        ax.set_xticks(range(n))
+        ax.set_xticklabels(labels, fontsize=9, color=NOTION_TEXT_GRAY)
+        ax.set_yticks([0, 25, 50, 75, 100])
+        ax.set_yticklabels(["None", "Low", "Moderate", "High", "Very high"],
+                           fontsize=8, color=NOTION_TEXT_GRAY)
+        ax.yaxis.set_tick_params(length=0)
+        ax.xaxis.set_tick_params(length=0)
+        for sp in ax.spines.values():
+            sp.set_visible(False)
+        ax.yaxis.grid(True, color=NOTION_LIGHT_GRID, linewidth=0.8, zorder=0)
+        ax.set_axisbelow(True)
+
+        if snowmelt_date:
+            sm_str = snowmelt_date.strftime("%-d %b")
+            title = (f"🦟 Mosquito biting activity — {site_label} "
+                     f"(snowmelt ~{sm_str}, day {days_since_melt_today} of season)")
+        elif days_since_melt_today == -999:
+            title = f"🦟 Mosquito biting activity — {site_label} (before mosquito season)"
+        elif days_since_melt_today == 999:
+            title = f"🦟 Mosquito biting activity — {site_label} (season ended)"
+        else:
+            title = f"🦟 Mosquito biting activity — {site_label} (snowmelt not yet detected)"
+        ax.set_title(title, color=NOTION_TEXT_GRAY, fontsize=10, loc="left", pad=6)
+
+        fig.tight_layout()
+        png = fig_to_png_bytes(fig, white_bg=True)
+    except Exception as e:
+        print(f"MOSQUITO CHART FAILED: {e}")
+        png = None
+
+    caption = (
+        "Estimated biting intensity: seasonal position × temperature × wind suppression. "
+        "Based on Arctic Aedes (nigripes / impiger) phenology — Culler et al. 2015, Proc R Soc B. "
+        "Snowmelt estimated from ERA5 reanalysis (5-day mean > 2 °C after May 1). "
+        "Sources: GEM/ECMWF forecast (Open-Meteo), ERA5 (Open-Meteo archive)."
+    )
+    block, fallback = _upload_chart_or_caption(png, "mosquito_forecast.png",
+                                               "Mosquito activity chart unavailable.")
+    blocks = [
+        heading("🦟 Mosquito Biting Activity Forecast", level=2),
+        callout(
+            ["10-day forecast of estimated mosquito biting intensity, combining temperature, wind speed, "
+             "and time since estimated snowmelt. Arctic Aedes mosquitoes emerge 1–2 weeks after snowmelt "
+             "and remain active for approximately 8 weeks. Activity is suppressed above ~18 km/h wind."],
+            color="gray_background",
+        ),
+    ]
+    if block:
+        blocks.append(block)
     blocks.append(gray_caption(fallback or caption))
     blocks.append(divider())
     return blocks

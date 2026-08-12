@@ -1,71 +1,74 @@
-{
-  "id": "inuvik",
-  "name": "Inuvik",
-  "site_display_name": "Inuvik",
-  "lat": 68.360741,
-  "lon": -133.723022,
-  "tz_name": "America/Inuvik",
-  "type": "riverine",
-  "public_notion_url": "https://snapdragon-hardboard-204.notion.site/inuvik-environmental-dashboard",
-  "notion_page_id": "3a000194631e808eb6dad607f33c9e97",
-  "logo_url": "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg",
-  "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
-  "hydrometric_stations": [
-    {
-      "station_id": "10LC002",
-      "provterr": "NT",
-      "river_name": "Mackenzie River at Inuvik",
-      "heading": "\ud83d\udca7 Mackenzie River \u2014 Water Level at Inuvik"
-    }
-  ],
-  "map_points": [
-    [
-      68.360741,
-      -133.723022,
-      "Inuvik",
-      -28
-    ],
-    [
-      68.226653,
-      -135.003294,
-      "Aklavik",
-      -10
-    ],
-    [
-      68.749154,
-      -136.48508,
-      "Police Cabin Lake",
-      -10
-    ],
-    [
-      67.437781,
-      -134.895544,
-      "Fort McPherson",
-      -10
-    ]
-  ],
-  "map_reference_lines": [],
-  "coastline_geojson_path": "coastline_data.geojson",
-  "water_bodies_geojson_path": "water_bodies.geojson",
-  "utm_zone": 8,
-  "utm_epsg": "32608",
-  "utm_center_x": 552488,
-  "utm_center_y": 7556268,
-  "modis_center_x": -2370675,
-  "modis_center_y": -52845,
-  "modis_rotation_deg": 90.0,
-  "modis_bbox_3413": "-2550675,-232845,-2190675,127155",
-  "blocks": [
-    "weather",
-    "alerts",
-    "wildfire",
-    "gem_forecast",
-    "snow_depth",
-    "hydrometric",
-    "modis",
-    "sentinel1",
-    "lake_river_ice",
-    "temperature",
-    "wind_chart"
-  ]
+﻿{
+    "id":  "inuvik",
+    "name":  "Inuvik",
+    "site_display_name":  "Inuvik",
+    "lat":  68.360741,
+    "lon":  -133.723022,
+    "tz_name":  "America/Inuvik",
+    "type":  "riverine",
+    "public_notion_url":  "https://snapdragon-hardboard-204.notion.site/inuvik-environmental-dashboard",
+    "notion_page_id":  "3a000194631e808eb6dad607f33c9e97",
+    "logo_url":  "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg",
+    "institution_text":  "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
+    "hydrometric_stations":  [
+                                 {
+                                     "station_id":  "10LC002",
+                                     "provterr":  "NT",
+                                     "river_name":  "Mackenzie River at Inuvik",
+                                     "heading":  "💧 Mackenzie River — Water Level at Inuvik"
+                                 }
+                             ],
+    "map_points":  [
+                       [
+                           68.360741,
+                           -133.723022,
+                           "Inuvik",
+                           -28
+                       ],
+                       [
+                           68.226653,
+                           -135.003294,
+                           "Aklavik",
+                           -10
+                       ],
+                       [
+                           68.749154,
+                           -136.48508,
+                           "Police Cabin Lake",
+                           -10
+                       ],
+                       [
+                           67.437781,
+                           -134.895544,
+                           "Fort McPherson",
+                           -10
+                       ]
+                   ],
+    "map_reference_lines":  [
+
+                            ],
+    "coastline_geojson_path":  "coastline_data.geojson",
+    "water_bodies_geojson_path":  "water_bodies.geojson",
+    "utm_zone":  8,
+    "utm_epsg":  "32608",
+    "utm_center_x":  552488,
+    "utm_center_y":  7556268,
+    "modis_center_x":  -2370675,
+    "modis_center_y":  -52845,
+    "modis_rotation_deg":  90.0,
+    "modis_bbox_3413":  "-2550675,-232845,-2190675,127155",
+    "blocks":  [
+                   "weather",
+                   "alerts",
+                   "wildfire",
+                   "gem_forecast",
+                   "snow_depth",
+                   "hydrometric",
+                   "mosquito",
+                   "modis",
+                   "sentinel1",
+                   "lake_river_ice",
+                   "temperature",
+                   "wind_chart"
+               ]
 }

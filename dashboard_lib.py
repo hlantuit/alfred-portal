@@ -8225,11 +8225,23 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label)
         snowmelt_date = _detect_snowmelt(_temps, year)
         days_since_melt_today = (today - snowmelt_date).days if snowmelt_date else -1
 
-    # ── 2. Seasonal envelope ─────────────────────────────────────────────
+    # ── 2. Seasonal envelope (latitude-dependent) ────────────────────────
+    # Piecewise: fast rise days 7-21, plateau 21-28, linear decline 28→end.
+    # Season end scales with latitude: high Arctic has a much shorter active
+    # period than subarctic — interpolated linearly between anchors.
+    #   60 °N (boreal/subarctic): ends ~day 140
+    #   75 °N (high Arctic):      ends ~day 80
+    _lat_clamped = max(60.0, min(75.0, lat))
+    _season_end = round(140 - (_lat_clamped - 60) * (140 - 80) / 15)
+
     def _seasonal(days):
-        if days < 7 or days > 70:
+        if days < 7 or days > _season_end:
             return 0.0
-        return _math.exp(-0.5 * ((days - 28) / 16) ** 2)
+        if days <= 21:
+            return (days - 7) / 14
+        if days <= 28:
+            return 1.0
+        return max(0.0, (_season_end - days) / max(1, _season_end - 28))
 
     # ── 3. Per-day forecast ──────────────────────────────────────────────
     daily     = gem_forecast.get("daily", {})
@@ -8242,7 +8254,7 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label)
 
     for i in range(n):
         d = _date.fromisoformat(dates_str[i])
-        labels.append("Today" if i == 0 else d.strftime("%-d %b"))
+        labels.append("Today" if i == 0 else d.strftime("%a %-d"))
 
         days_from_melt = days_since_melt_today + i
 
@@ -8253,15 +8265,22 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label)
         temp_f = max(0.0, min(1.0, (t_max - 10) / 10))
         # Wind suppression: 1.0 below 10 km/h → 0 above 18 km/h
         wind_f = max(0.0, min(1.0, (18 - w_max) / 8))
-        # Seasonal envelope
+        # Seasonal gate: 0 outside season, otherwise how far into decline phase.
+        # Used as a damping multiplier rather than a straight multiplier so that
+        # late-season warm/calm days still show meaningful (low) activity rather
+        # than collapsing to zero due to multiplicative rounding.
         seas_f = _seasonal(days_from_melt)
 
-        idx = round(temp_f * wind_f * seas_f * 100)
+        # Population level (seasonal envelope) × daily activity fraction
+        # (temperature + wind conditions). Separating the two avoids the
+        # compound near-zero problem of multiplying small seasonal × small temp.
+        # Range: 0 (outside season) → 50 (peak, cold/windy) → 100 (peak, warm/calm).
+        idx = round(seas_f * 50 * (1 + temp_f * wind_f))
         activity.append(idx)
 
-        if idx < 10:   colors.append("#BBBBBB")
-        elif idx < 30: colors.append("#F5C542")
-        elif idx < 60: colors.append("#E07840")
+        if idx < 5:    colors.append("#BBBBBB")
+        elif idx < 25: colors.append("#F5C542")
+        elif idx < 55: colors.append("#E07840")
         else:          colors.append("#C1440E")
 
     # ── 4. Chart ─────────────────────────────────────────────────────────

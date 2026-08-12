@@ -6310,14 +6310,23 @@ def build_hydrometric_climatology_chart(doy_values, current_year_list, station_i
         if len(cur_doys):
             ax.plot(cur_doys, cur_vals, color=RIVER_TEAL, linewidth=2.0, zorder=3)
 
-        # All-time record high — computed from all historical + current-year values
-        all_hist_vals = [v for vals in doy_values.values() for v in vals]
-        all_cur_vals  = [v for _, v in current_year_list]
-        record_high   = max(all_hist_vals + all_cur_vals) if (all_hist_vals or all_cur_vals) else None
+        # Per-day record high curve — max value ever recorded on each day of year,
+        # including the current year.  Smoothed with the same 7-day window as the
+        # mean/std so it reads as a continuous envelope, not a noisy scatter.
+        rec_highs = _np.full(365, _np.nan)
+        for i, doy in enumerate(doys):
+            vals = doy_values.get(doy, [])
+            # Also include any current-year reading on this doy
+            cur_on_doy = [v for d, v in current_year_list if int(round(d)) == doy]
+            all_vals = list(vals) + cur_on_doy
+            if all_vals:
+                rec_highs[i] = max(all_vals)
+        rec_highs_s = _smooth(rec_highs)
+        has_record = ~_np.isnan(rec_highs_s)
 
-        if record_high is not None:
-            ax.axhline(record_high, color="#CC2936", linewidth=1.2,
-                       linestyle="--", alpha=0.85, zorder=5)
+        if has_record.any():
+            ax.plot(doys[has_record], rec_highs_s[has_record],
+                    color="#CC2936", linewidth=1.2, linestyle="--", alpha=0.85, zorder=5)
 
         if now_doy:
             ax.axvline(now_doy, color=NOTION_TEXT_GRAY, linewidth=1.0,
@@ -6346,10 +6355,11 @@ def build_hydrometric_climatology_chart(doy_values, current_year_list, station_i
         ylabel = "Discharge (m³/s)" if unit == "discharge" else "Water level (m)"
         ax.set_ylabel(ylabel, fontsize=13, color=NOTION_TEXT_GRAY)
 
-        # Label the record-high line at the right edge
-        if record_high is not None:
-            ax.text(364, record_high, "Highest on record",
-                    ha="right", va="bottom", fontsize=10, color="#CC2936", zorder=6)
+        # Label at the peak of the record curve
+        if has_record.any():
+            peak_idx = _np.nanargmax(rec_highs_s)
+            ax.text(doys[peak_idx], rec_highs_s[peak_idx], "  Highest on record",
+                    ha="left", va="bottom", fontsize=10, color="#CC2936", zorder=6)
 
         n_years = len({int(r[0]) for r in [] if False})  # placeholder; caption carries it
         legend_handles = [
@@ -6357,7 +6367,7 @@ def build_hydrometric_climatology_chart(doy_values, current_year_list, station_i
             _L2D([0], [0], color=CLIM_GRAY, linewidth=1.5, label="Historical mean"),
             _L2D([0], [0], color=RIVER_TEAL, linewidth=2.0, label=str(current_year)),
         ]
-        if record_high is not None:
+        if has_record.any():
             legend_handles.append(
                 _L2D([0], [0], color="#CC2936", linewidth=1.2, linestyle="--",
                      label="Highest on record")

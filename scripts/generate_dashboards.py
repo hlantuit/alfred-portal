@@ -981,13 +981,41 @@ def update_community(community, now_utc):
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--community", metavar="ID",
+        help="Only process this community ID (may be given multiple times)",
+        action="append", dest="communities", default=None,
+    )
+    parser.add_argument(
+        "--skip-blocks", metavar="BLOCK",
+        help="Skip these block types (comma-separated, e.g. sentinel1,sea_ice,modis)",
+        default="",
+    )
+    args = parser.parse_args()
+
+    skip_blocks = {b.strip() for b in args.skip_blocks.split(",") if b.strip()}
+
     token = os.environ.get("NOTION_TOKEN")
     if not token:
         print("ERROR: NOTION_TOKEN env var not set")
         sys.exit(1)
 
-    communities = load_communities()
+    all_communities = load_communities()
+    if args.communities:
+        communities = [c for c in all_communities if c["id"] in args.communities]
+        if not communities:
+            print(f"ERROR: no communities matched {args.communities}")
+            sys.exit(1)
+    else:
+        communities = all_communities
     print(f"Found {len(communities)} communities")
+
+    if skip_blocks:
+        print(f"Skipping blocks: {', '.join(sorted(skip_blocks))}")
+        for c in communities:
+            c["blocks"] = [b for b in c.get("blocks", []) if b not in skip_blocks]
 
     now_utc = datetime.now(timezone.utc)
 

@@ -1,0 +1,57 @@
+name: Update portal data — fast (hourly, test)
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install requests pillow matplotlib numpy notion-client cairosvg xarray netcdf4 scipy cartopy shapely
+
+      # Update only the test community, skipping slow satellite blocks
+      - name: Update Notion dashboards (fast blocks only)
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        run: |
+          python scripts/generate_dashboards.py \
+            --community shingle-point-test \
+            --skip-blocks sentinel1,sea_ice,sea_ice_zoom,modis
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add cache/ 2>/dev/null || true
+
+          PNG_COUNT=$(find communities/shingle-point-test -path "*/charts/*.png" 2>/dev/null | wc -l)
+          echo "Chart PNGs found: $PNG_COUNT"
+          if [ "$PNG_COUNT" -gt 0 ]; then
+            find communities/shingle-point-test -path "*/charts/*.png" -exec git add {} +
+          fi
+
+          find communities/shingle-point-test -name "coastline_data.geojson" -exec git add {} + 2>/dev/null || true
+          find communities/shingle-point-test -name "water_bodies.geojson"   -exec git add {} + 2>/dev/null || true
+
+          echo "Staged files:"
+          git diff --cached --name-only
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update fast blocks (shingle-point-test) [skip ci]"
+            git pull --rebase origin main
+            git push
+          fi

@@ -374,6 +374,11 @@ def update_community(community, now_utc):
     lib.COMMUNITY_ID = sid
     lib.CHARTS_SAVE_DIR = os.path.join(COMMUNITIES_DIR, sid, "charts")
 
+    # Satellite blocks that are configured for this community but skipped this run
+    _config_blocks = set(community.get("_original_blocks", community.get("blocks", [])))
+    _sat_block_names = {"modis", "sentinel1", "sea_ice", "sea_ice_zoom"}
+    skipped_sat = (_config_blocks - enabled) & _sat_block_names
+
     lat      = community["lat"]
     lon      = community["lon"]
     tz_name  = community.get("tz_name", "UTC")
@@ -821,6 +826,90 @@ def update_community(community, now_utc):
         if modis_bytes:
             modis_block_obj, _ = lib._upload_chart_or_caption(modis_bytes, "modis.png", None)
 
+        # Save satellite metadata so the fast workflow can use cached images
+        import json as _json
+        _sat_meta_path = os.path.join(COMMUNITIES_DIR, sid, "charts", "satellite_meta.json")
+        _sat_meta_out = {}
+        if os.path.exists(_sat_meta_path):
+            try:
+                with open(_sat_meta_path) as _mf:
+                    _sat_meta_out = _json.load(_mf)
+            except Exception:
+                pass
+        if "sentinel1" in enabled and sentinel1_bytes:
+            _sat_meta_out["sentinel1"] = {"caption": sentinel1_caption or ""}
+        if "sea_ice" in enabled and sea_ice_bytes:
+            _sat_meta_out["sea_ice"] = {"caption": sea_ice_caption or ""}
+        if "sea_ice_zoom" in enabled and sea_ice_zoom_bytes:
+            _sat_meta_out["sea_ice_zoom"] = {"caption": sea_ice_zoom_caption or ""}
+        if "modis" in enabled and modis_bytes:
+            _sat_meta_out["modis"] = {
+                "caption": f"NASA MODIS Terra, true color, {modis_date}." if modis_date else "MODIS image (date unavailable).",
+                "date": modis_date or "",
+                "bbox": modis_bbox,
+            }
+        if _sat_meta_out:
+            os.makedirs(os.path.join(COMMUNITIES_DIR, sid, "charts"), exist_ok=True)
+            with open(_sat_meta_path, "w") as _mf:
+                _json.dump(_sat_meta_out, _mf, indent=2)
+
+    # Load cached satellite images for blocks skipped in this run
+    if skipped_sat:
+        import json as _json
+        _sat_meta_path = os.path.join(COMMUNITIES_DIR, sid, "charts", "satellite_meta.json")
+        _sat_meta_in = {}
+        if os.path.exists(_sat_meta_path):
+            try:
+                with open(_sat_meta_path) as _mf:
+                    _sat_meta_in = _json.load(_mf)
+            except Exception:
+                pass
+        _charts_dir = os.path.join(COMMUNITIES_DIR, sid, "charts")
+
+        def _load_cached_sat_png(name):
+            p = os.path.join(_charts_dir, f"{name}.png")
+            if os.path.exists(p):
+                with open(p, "rb") as _f:
+                    return _f.read()
+            return None
+
+        if "sentinel1" in skipped_sat:
+            _cached = _load_cached_sat_png("sentinel1")
+            if _cached:
+                sentinel1_bytes = _cached
+                sentinel1_caption = _sat_meta_in.get("sentinel1", {}).get(
+                    "caption", "Sentinel-1 SAR image (cached from last daily update).")
+                enabled.add("sentinel1")
+                print(f"[{sid}] SENTINEL-1: using cached image")
+
+        if "sea_ice" in skipped_sat:
+            _cached = _load_cached_sat_png("sea_ice")
+            if _cached:
+                sea_ice_bytes = _cached
+                sea_ice_caption = _sat_meta_in.get("sea_ice", {}).get(
+                    "caption", "Sea ice classification (cached from last daily update).")
+                enabled.add("sea_ice")
+                print(f"[{sid}] SEA ICE: using cached image")
+
+        if "sea_ice_zoom" in skipped_sat:
+            _cached = _load_cached_sat_png("sea_ice_zoom")
+            if _cached:
+                sea_ice_zoom_bytes = _cached
+                sea_ice_zoom_caption = _sat_meta_in.get("sea_ice_zoom", {}).get(
+                    "caption", "Sea ice classification, zoom (cached from last daily update).")
+                enabled.add("sea_ice_zoom")
+                print(f"[{sid}] SEA ICE ZOOM: using cached image")
+
+        if "modis" in skipped_sat:
+            _cached = _load_cached_sat_png("modis")
+            if _cached:
+                _modis_cached_meta = _sat_meta_in.get("modis", {})
+                modis_date = _modis_cached_meta.get("date") or None
+                modis_bbox = _modis_cached_meta.get("bbox", "")
+                modis_block_obj, _ = lib._upload_chart_or_caption(_cached, "modis.png", None)
+                enabled.add("modis")
+                print(f"[{sid}] MODIS: using cached image")
+
     # ------------------------------------------------------------------ #
     # ASSEMBLE PAGE                                                        #
     # ------------------------------------------------------------------ #
@@ -1015,6 +1104,7 @@ def main():
     if skip_blocks:
         print(f"Skipping blocks: {', '.join(sorted(skip_blocks))}")
         for c in communities:
+            c["_original_blocks"] = list(c.get("blocks", []))
             c["blocks"] = [b for b in c.get("blocks", []) if b not in skip_blocks]
 
     now_utc = datetime.now(timezone.utc)

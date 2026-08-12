@@ -47,6 +47,9 @@ jobs:
             find communities -path "*/charts/*.png" -exec git add {} +
           fi
 
+          # Satellite metadata sidecars (used by fast workflow to serve cached images)
+          find communities -name "satellite_meta.json" -exec git add {} + 2>/dev/null || true
+
           # Auto-fetched GeoJSON overlays
           find communities -name "coastline_data.geojson" -exec git add {} + 2>/dev/null || true
           find communities -name "water_bodies.geojson"   -exec git add {} + 2>/dev/null || true

@@ -6401,6 +6401,15 @@ def build_hydrometric_climatology_chart(doy_values, current_year_list, station_i
         if len(cur_doys):
             ax.plot(cur_doys, cur_vals, color=RIVER_TEAL, linewidth=2.0, zorder=3)
 
+        # All-time record high — computed from all historical + current-year values
+        all_hist_vals = [v for vals in doy_values.values() for v in vals]
+        all_cur_vals  = [v for _, v in current_year_list]
+        record_high   = max(all_hist_vals + all_cur_vals) if (all_hist_vals or all_cur_vals) else None
+
+        if record_high is not None:
+            ax.axhline(record_high, color="#CC2936", linewidth=1.2,
+                       linestyle="--", alpha=0.85, zorder=5)
+
         if now_doy:
             ax.axvline(now_doy, color=NOTION_TEXT_GRAY, linewidth=1.0,
                        linestyle="--", alpha=0.65, zorder=4)
@@ -6428,12 +6437,22 @@ def build_hydrometric_climatology_chart(doy_values, current_year_list, station_i
         ylabel = "Discharge (m³/s)" if unit == "discharge" else "Water level (m)"
         ax.set_ylabel(ylabel, fontsize=13, color=NOTION_TEXT_GRAY)
 
+        # Label the record-high line at the right edge
+        if record_high is not None:
+            ax.text(364, record_high, "Highest on record",
+                    ha="right", va="bottom", fontsize=10, color="#CC2936", zorder=6)
+
         n_years = len({int(r[0]) for r in [] if False})  # placeholder; caption carries it
         legend_handles = [
             _Patch(facecolor=CLIM_FILL, edgecolor=CLIM_GRAY, label="Historical mean ±1σ"),
             _L2D([0], [0], color=CLIM_GRAY, linewidth=1.5, label="Historical mean"),
             _L2D([0], [0], color=RIVER_TEAL, linewidth=2.0, label=str(current_year)),
         ]
+        if record_high is not None:
+            legend_handles.append(
+                _L2D([0], [0], color="#CC2936", linewidth=1.2, linestyle="--",
+                     label="Highest on record")
+            )
         ax.legend(handles=legend_handles, fontsize=11, frameon=False,
                   loc="upper left", labelcolor=NOTION_TEXT_GRAY,
                   handlelength=1.5, handleheight=0.8, handletextpad=0.5)

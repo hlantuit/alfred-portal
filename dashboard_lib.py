@@ -2784,8 +2784,9 @@ def build_tdd_histogram(lat, lon, now_utc, temp_cache, num_years=25):
             )
             # Label colored to match the line
             label_color = NOTION_RED if below_avg else NOTION_TEXT_GRAY
+            _y_range = ax.get_ylim()[1] - ax.get_ylim()[0]
             ax.text(
-                current_idx, expected_tdd, "25yr avg",
+                current_idx, expected_tdd + _y_range * 0.025, "25yr avg",
                 ha="center", va="bottom", fontsize=9, color=label_color,
                 fontweight="bold", zorder=6,
                 bbox=dict(boxstyle="round,pad=0.15", facecolor="white", edgecolor="none", alpha=0.7),

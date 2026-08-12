@@ -1,48 +1,74 @@
-{
-  "id": "barrow",
-  "name": "Utqiagvik (Barrow)",
-  "site_display_name": "Utqiagvik (Barrow)",
-  "lat": 71.2906,
-  "lon": -156.7887,
-  "tz_name": "America/Anchorage",
-  "type": "coastal",
-  "public_notion_url": "https://snapdragon-hardboard-204.notion.site/utqiagvik-barrow-environmental-dashboard",
-  "notion_page_id": "3a000194631e8037a155c3ec63d10792",
-  "logo_url": "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg",
-  "institution_text": "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
-  "water_level_yearly_mean": null,
-  "webcam_url": "https://weathercams.faa.gov/api/cameras/10565/images",
-  "webcam_label": "Webcam — Utqiagvik Airport (PABR)",
-  "webcam_page_url": "https://weathercams.faa.gov/map/-158.895,70.62266,-150.4575,71.93051/cameraSite/179/details/camera/10565/full",
-  "hydrometric_stations": [],
-  "map_points": [
-    [71.2906, -156.7887, "Utqiagvik (Barrow)", -28],
-    [70.638, -160.02, "Wainwright", -10],
-    [70.467, -157.381, "Atqasuk", -10],
-    [71.285, -156.789, "Utqiagvik", -10, 15]
-  ],
-  "map_reference_lines": [],
-  "coastline_geojson_path": "coastline_data.geojson",
-  "utm_zone": 4,
-  "utm_epsg": "32604",
-  "utm_center_x": 579139,
-  "utm_center_y": 7911299,
-  "modis_center_x": -1898174,
-  "modis_center_y": 758781,
-  "modis_rotation_deg": 90.0,
-  "modis_bbox_3413": "-2078174,578781,-1718174,938781",
-  "blocks": [
-    "weather",
-    "alerts",
-    "gem_forecast",
-    "webcam",
-    "wave_forecast",
-    "water_level",
-    "modis",
-    "sentinel1",
-    "sea_ice",
-    "sea_ice_zoom",
-    "temperature",
-    "wind_chart"
-  ]
+﻿{
+    "id":  "barrow",
+    "name":  "Utqiagvik (Barrow)",
+    "site_display_name":  "Utqiagvik (Barrow)",
+    "lat":  71.2906,
+    "lon":  -156.7887,
+    "tz_name":  "America/Anchorage",
+    "type":  "coastal",
+    "public_notion_url":  "https://snapdragon-hardboard-204.notion.site/utqiagvik-barrow-environmental-dashboard",
+    "notion_page_id":  "3a000194631e8037a155c3ec63d10792",
+    "logo_url":  "https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg",
+    "institution_text":  "This dashboard is provided by the Alfred Wegener Institute Helmholtz Centre for Polar and Marine Research.",
+    "water_level_yearly_mean":  null,
+    "webcam_url":  "https://weathercams.faa.gov/api/cameras/10565/images",
+    "webcam_label":  "Webcam — Utqiagvik Airport (PABR)",
+    "webcam_page_url":  "https://weathercams.faa.gov/map/-158.895,70.62266,-150.4575,71.93051/cameraSite/179/details/camera/10565/full",
+    "hydrometric_stations":  [
+
+                             ],
+    "map_points":  [
+                       [
+                           71.2906,
+                           -156.7887,
+                           "Utqiagvik (Barrow)",
+                           -28
+                       ],
+                       [
+                           70.638,
+                           -160.02,
+                           "Wainwright",
+                           -10
+                       ],
+                       [
+                           70.467,
+                           -157.381,
+                           "Atqasuk",
+                           -10
+                       ],
+                       [
+                           71.285,
+                           -156.789,
+                           "Utqiagvik",
+                           -10,
+                           15
+                       ]
+                   ],
+    "map_reference_lines":  [
+
+                            ],
+    "coastline_geojson_path":  "coastline_data.geojson",
+    "utm_zone":  4,
+    "utm_epsg":  "32604",
+    "utm_center_x":  579139,
+    "utm_center_y":  7911299,
+    "modis_center_x":  -1898174,
+    "modis_center_y":  758781,
+    "modis_rotation_deg":  90.0,
+    "modis_bbox_3413":  "-2078174,578781,-1718174,938781",
+    "blocks":  [
+                   "weather",
+                   "alerts",
+                   "gem_forecast",
+                   "webcam",
+                   "wave_forecast",
+                   "water_level",
+                   "modis",
+                   "sentinel1",
+                   "sea_ice",
+                   "sea_ice_zoom",
+                   "temperature",
+                   "wind_chart"
+               ],
+    "sea_seed_from":  "top,left"
 }

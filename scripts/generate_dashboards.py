@@ -141,26 +141,83 @@ def _write_geojson_safe(community_id, label, geojson, out_path):
 
 
 def ensure_coastline_geojson(community_id, bbox_latlon, out_path):
-    """Fetch natural=coastline ways from Overpass API and save as GeoJSON LineStrings."""
+    """Fetch natural=coastline ways AND coastal water-body polygons from Overpass.
+
+    Saves a GeoJSON FeatureCollection where:
+      - Coastline ways → LineString features, properties={}
+      - Coastal bays/lagoons/ocean areas → Polygon features with
+        properties={"sea_seed": true}
+
+    The sea_seed polygons are used by _make_sea_mask as extra flood-fill
+    seeds so that enclosed lagoons behind barrier beaches get classified as
+    sea even when unreachable from the image edge.
+    """
     import json as _json
     s, w, n, e = bbox_latlon
-    query = f"[out:json][timeout:60];way[natural=coastline]({s},{w},{n},{e});out geom qt 2000;"
+    # Single compound query — coastline ways + water-body polygons tagged as
+    # bays, lagoons, or ocean/sea.  Timeout raised to 90 s for the larger result.
+    query = (
+        f"[out:json][timeout:90];"
+        f"("
+        f"  way[natural=coastline]({s},{w},{n},{e});"
+        f"  way[natural=bay]({s},{w},{n},{e});"
+        f"  relation[natural=bay]({s},{w},{n},{e});"
+        f"  way[natural=water][water~\"^(bay|lagoon|sea|ocean|fjord|strait)$\"]({s},{w},{n},{e});"
+        f"  relation[natural=water][water~\"^(bay|lagoon|sea|ocean|fjord|strait)$\"]({s},{w},{n},{e});"
+        f");"
+        f"out geom qt 5000;"
+    )
     print(f"[{community_id}] COASTLINE: fetching from Overpass ({s},{w},{n},{e})")
     try:
         r = _overpass_post(query)
         elements = r.json().get("elements", [])
         features = []
+        n_coast = n_seed = 0
         for el in elements:
+            tags = el.get("tags", {})
+            is_coastline = tags.get("natural") == "coastline"
+            is_sea_body = (
+                tags.get("natural") in ("bay", "water")
+                and tags.get("water", tags.get("natural")) in
+                    ("bay", "lagoon", "sea", "ocean", "fjord", "strait", "water")
+            ) or tags.get("natural") == "bay"
+
             if el.get("type") == "way" and "geometry" in el:
                 coords = _round_coords([[pt["lon"], pt["lat"]] for pt in el["geometry"]])
-                features.append({
-                    "type": "Feature",
-                    "geometry": {"type": "LineString", "coordinates": coords},
-                    "properties": {},
-                })
+                if is_coastline:
+                    features.append({
+                        "type": "Feature",
+                        "geometry": {"type": "LineString", "coordinates": coords},
+                        "properties": {},
+                    })
+                    n_coast += 1
+                elif is_sea_body and len(coords) >= 3:
+                    # Closed ring → Polygon seed
+                    ring = coords if coords[0] == coords[-1] else coords + [coords[0]]
+                    features.append({
+                        "type": "Feature",
+                        "geometry": {"type": "Polygon", "coordinates": [ring]},
+                        "properties": {"sea_seed": True},
+                    })
+                    n_seed += 1
+            elif el.get("type") == "relation" and is_sea_body:
+                # Assemble outer rings from relation members
+                for member in el.get("members", []):
+                    if member.get("role") == "outer" and "geometry" in member:
+                        coords = _round_coords(
+                            [[pt["lon"], pt["lat"]] for pt in member["geometry"]]
+                        )
+                        if len(coords) >= 3:
+                            ring = coords if coords[0] == coords[-1] else coords + [coords[0]]
+                            features.append({
+                                "type": "Feature",
+                                "geometry": {"type": "Polygon", "coordinates": [ring]},
+                                "properties": {"sea_seed": True},
+                            })
+                            n_seed += 1
         geojson = {"type": "FeatureCollection", "features": features}
         if _write_geojson_safe(community_id, "COASTLINE", geojson, out_path):
-            print(f"[{community_id}] COASTLINE: {len(features)} segments saved to {out_path}")
+            print(f"[{community_id}] COASTLINE: {n_coast} coastline + {n_seed} sea-seed polygons saved to {out_path}")
     except Exception as e:
         print(f"[{community_id}] COASTLINE FETCH FAILED: {e}")
 

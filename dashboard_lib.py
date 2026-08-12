@@ -4608,6 +4608,7 @@ def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_wi
 
     w = h = output_size_px
     mask = _PI.new("L", (w, h), 0)
+    sea_seed_polygons_px = []
 
     if coastline_geojson_path:
         try:
@@ -4622,16 +4623,36 @@ def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_wi
 
             draw = _PID.Draw(mask)
             all_lines_px = []
+            sea_seed_polygons_px = []  # interior-point seeds from bay/lagoon polygons
             for feature in geojson.get("features", []):
                 geom = feature.get("geometry", {})
+                props = feature.get("properties", {})
+                is_sea_seed = props.get("sea_seed", False)
                 gt = geom.get("type")
                 coords = geom.get("coordinates", [])
+
+                if is_sea_seed:
+                    # Sea-body polygon (bay, lagoon, etc.) — record an interior
+                    # point from each ring so we can seed the flood fill from inside.
+                    rings = []
+                    if gt == "Polygon":
+                        rings = coords[:1]   # outer ring only
+                    elif gt == "MultiPolygon":
+                        rings = [poly[0] for poly in coords]
+                    for ring in rings:
+                        if len(ring) >= 3:
+                            # Approximate centroid of the ring
+                            avg_lon = sum(c[0] for c in ring) / len(ring)
+                            avg_lat = sum(c[1] for c in ring) / len(ring)
+                            sea_seed_polygons_px.append(_to_px(avg_lon, avg_lat))
+                    continue  # do NOT draw these as barriers
+
                 if gt == "LineString":
                     lines = [coords]
                 elif gt == "MultiLineString":
                     lines = coords
                 elif gt == "Polygon":
-                    lines = coords  # outer ring + holes, all drawn as closed lines
+                    lines = coords  # outer ring + holes, drawn as closed lines (coastline)
                 elif gt == "MultiPolygon":
                     lines = [ring for poly in coords for ring in poly]
                 else:
@@ -4713,6 +4734,29 @@ def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_wi
 
     if not any_filled:
         return np.ones((h, w), dtype=bool)
+
+    # Secondary flood fill: seed from OSM bay/lagoon polygons tagged sea_seed=True.
+    # These reach enclosed coastal water bodies (lagoons behind barrier beaches)
+    # that the edge flood fill cannot access.
+    if sea_seed_polygons_px:
+        _arr = np.array(mask)
+        for _cpx, _cpy in sea_seed_polygons_px:
+            _seeded = False
+            for _r in range(0, min(w, h) // 4, 3):
+                for _dx, _dy in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1),
+                                  (1, 1), (-1, 1), (1, -1), (-1, -1)]:
+                    _sx = int(_cpx) + _dx * _r
+                    _sy = int(_cpy) + _dy * _r
+                    if 0 <= _sx < w and 0 <= _sy < h and _arr[_sy, _sx] == 0:
+                        try:
+                            _PID.floodfill(mask, (_sx, _sy), 128)
+                            _arr = np.array(mask)
+                        except Exception as _fe:
+                            print(f"SEA MASK SECONDARY SEED FAILED at ({_sx},{_sy}): {_fe}")
+                        _seeded = True
+                        break
+                if _seeded:
+                    break
 
     return np.array(mask) == 128
 

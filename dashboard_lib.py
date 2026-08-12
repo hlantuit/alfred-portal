@@ -4580,7 +4580,7 @@ def add_ice_classification_legend(png_bytes, ice_label="Sea ice"):
 
 
 def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_width_m, output_size_px,
-                   sea_seed_from="top"):
+                   sea_seed_from="top", sea_seed_points=None):
     """
     Rasterises the coastline GeoJSON as thick lines on a binary mask, then
     flood-fills from one or more edge pixels to identify the sea region.
@@ -4735,9 +4735,36 @@ def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_wi
     if not any_filled:
         return np.ones((h, w), dtype=bool)
 
-    # Secondary flood fill: seed from OSM bay/lagoon polygons tagged sea_seed=True.
-    # These reach enclosed coastal water bodies (lagoons behind barrier beaches)
+    # Secondary flood fill: seed from OSM bay/lagoon polygons tagged sea_seed=True,
+    # then from any explicit lat/lon points in sea_seed_points config.
+    # Both reach enclosed coastal water bodies (lagoons behind barrier beaches)
     # that the edge flood fill cannot access.
+    if sea_seed_points and coastline_geojson_path:
+        # Convert explicit config lat/lon points to pixel coordinates and append
+        try:
+            def _to_px_ll(lat_val, lon_val):
+                import math as _math
+                x, y = latlon_to_utm(lat_val, lon_val, zone=utm_zone)
+                px = int((x - (center_x - half_width_m)) / (2 * half_width_m) * w)
+                py = int(h - (y - (center_y - half_width_m)) / (2 * half_width_m) * h)
+                return (px, py)
+            for pt in sea_seed_points:
+                sea_seed_polygons_px.append(_to_px_ll(pt[0], pt[1]))
+        except Exception as _spe:
+            print(f"SEA MASK explicit seed_points conversion failed: {_spe}")
+    elif sea_seed_points:
+        # No coastline file — _to_px was never defined; define it inline
+        try:
+            _ssf_extra = []
+            for pt in sea_seed_points:
+                x, y = latlon_to_utm(pt[0], pt[1], zone=utm_zone)
+                px = int((x - (center_x - half_width_m)) / (2 * half_width_m) * w)
+                py = int(h - (y - (center_y - half_width_m)) / (2 * half_width_m) * h)
+                _ssf_extra.append((px, py))
+            sea_seed_polygons_px.extend(_ssf_extra)
+        except Exception as _spe:
+            print(f"SEA MASK explicit seed_points conversion failed: {_spe}")
+
     if sea_seed_polygons_px:
         _arr = np.array(mask)
         for _cpx, _cpy in sea_seed_polygons_px:
@@ -4807,7 +4834,7 @@ def fetch_and_process_sentinel1_ice(lat, lon, site_label, utm_zone, utm_epsg,
                                      half_width_m=150_000, reference_lines=None,
                                      coastline_geojson_path=None, now_utc=None,
                                      arrow_annotations=None, lookback_days=10,
-                                     sea_seed_from="top"):
+                                     sea_seed_from="top", sea_seed_points=None):
     """
     Fetches a Sentinel-1 sea-ice classification image for the same scene
     as fetch_and_process_sentinel1, using a colour-ramp evalscript instead
@@ -4864,6 +4891,7 @@ def fetch_and_process_sentinel1_ice(lat, lon, site_label, utm_zone, utm_epsg,
     sea_mask = _make_sea_mask(
         coastline_geojson_path, center_x, center_y, utm_zone, half_width_m,
         MODIS_FINAL_SIZE_PX, sea_seed_from=sea_seed_from,
+        sea_seed_points=sea_seed_points,
     )
     if raw_gray is not None and sea_mask is not None:
         raw_color = _composite_sea_color_land_gray(raw_color, raw_gray, sea_mask)

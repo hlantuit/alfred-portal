@@ -4658,7 +4658,9 @@ def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_wi
                     draw.polygon(hole_pts, fill=128)
 
         for land_geom in land_in_frame:
-            _rasterize_polygon(land_geom)
+            clipped = land_geom.intersection(frame_box)
+            if not clipped.is_empty:
+                _rasterize_polygon(clipped)
 
         return np.array(mask) == 128
 

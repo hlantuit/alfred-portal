@@ -3795,10 +3795,13 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
         marker_radius = 6
         _dot_positions = []
         _placed_labels = []
+        _FRAME_MARGIN = 20  # px — skip dots/labels projected this far outside the frame
         for point in points:
             plat, plon = point[0], point[1]
             px, py = project_point(plat, plon)
-            _dot_positions.append((px, py, marker_radius))
+            if (-_FRAME_MARGIN <= px <= width_px + _FRAME_MARGIN and
+                    -_FRAME_MARGIN <= py <= height_px + _FRAME_MARGIN):
+                _dot_positions.append((px, py, marker_radius))
 
         for point in points:
             if len(point) >= 6:
@@ -3818,6 +3821,11 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
                 fill_color = (255, 60, 60)
 
             x_px, y_px = project_point(plat, plon)
+
+            # Skip points projected outside the frame (with a small margin).
+            if not (-_FRAME_MARGIN <= x_px <= width_px + _FRAME_MARGIN and
+                    -_FRAME_MARGIN <= y_px <= height_px + _FRAME_MARGIN):
+                continue
 
             draw.ellipse(
                 [x_px - marker_radius, y_px - marker_radius, x_px + marker_radius, y_px + marker_radius],

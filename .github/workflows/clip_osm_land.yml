@@ -1,0 +1,41 @@
+name: Clip OSM land polygons (one-time setup)
+
+# Run manually once to download and clip OSM land polygons.
+# The clipped shapefile is committed to data/osm_land_arctic/ and
+# used by _make_sea_mask on every subsequent workflow run.
+on:
+  workflow_dispatch:
+
+jobs:
+  clip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install requests fiona shapely
+
+      - name: Download and clip OSM land polygons
+        run: python scripts/clip_osm_land.py
+
+      - name: Commit clipped shapefile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/osm_land_arctic/
+          echo "Staged files:"
+          git diff --cached --name-only
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "data: add clipped OSM land polygons for Arctic sea mask"
+            git pull --rebase origin main
+            git push
+          fi

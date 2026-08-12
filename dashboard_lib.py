@@ -4618,15 +4618,22 @@ def _make_sea_mask(coastline_geojson_path, center_x, center_y, utm_zone, half_wi
         max_lat = max(c[1] for c in corners_ll)
         frame_box = _box(min_lon, min_lat, max_lon, max_lat)
 
-        # Download (once, cached by cartopy) Natural Earth 10 m land polygons.
-        land_shp = _shpreader.natural_earth(
-            resolution="10m", category="physical", name="land"
-        )
-        land_records = list(_shpreader.Reader(land_shp).geometries())
+        # Prefer local OSM land polygons (high resolution, committed to repo).
+        # Fall back to Natural Earth 10m if the OSM file hasn't been generated yet.
+        _osm_shp = os.path.join(os.getcwd(), "data", "osm_land_arctic", "osm_land_arctic.shp")
+        if os.path.exists(_osm_shp):
+            land_records = list(_shpreader.Reader(_osm_shp).geometries())
+            _src_label = "OSM"
+        else:
+            land_shp = _shpreader.natural_earth(
+                resolution="10m", category="physical", name="land"
+            )
+            land_records = list(_shpreader.Reader(land_shp).geometries())
+            _src_label = "Natural Earth 10m"
 
         # Filter to polygons that intersect the frame bbox.
         land_in_frame = [g for g in land_records if g.intersects(frame_box)]
-        print(f"SEA MASK: {len(land_in_frame)} Natural Earth land polygon(s) intersect frame")
+        print(f"SEA MASK ({_src_label}): {len(land_in_frame)} land polygon(s) intersect frame")
 
         # Rasterize: for each land polygon, compute pixel coords and fill.
         mask = _PI.new("L", (w, h), 128)  # start all-sea (128)

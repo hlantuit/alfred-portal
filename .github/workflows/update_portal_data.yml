@@ -1,8 +1,8 @@
-name: Update portal data
+name: Update portal data — slow (daily, satellite)
 
 on:
   schedule:
-    - cron: "0 0,6,12,18 * * *"
+    - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
@@ -25,8 +25,8 @@ jobs:
       - name: Generate portal data
         run: python scripts/generate_portal_data.py --out-dir data
 
-      # Update Notion dashboards using dashboard_lib (vendored at repo root)
-      - name: Update Notion dashboards
+      # Satellite blocks only — fast blocks are updated hourly by the other workflow
+      - name: Update Notion dashboards (satellite blocks)
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           SENTINEL_HUB_CLIENT_ID: ${{ secrets.SENTINEL_HUB_CLIENT_ID }}

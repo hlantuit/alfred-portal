@@ -1,4 +1,4 @@
-name: Update portal data — fast (hourly, test)
+name: Update portal data — fast (hourly)
 
 on:
   schedule:
@@ -8,7 +8,7 @@ on:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 60
     permissions:
       contents: write
 
@@ -21,13 +21,12 @@ jobs:
 
       - run: pip install requests pillow matplotlib numpy notion-client cairosvg xarray netcdf4 scipy cartopy shapely
 
-      # Update only the test community, skipping slow satellite blocks
+      # All communities, fast blocks only (no satellite imagery)
       - name: Update Notion dashboards (fast blocks only)
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
         run: |
           python scripts/generate_dashboards.py \
-            --community shingle-point-test \
             --skip-blocks sentinel1,sea_ice,sea_ice_zoom,modis
 
       - name: Commit and push
@@ -36,14 +35,14 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add cache/ 2>/dev/null || true
 
-          PNG_COUNT=$(find communities/shingle-point-test -path "*/charts/*.png" 2>/dev/null | wc -l)
+          PNG_COUNT=$(find communities -path "*/charts/*.png" 2>/dev/null | wc -l)
           echo "Chart PNGs found: $PNG_COUNT"
           if [ "$PNG_COUNT" -gt 0 ]; then
-            find communities/shingle-point-test -path "*/charts/*.png" -exec git add {} +
+            find communities -path "*/charts/*.png" -exec git add {} +
           fi
 
-          find communities/shingle-point-test -name "coastline_data.geojson" -exec git add {} + 2>/dev/null || true
-          find communities/shingle-point-test -name "water_bodies.geojson"   -exec git add {} + 2>/dev/null || true
+          find communities -name "coastline_data.geojson" -exec git add {} + 2>/dev/null || true
+          find communities -name "water_bodies.geojson"   -exec git add {} + 2>/dev/null || true
 
           echo "Staged files:"
           git diff --cached --name-only
@@ -51,7 +50,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "chore: update fast blocks (shingle-point-test) [skip ci]"
+            git commit -m "chore: update fast blocks [skip ci]"
             git pull --rebase origin main
             git push
           fi

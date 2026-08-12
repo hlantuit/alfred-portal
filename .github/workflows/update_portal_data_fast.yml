@@ -51,6 +51,9 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "chore: update fast blocks [skip ci]"
-            git pull --rebase origin main || git rebase --skip
+            git pull --rebase origin main || (
+              git diff --name-only --diff-filter=U | xargs git rm -f 2>/dev/null || true
+              git rebase --continue
+            )
             git push
           fi

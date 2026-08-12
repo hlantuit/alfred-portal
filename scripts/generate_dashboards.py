@@ -521,11 +521,14 @@ def update_community(community, now_utc):
     # Marine forecast                                                      #
     # ------------------------------------------------------------------ #
     marine_text = marine_source_text = None
-    marine_zone_id   = community.get("marine_zone_id")
-    marine_zone_name = community.get("marine_zone_name", "")
+    marine_zone_id      = community.get("marine_zone_id")
+    marine_zone_name    = community.get("marine_zone_name", "")
+    marine_exclude      = community.get("marine_exclude_title_patterns") or None
     if "marine" in enabled and marine_zone_id:
         entries = lib.get_marine_forecast(marine_zone_id)
-        marine_text, marine_source_text = lib.format_marine_forecast_text(entries, marine_zone_name)
+        marine_text, marine_source_text = lib.format_marine_forecast_text(
+            entries, marine_zone_name, exclude_title_patterns=marine_exclude
+        )
 
     # ------------------------------------------------------------------ #
     # Weather alerts                                                       #

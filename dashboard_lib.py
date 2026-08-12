@@ -8226,13 +8226,16 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label)
         days_since_melt_today = (today - snowmelt_date).days if snowmelt_date else -1
 
     # ── 2. Seasonal envelope (latitude-dependent) ────────────────────────
-    # Piecewise: fast rise days 7-21, plateau 21-28, linear decline 28→end.
-    # Season end scales with latitude: high Arctic has a much shorter active
-    # period than subarctic — interpolated linearly between anchors.
-    #   60 °N (boreal/subarctic): ends ~day 140
-    #   75 °N (high Arctic):      ends ~day 80
+    # Piecewise: linear rise days 7-21, plateau 21-28, then exponential
+    # decay to a hard zero at season_end. Exponential (not linear) so the
+    # population stays meaningful through late season — at subarctic sites
+    # (68 °N) mosquitoes are still present in mid-August whenever wind and
+    # temperature allow, they just peak earlier.
+    # Anchors (days post-snowmelt):
+    #   60 °N (boreal):       ~150 days (season extends into September)
+    #   75 °N (high Arctic):  ~85 days  (compressed ~3-month season)
     _lat_clamped = max(60.0, min(75.0, lat))
-    _season_end = round(140 - (_lat_clamped - 60) * (140 - 80) / 15)
+    _season_end = round(150 - (_lat_clamped - 60) * (150 - 85) / 15)
 
     def _seasonal(days):
         if days < 7 or days > _season_end:
@@ -8241,7 +8244,8 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label)
             return (days - 7) / 14
         if days <= 28:
             return 1.0
-        return max(0.0, (_season_end - days) / max(1, _season_end - 28))
+        _progress = (days - 28) / max(1, _season_end - 28)
+        return _math.exp(-_progress)   # k=1: ~37% activity at season_end
 
     # ── 3. Per-day forecast ──────────────────────────────────────────────
     daily     = gem_forecast.get("daily", {})
@@ -8261,10 +8265,12 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label)
         t_max = temp_maxes[i] if i < len(temp_maxes) and temp_maxes[i] is not None else 0.0
         w_max = wind_maxes[i] if i < len(wind_maxes) and wind_maxes[i] is not None else 0.0
 
-        # Temperature factor: 0 at ≤10 °C → 1.0 at ≥20 °C
-        temp_f = max(0.0, min(1.0, (t_max - 10) / 10))
-        # Wind suppression: 1.0 below 10 km/h → 0 above 18 km/h
-        wind_f = max(0.0, min(1.0, (18 - w_max) / 8))
+        # Temperature factor: 0 at ≤8 °C → 1.0 at ≥20 °C
+        # DeSiervo et al. 2023 (Ecol. Entomol.): near-zero activity below 8 °C
+        temp_f = max(0.0, min(1.0, (t_max - 8) / 12))
+        # Wind suppression: 1.0 at ≤10 km/h → 0 at ≥22 km/h (6 m/s)
+        # DeSiervo et al. 2023: near-zero activity above 6 m/s (≈22 km/h)
+        wind_f = max(0.0, min(1.0, (22 - w_max) / 12))
         # Seasonal gate: 0 outside season, otherwise how far into decline phase.
         # Used as a damping multiplier rather than a straight multiplier so that
         # late-season warm/calm days still show meaningful (low) activity rather
@@ -8323,9 +8329,12 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label)
         png = None
 
     caption = (
-        "Estimated biting intensity: seasonal position × temperature × wind suppression. "
-        "Based on Arctic Aedes (nigripes / impiger) phenology — Culler et al. 2015, Proc R Soc B. "
-        "Snowmelt estimated from ERA5 reanalysis (5-day mean > 2 °C after May 1). "
+        "Estimated biting intensity index: seasonal envelope (exponential decline post-peak) × "
+        "temperature factor (0 at ≤8 °C, max at ≥20 °C) × wind suppression (0 at ≥22 km/h). "
+        "Temperature and wind thresholds from DeSiervo et al. 2023 (Ecol. Entomol. 48:19–30). "
+        "Emergence timing from Corbet & Danks 1975 (Can. Entomol.). "
+        "Season length latitude-scaled: 150 days at 60 °N, 85 days at 75 °N (Arctic Aedes nigripes/impiger). "
+        "Snowmelt estimated from ERA5 reanalysis (5-day mean T > 2 °C after May 1). "
         "Sources: GEM/ECMWF forecast (Open-Meteo), ERA5 (Open-Meteo archive)."
     )
     block, fallback = _upload_chart_or_caption(png, "mosquito_forecast.png",
@@ -8333,9 +8342,11 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label)
     blocks = [
         heading("🦟 Mosquito Biting Activity Forecast", level=2),
         callout(
-            ["10-day forecast of estimated mosquito biting intensity, combining temperature, wind speed, "
-             "and time since estimated snowmelt. Arctic Aedes mosquitoes emerge 1–2 weeks after snowmelt "
-             "and remain active for approximately 8 weeks. Activity is suppressed above ~18 km/h wind."],
+            ["10-day forecast of estimated mosquito biting intensity for Arctic Aedes mosquitoes "
+             "(A. nigripes / A. impiger). Index combines time since estimated snowmelt, daily maximum "
+             "temperature (active above 8 °C), and wind speed (suppressed above 22 km/h / 6 m/s). "
+             "Season length is latitude-dependent: ~150 days at 60 °N, ~85 days at 75 °N. "
+             "Based on: DeSiervo et al. 2023 (Ecol. Entomol.); Corbet & Danks 1975 (Can. Entomol.)."],
             color="gray_background",
         ),
     ]

@@ -1259,7 +1259,7 @@ def fetch_gem_forecast(lat, lon, now_utc, tz_name="UTC"):
     daily min/max aggregation in the API matches local calendar days.
     """
     hourly_vars = "temperature_2m,windspeed_10m,winddirection_10m,pressure_msl,precipitation,rain"
-    daily_vars  = "weathercode,temperature_2m_max,temperature_2m_min,windspeed_10m_max,winddirection_10m_dominant,precipitation_sum,uv_index_max"
+    daily_vars  = "weathercode,temperature_2m_max,temperature_2m_min,windspeed_10m_max,windspeed_10m_mean,winddirection_10m_dominant,precipitation_sum,uv_index_max"
 
     for model in ("gem_seamless", "best_match"):
         try:
@@ -1290,11 +1290,12 @@ def fetch_gem_forecast(lat, lon, now_utc, tz_name="UTC"):
                     "rain":          h.get("rain", []),
                 },
                 "daily": {
-                    "dates":       d["time"],
-                    "weathercode": d.get("weathercode", []),
-                    "temp_max":    d.get("temperature_2m_max", []),
-                    "temp_min":    d.get("temperature_2m_min", []),
-                    "windspeed":   d.get("windspeed_10m_max", []),
+                    "dates":        d["time"],
+                    "weathercode":  d.get("weathercode", []),
+                    "temp_max":     d.get("temperature_2m_max", []),
+                    "temp_min":     d.get("temperature_2m_min", []),
+                    "windspeed":    d.get("windspeed_10m_max", []),
+                    "windspeed_mean": d.get("windspeed_10m_mean", []),
                     "winddir":     d.get("winddirection_10m_dominant", []),
                     "precip":      d.get("precipitation_sum", []),
                     "uv_index":    d.get("uv_index_max", []),
@@ -8248,10 +8249,19 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label)
         return _math.exp(-_progress)   # k=1: ~37% activity at season_end
 
     # ── 3. Per-day forecast ──────────────────────────────────────────────
-    daily     = gem_forecast.get("daily", {})
-    dates_str = daily.get("dates", [])
-    temp_maxes = daily.get("temp_max",  [])
-    wind_maxes = daily.get("windspeed", [])   # daily max wind km/h
+    daily      = gem_forecast.get("daily", {})
+    dates_str  = daily.get("dates", [])
+    temp_maxes = daily.get("temp_max", [])
+    # Use daily mean wind (not max) for suppression: mosquitoes are active
+    # during calm windows even on days with brief peak gusts.
+    # Fall back to max / 2 if mean not available (older cached forecasts).
+    _wind_mean = daily.get("windspeed_mean", [])
+    _wind_max  = daily.get("windspeed", [])
+    wind_means = [
+        (_wind_mean[i] if i < len(_wind_mean) and _wind_mean[i] is not None
+         else (_wind_max[i] / 2 if i < len(_wind_max) and _wind_max[i] is not None else 0.0))
+        for i in range(max(len(_wind_mean), len(_wind_max)))
+    ]
 
     n = min(10, len(dates_str))
     activity, labels, colors = [], [], []
@@ -8263,14 +8273,15 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label)
         days_from_melt = days_since_melt_today + i
 
         t_max = temp_maxes[i] if i < len(temp_maxes) and temp_maxes[i] is not None else 0.0
-        w_max = wind_maxes[i] if i < len(wind_maxes) and wind_maxes[i] is not None else 0.0
+        w_mean = wind_means[i] if i < len(wind_means) else 0.0
 
         # Temperature factor: 0 at ≤8 °C → 1.0 at ≥20 °C
         # DeSiervo et al. 2023 (Ecol. Entomol.): near-zero activity below 8 °C
         temp_f = max(0.0, min(1.0, (t_max - 8) / 12))
-        # Wind suppression: 1.0 at ≤10 km/h → 0 at ≥22 km/h (6 m/s)
-        # DeSiervo et al. 2023: near-zero activity above 6 m/s (≈22 km/h)
-        wind_f = max(0.0, min(1.0, (22 - w_max) / 12))
+        # Wind suppression using daily mean wind (not daily max): 1.0 at ≤5 km/h → 0 at ≥22 km/h
+        # DeSiervo et al. 2023: near-zero activity above 6 m/s sustained;
+        # mean wind captures whether most of the day was calm, unlike the daily peak gust.
+        wind_f = max(0.0, min(1.0, (22 - w_mean) / 17))
         # Seasonal gate: 0 outside season, otherwise how far into decline phase.
         # Used as a damping multiplier rather than a straight multiplier so that
         # late-season warm/calm days still show meaningful (low) activity rather

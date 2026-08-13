@@ -66,7 +66,7 @@ jobs:
             git commit -m "chore: update portal data [skip ci]"
             git pull --rebase origin main || (
               git diff --name-only --diff-filter=U | xargs git rm -f 2>/dev/null || true
-              git rebase --continue
+              GIT_EDITOR=true git rebase --continue
             )
             git push
           fi

@@ -8283,7 +8283,7 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
     # meaningful activity on warm/calm days (Corbet & Danks 1975).
     _tdd_rise  = 80.0
     _tdd_peak  = 160.0
-    _tdd_scale = 550.0   # e-folding scale for exponential decline
+    _tdd_scale = 750.0   # e-folding scale for exponential decline
 
     def _seasonal_tdd(tdd):
         if tdd < 0:

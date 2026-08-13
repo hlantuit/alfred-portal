@@ -8257,13 +8257,17 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
             snowmelt_date = _detect_snowmelt(_temps, year)
             if snowmelt_date:
                 _save_cache(snowmelt_date, "ERA5")
-            elif not _temps:
-                # ERA5 call failed entirely — climatological fallback
+            elif not _temps or today >= _date(year, 6, 1):
+                # ERA5 failed entirely, OR we're past June 1 and no 5-day window
+                # exceeded 2 °C (common at high-Arctic sites where May is still
+                # frozen) — use a climatological fallback so the chart isn't blank.
+                # Fallback snowmelt date: ~May 10 at 60 °N → May 25 at 75 °N.
                 _lat_c = max(60.0, min(75.0, lat))
                 _fallback_doy = round(130 + (_lat_c - 60) * (145 - 130) / 15)
                 snowmelt_date = _date(year, 1, 1) + _td(days=_fallback_doy - 1)
-                print(f"MOSQUITO: ERA5 empty for {site_label} — fallback snowmelt {snowmelt_date}")
-                # Don't cache the fallback so the next run retries ERA5
+                _src = "climatological_fallback"
+                print(f"MOSQUITO: snowmelt not detected for {site_label} — fallback {snowmelt_date}")
+                _save_cache(snowmelt_date, _src)  # cache so we don't retry ERA5 daily
         days_since_melt_today = (today - snowmelt_date).days if snowmelt_date else -1
 
     # ── 2. Seasonal envelope (latitude-dependent) ────────────────────────

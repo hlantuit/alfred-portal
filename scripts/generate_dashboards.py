@@ -1032,7 +1032,9 @@ def update_community(community, now_utc):
                                                   prefix=clim_caption + "  ", prefix_gray=True))
 
     if "mosquito" in enabled and gem_forecast:
-        blocks += lib.build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label)
+        _mosq_cache = os.path.join(COMMUNITIES_DIR, sid, "charts", "mosquito_meta.json")
+        blocks += lib.build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
+                                                       cache_path=_mosq_cache)
 
     if "harvesting" in enabled:
         blocks += lib.build_harvesting_section(now_utc, site_id=sid)

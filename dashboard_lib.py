@@ -2405,7 +2405,7 @@ def fetch_daily_temps(lat, lon, start_date, end_date):
             "daily": "temperature_2m_mean",
             "timezone": "UTC",
         }
-        r = get_with_retry(url, params=params, timeout=20, retries=1)
+        r = get_with_retry(url, params=params, timeout=30, retries=3, backoff_seconds=5)
         data = r.json()
         daily = data.get("daily", {})
         times = daily.get("time", [])
@@ -8197,33 +8197,73 @@ def _detect_snowmelt(daily_temps, year):
     return None
 
 
-def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label):
+def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
+                                     cache_path=None):
     """
     10-day mosquito biting activity forecast.
     Index = seasonal_factor(days since snowmelt) × temp_factor(daily max T)
-            × wind_suppression(daily max wind).
-    Seasonal envelope: Gaussian centred on day 28 post-snowmelt (σ=16),
-    zeroed before day 7 and after day 70 — consistent with Arctic Aedes
-    nigripes / impiger phenology (Culler et al. 2015, Proc R Soc B).
+            × wind_suppression(daily mean wind).
+    Snowmelt date is fetched from ERA5 once per year and cached in
+    cache_path (mosquito_meta.json). Subsequent runs reuse the cached date
+    to avoid repeated ERA5 archive requests.
     """
     import math as _math
+    import json as _json
+    import os as _os
     from datetime import date as _date, timedelta as _td
 
     NOTION_TEXT_GRAY  = "#787774"
     NOTION_LIGHT_GRID = "#EDECEC"
 
-    # ── 1. Snowmelt detection ────────────────────────────────────────────
+    # ── 1. Snowmelt detection (cached per year) ──────────────────────────
     today = now_utc.date()
     year  = today.year
+
+    # Load cache
+    _cache = {}
+    if cache_path and _os.path.exists(cache_path):
+        try:
+            with open(cache_path) as _cf:
+                _cache = _json.load(_cf)
+        except Exception:
+            _cache = {}
+
+    def _save_cache(d, source):
+        if not cache_path:
+            return
+        try:
+            _os.makedirs(_os.path.dirname(cache_path), exist_ok=True)
+            with open(cache_path, "w") as _cf:
+                _json.dump({"year": year, "snowmelt_date": d.isoformat(),
+                            "source": source}, _cf)
+        except Exception as _e:
+            print(f"MOSQUITO: could not save cache — {_e}")
+
     if today < _date(year, 5, 1):
-        snowmelt_date      = None
+        snowmelt_date         = None
         days_since_melt_today = -999        # before season window opens
     elif today > _date(year, 10, 1):
-        snowmelt_date      = None
+        snowmelt_date         = None
         days_since_melt_today = 999         # past season window
     else:
-        _temps = fetch_daily_temps(lat, lon, _date(year, 5, 1), today)
-        snowmelt_date = _detect_snowmelt(_temps, year)
+        # Use cached snowmelt date if it belongs to this year
+        _cached_year = _cache.get("year")
+        _cached_date = _cache.get("snowmelt_date")
+        if _cached_year == year and _cached_date:
+            snowmelt_date = _date.fromisoformat(_cached_date)
+        else:
+            # First run of the year — fetch ERA5 and cache the result
+            _temps = fetch_daily_temps(lat, lon, _date(year, 5, 1), today)
+            snowmelt_date = _detect_snowmelt(_temps, year)
+            if snowmelt_date:
+                _save_cache(snowmelt_date, "ERA5")
+            elif not _temps:
+                # ERA5 call failed entirely — climatological fallback
+                _lat_c = max(60.0, min(75.0, lat))
+                _fallback_doy = round(130 + (_lat_c - 60) * (145 - 130) / 15)
+                snowmelt_date = _date(year, 1, 1) + _td(days=_fallback_doy - 1)
+                print(f"MOSQUITO: ERA5 empty for {site_label} — fallback snowmelt {snowmelt_date}")
+                # Don't cache the fallback so the next run retries ERA5
         days_since_melt_today = (today - snowmelt_date).days if snowmelt_date else -1
 
     # ── 2. Seasonal envelope (latitude-dependent) ────────────────────────

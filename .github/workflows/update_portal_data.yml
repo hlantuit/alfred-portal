@@ -50,6 +50,9 @@ jobs:
           # Satellite metadata sidecars (used by fast workflow to serve cached images)
           find communities -name "satellite_meta.json" -exec git add {} + 2>/dev/null || true
 
+          # Mosquito snowmelt cache (fetched once per year from ERA5)
+          find communities -name "mosquito_meta.json" -exec git add {} + 2>/dev/null || true
+
           # Auto-fetched GeoJSON overlays
           find communities -name "coastline_data.geojson" -exec git add {} + 2>/dev/null || true
           find communities -name "water_bodies.geojson"   -exec git add {} + 2>/dev/null || true

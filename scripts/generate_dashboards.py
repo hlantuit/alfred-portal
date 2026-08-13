@@ -1035,7 +1035,7 @@ def update_community(community, now_utc):
         _mosq_cache = os.path.join(COMMUNITIES_DIR, sid, "charts", "mosquito_meta.json")
         try:
             blocks += lib.build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
-                                                           cache_path=_mosq_cache)
+                                                           cache_path=_mosq_cache, tz_name=tz_name)
         except Exception as _me:
             import traceback
             print(f"[{sid}] MOSQUITO BLOCK FAILED: {_me}")

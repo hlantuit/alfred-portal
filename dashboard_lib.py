@@ -8198,7 +8198,7 @@ def _detect_snowmelt(daily_temps, year):
 
 
 def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
-                                     cache_path=None):
+                                     cache_path=None, tz_name="UTC"):
     """
     10-day mosquito biting activity forecast.
     Index = seasonal_factor(days since snowmelt) × temp_factor(daily max T)
@@ -8295,25 +8295,14 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
         _f = _math.exp(-(tdd - _tdd_peak) / _tdd_scale)
         return _f if _f >= 0.02 else 0.0  # hard cutoff at ~2 % of peak
 
-    # ── 3. Per-day forecast ──────────────────────────────────────────────
+    # ── 3. TDD cumulation (daily, used to assign seasonal weight per hour) ──
     daily      = gem_forecast.get("daily", {})
     dates_str  = daily.get("dates", [])
     temp_maxes = daily.get("temp_max", [])
     temp_mins  = daily.get("temp_min",  [])
-    # Daily mean wind (not max) — mosquitoes active in calm windows even on
-    # gusty days. Fall back to wind_max/2 if mean is absent.
-    _wind_mean = daily.get("windspeed_mean", [])
-    _wind_max  = daily.get("windspeed", [])
-    wind_means = [
-        (_wind_mean[i] if i < len(_wind_mean) and _wind_mean[i] is not None
-         else (_wind_max[i] / 2 if i < len(_wind_max) and _wind_max[i] is not None else 0.0))
-        for i in range(max(len(_wind_mean), len(_wind_max)))
-    ]
-
     n = min(10, len(dates_str))
 
-    # Estimate TDD today using recent forecast temps as a proxy for recent
-    # actual conditions (no additional ERA5 call needed on cached runs).
+    # Estimate TDD accumulated through today using near-term forecast mean temps.
     _recent_tdd_samples = []
     for _j in range(min(3, n)):
         _tx = temp_maxes[_j] if _j < len(temp_maxes) and temp_maxes[_j] is not None else 0.0
@@ -8323,78 +8312,117 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
                       if _recent_tdd_samples else 6.0)
     tdd_today = max(0.0, days_since_melt_today * _avg_daily_tdd)
 
-    # Cumulative TDD added by each forecast day (day 0 = today)
+    # Cumulative TDD added by each forecast day (day 0 = today, cumul[0]=0)
     _tdd_cumul = [0.0]
     for _j in range(1, n):
         _tx = temp_maxes[_j-1] if _j-1 < len(temp_maxes) and temp_maxes[_j-1] is not None else 0.0
         _tn = temp_mins[_j-1]  if _j-1 < len(temp_mins)  and temp_mins[_j-1]  is not None else 0.0
         _tdd_cumul.append(_tdd_cumul[-1] + max(0.0, (_tx + _tn) / 2))
 
-    activity, labels, colors = [], [], []
+    # date string → day index lookup (used to map each hourly timestamp to a TDD)
+    _date_to_didx = {d: j for j, d in enumerate(dates_str)}
 
-    for i in range(n):
-        d = _date.fromisoformat(dates_str[i])
-        labels.append("Today" if i == 0 else d.strftime("%a %-d"))
+    # ── 4. Hourly mosquito activity ───────────────────────────────────────
+    # Uses hourly temperature and wind so calm afternoon peaks and gusty
+    # periods show up as real within-day swings on the chart.
+    hourly_data = gem_forecast.get("hourly", {})
+    _h_times_all = hourly_data.get("time", [])
+    _h_temps_all = hourly_data.get("temperature", [])
+    _h_winds_all = hourly_data.get("windspeed", [])
 
-        tdd_i = tdd_today + _tdd_cumul[i]
+    # Slice to start from the current hour (same approach as _gem_chart)
+    from datetime import timezone as _tz_utc
+    _h_start = 0
+    _t0_local = now_utc.replace(tzinfo=None)   # fallback: treat now_utc as local
+    try:
+        from zoneinfo import ZoneInfo as _ZI
+        _now_local = now_utc.replace(tzinfo=_tz_utc.utc).astimezone(_ZI(tz_name))
+        _now_str   = _now_local.strftime("%Y-%m-%dT%H:00")
+        _h_start   = next((k for k, t in enumerate(_h_times_all) if t >= _now_str), 0)
+        _t0_local  = _now_local.replace(tzinfo=None)
+    except Exception:
+        pass
 
-        t_max  = temp_maxes[i] if i < len(temp_maxes) and temp_maxes[i] is not None else 0.0
-        w_mean = wind_means[i] if i < len(wind_means) else 0.0
+    _h_times = _h_times_all[_h_start:]
+    _h_temps = _h_temps_all[_h_start:]
+    _h_winds = _h_winds_all[_h_start:]
 
-        # Temperature factor: 0 at ≤8 °C → 1.0 at ≥20 °C
-        # DeSiervo et al. 2023 (Ecol. Entomol.): near-zero activity below 8 °C
-        temp_f = max(0.0, min(1.0, (t_max - 8) / 12))
-        # Wind suppression — daily mean wind, 1.0 at ≤5 km/h → 0 at ≥22 km/h
-        # DeSiervo et al. 2023: near-zero above 6 m/s sustained.
-        # Floor at 0.1: even on windy days mosquitoes shelter and can bite.
-        wind_f = max(0.1, min(1.0, (22 - w_mean) / 17))
+    _h_activity = []
+    _h_hours    = []
+    for _k, _t_str in enumerate(_h_times):
+        _day_idx = _date_to_didx.get(_t_str[:10], -1)
+        if _day_idx < 0 or _day_idx >= n:
+            continue
+        _ht  = _h_temps[_k] if _k < len(_h_temps) and _h_temps[_k] is not None else 0.0
+        _hw  = _h_winds[_k] if _k < len(_h_winds) and _h_winds[_k] is not None else 0.0
+        _tdd = tdd_today + _tdd_cumul[_day_idx]
+        _tf  = max(0.0, min(1.0, (_ht - 8) / 12))
+        _wf  = max(0.1, min(1.0, (22 - _hw) / 17))
+        _sf  = _seasonal_tdd(_tdd)
+        _h_activity.append(float(min(100, round(_sf * 100 * _tf * _wf))))
+        _h_hours.append(_k)
 
-        # Fully multiplicative formula: cold or windy → genuinely suppressed;
-        # warm + calm + mid-season → High or Very High.
-        # seas_f = population density proxy (TDD-based); temp_f × wind_f =
-        # fraction of population active today.
-        seas_f = _seasonal_tdd(tdd_i)
-        idx = round(seas_f * 100 * temp_f * wind_f)
-        activity.append(idx)
-
-        if idx < 5:    colors.append("#BBBBBB")          # None
-        elif idx < 25: colors.append("#F5C542")          # Low
-        elif idx < 55: colors.append("#E07840")          # Moderate
-        elif idx < 80: colors.append("#C1440E")          # High
-        else:          colors.append("#8B1A00")          # Very high
-
-    # ── 4. Chart ─────────────────────────────────────────────────────────
+    # ── 5. Chart (line, matching _gem_chart style) ────────────────────────
+    PINK = "#F72585"
     try:
         plt.rcParams["font.family"] = "DejaVu Sans"
-        fig, ax = plt.subplots(figsize=(8, 2.8), dpi=150)
+        fig, ax = plt.subplots(figsize=(8, 3.0), dpi=150)
         fig.patch.set_alpha(0)
         ax.set_facecolor("none")
 
-        ax.bar(range(n), activity, color=colors, width=0.65, zorder=3)
+        if _h_activity:
+            ax.fill_between(_h_hours, _h_activity, 0,
+                            color=PINK, alpha=0.12, linewidth=0, zorder=1)
+            ax.plot(_h_hours, _h_activity, color=PINK, linewidth=2.5, zorder=2)
+            _NOTION_RED = "#E16259"
+            ax.plot([0], [_h_activity[0]], marker="o", markersize=9,
+                    color=_NOTION_RED, markeredgecolor="white", markeredgewidth=1.5, zorder=5)
+            _xr = max(_h_hours) if _h_hours else 240
+            ax.annotate("now", xy=(0, _h_activity[0]),
+                        xytext=(_xr * 0.02, _h_activity[0]),
+                        color=_NOTION_RED, fontsize=13, fontweight="bold",
+                        ha="left", va="center",
+                        bbox=dict(boxstyle="round,pad=0.15", facecolor="white",
+                                  edgecolor="none", alpha=0.8))
+
+        for _sp in ["top", "right", "left"]:
+            ax.spines[_sp].set_visible(False)
+        ax.spines["bottom"].set_color(NOTION_LIGHT_GRID)
+
+        ax.set_xlim(0, max(_h_hours) if _h_hours else 240)
         ax.set_ylim(0, 108)
-        ax.set_xticks(range(n))
-        ax.set_xticklabels(labels, fontsize=9, color=NOTION_TEXT_GRAY)
-        ax.set_yticks([0, 25, 55, 80, 100])
+
+        # x-ticks: midnight per day + minor tick at noon (same as _gem_chart)
+        _tick_h, _tick_lbl, _minor_h = [], [], []
+        for _h in _h_hours:
+            _t = _t0_local + _td(hours=_h)
+            if _t.hour == 0 or _h == 0:
+                _tick_h.append(_h)
+                _tick_lbl.append("now" if _h == 0 else _t.strftime("%b %d"))
+            elif _t.hour == 12:
+                _minor_h.append(_h)
+        ax.set_xticks(_tick_h)
+        ax.set_xticklabels(_tick_lbl, fontsize=13, color=NOTION_TEXT_GRAY,
+                           rotation=45, ha="right")
+        ax.set_xticks(_minor_h, minor=True)
+        ax.tick_params(axis="x", which="minor", length=4,
+                       color="#555555", width=1.0, bottom=True, direction="out")
+        ax.tick_params(axis="x", which="major", length=8,
+                       color="#555555", width=1.2, bottom=True, direction="out")
+
+        # y-ticks with category labels at the colour thresholds
+        ax.set_yticks([5, 25, 55, 80, 100])
         ax.set_yticklabels(["None", "Low", "Moderate", "High", "Very high"],
-                           fontsize=8, color=NOTION_TEXT_GRAY)
+                           fontsize=13, color=NOTION_TEXT_GRAY)
         ax.yaxis.set_tick_params(length=0)
-        ax.xaxis.set_tick_params(length=0)
-        for sp in ax.spines.values():
-            sp.set_visible(False)
-        ax.yaxis.grid(True, color=NOTION_LIGHT_GRID, linewidth=0.8, zorder=0)
+        ax.yaxis.grid(True, color=NOTION_LIGHT_GRID, linewidth=1, zorder=0)
+        ax.xaxis.grid(False)
         ax.set_axisbelow(True)
 
-        if snowmelt_date:
-            sm_str = snowmelt_date.strftime("%-d %b")
-            title = (f"🦟 Mosquito biting activity — {site_label} "
-                     f"(snowmelt ~{sm_str}, day {days_since_melt_today} of season)")
-        elif days_since_melt_today == -999:
-            title = f"🦟 Mosquito biting activity — {site_label} (before mosquito season)"
-        elif days_since_melt_today == 999:
-            title = f"🦟 Mosquito biting activity — {site_label} (season ended)"
-        else:
-            title = f"🦟 Mosquito biting activity — {site_label} (snowmelt not yet detected)"
-        ax.set_title(title, color=NOTION_TEXT_GRAY, fontsize=10, loc="left", pad=6)
+        # Subtle midnight vertical dividers (same as _gem_chart)
+        for _h in _tick_h:
+            if _h > 0:
+                ax.axvline(_h, color=NOTION_TEXT_GRAY, linewidth=0.6, alpha=0.18, zorder=0.5)
 
         fig.tight_layout()
         png = fig_to_png_bytes(fig, white_bg=True)
@@ -8402,26 +8430,33 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
         print(f"MOSQUITO CHART FAILED: {e}")
         png = None
 
+    if snowmelt_date:
+        _sm_note = f"Snowmelt ~{snowmelt_date.strftime('%-d %b')}, day {days_since_melt_today} of season. "
+    elif days_since_melt_today == -999:
+        _sm_note = "Before mosquito season. "
+    elif days_since_melt_today == 999:
+        _sm_note = "Season ended. "
+    else:
+        _sm_note = "Snowmelt date estimated from climatological average. "
     caption = (
-        "Estimated biting intensity: population density (TDD-based seasonal envelope) × "
-        "temperature activity factor (0 at ≤8 °C, max at ≥20 °C) × wind suppression (0 at ≥22 km/h mean). "
-        "TDD (Thawing Degree Days since snowmelt) drives the seasonal model — "
-        "season length emerges from actual heat accumulation, not latitude. "
-        "Temperature and wind thresholds from DeSiervo et al. 2023 (Ecol. Entomol. 48:19–30). "
-        "Emergence timing from Corbet & Danks 1975 (Can. Entomol.). "
-        "Snowmelt estimated from ERA5 reanalysis (5-day mean T > 2 °C after May 1). "
-        "Sources: GEM/ECMWF forecast (Open-Meteo), ERA5 (Open-Meteo archive)."
+        _sm_note +
+        "Estimated hourly biting intensity: seasonal envelope (Thawing Degree Days since snowmelt) × "
+        "temperature factor (0 at ≤8 °C, max at ≥20 °C) × wind suppression (0 at ≥22 km/h). "
+        "TDD captures continental vs. maritime differences better than latitude. "
+        "Thresholds from DeSiervo et al. 2023 (Ecol. Entomol. 48:19–30); "
+        "emergence timing from Corbet & Danks 1975 (Can. Entomol.). "
+        "Sources: GEM/ECMWF hourly forecast (Open-Meteo), ERA5 (Open-Meteo archive)."
     )
     block, fallback = _upload_chart_or_caption(png, "mosquito_forecast.png",
                                                "Mosquito activity chart unavailable.")
     blocks = [
         heading("🦟 Mosquito Biting Activity Forecast", level=2),
         callout(
-            ["10-day forecast of estimated mosquito biting intensity for Arctic Aedes mosquitoes "
-             "(A. nigripes / A. impiger). Population density is modelled using Thawing Degree Days (TDD) "
-             "accumulated since snowmelt — capturing continental vs. maritime differences that "
-             "latitude alone cannot. Daily activity is gated by temperature (active above 8 °C) "
-             "and mean wind speed (suppressed above 22 km/h / 6 m/s). "
+            ["10-day hourly forecast of estimated mosquito biting intensity for Arctic Aedes "
+             "(A. nigripes / A. impiger). The curve shows hour-by-hour variation: warm, calm hours "
+             "drive peaks; cold or windy hours suppress activity. Population density is modelled "
+             "using Thawing Degree Days (TDD) accumulated since snowmelt — capturing continental "
+             "vs. maritime differences that latitude alone cannot. "
              "Based on: DeSiervo et al. 2023 (Ecol. Entomol.); Corbet & Danks 1975 (Can. Entomol.)."],
             color="gray_background",
         ),

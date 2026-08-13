@@ -1033,8 +1033,13 @@ def update_community(community, now_utc):
 
     if "mosquito" in enabled and gem_forecast:
         _mosq_cache = os.path.join(COMMUNITIES_DIR, sid, "charts", "mosquito_meta.json")
-        blocks += lib.build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
-                                                       cache_path=_mosq_cache)
+        try:
+            blocks += lib.build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
+                                                           cache_path=_mosq_cache)
+        except Exception as _me:
+            import traceback
+            print(f"[{sid}] MOSQUITO BLOCK FAILED: {_me}")
+            traceback.print_exc()
 
     if "harvesting" in enabled:
         blocks += lib.build_harvesting_section(now_utc, site_id=sid)

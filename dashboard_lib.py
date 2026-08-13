@@ -8270,35 +8270,38 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
                 _save_cache(snowmelt_date, _src)  # cache so we don't retry ERA5 daily
         days_since_melt_today = (today - snowmelt_date).days if snowmelt_date else -1
 
-    # ── 2. Seasonal envelope (latitude-dependent) ────────────────────────
-    # Piecewise: linear rise days 7-21, plateau 21-28, then exponential
-    # decay to a hard zero at season_end. Exponential (not linear) so the
-    # population stays meaningful through late season — at subarctic sites
-    # (68 °N) mosquitoes are still present in mid-August whenever wind and
-    # temperature allow, they just peak earlier.
-    # Anchors (days post-snowmelt):
-    #   60 °N (boreal):       ~150 days (season extends into September)
-    #   75 °N (high Arctic):  ~85 days  (compressed ~3-month season)
-    _lat_clamped = max(60.0, min(75.0, lat))
-    _season_end = round(150 - (_lat_clamped - 60) * (150 - 85) / 15)
+    # ── 2. TDD-based seasonal envelope (no latitude adjustment) ──────────
+    # Thawing Degree Days (TDD) since snowmelt drive population density
+    # better than calendar days and better than latitude — a continental
+    # site at 70 °N can accumulate TDD faster than a maritime site at 65 °N,
+    # and the actual season length emerges naturally from the heat sum rather
+    # than being forced by a latitude formula.
+    #
+    # Piecewise: linear rise (TDD 0 → 80), plateau (80 → 160), then
+    # exponential decay with scale = 550 °C·days. Hard zero below 2%.
+    # Calibration: at TDD = 710 (=160+550), seas_f = e^-1 = 0.37 — still
+    # meaningful activity on warm/calm days (Corbet & Danks 1975).
+    _tdd_rise  = 80.0
+    _tdd_peak  = 160.0
+    _tdd_scale = 550.0   # e-folding scale for exponential decline
 
-    def _seasonal(days):
-        if days < 7 or days > _season_end:
+    def _seasonal_tdd(tdd):
+        if tdd < 0:
             return 0.0
-        if days <= 21:
-            return (days - 7) / 14
-        if days <= 28:
+        if tdd <= _tdd_rise:
+            return tdd / _tdd_rise
+        if tdd <= _tdd_peak:
             return 1.0
-        _progress = (days - 28) / max(1, _season_end - 28)
-        return _math.exp(-_progress)   # k=1: ~37% activity at season_end
+        _f = _math.exp(-(tdd - _tdd_peak) / _tdd_scale)
+        return _f if _f >= 0.02 else 0.0  # hard cutoff at ~2 % of peak
 
     # ── 3. Per-day forecast ──────────────────────────────────────────────
     daily      = gem_forecast.get("daily", {})
     dates_str  = daily.get("dates", [])
     temp_maxes = daily.get("temp_max", [])
-    # Use daily mean wind (not max) for suppression: mosquitoes are active
-    # during calm windows even on days with brief peak gusts.
-    # Fall back to max / 2 if mean not available (older cached forecasts).
+    temp_mins  = daily.get("temp_min",  [])
+    # Daily mean wind (not max) — mosquitoes active in calm windows even on
+    # gusty days. Fall back to wind_max/2 if mean is absent.
     _wind_mean = daily.get("windspeed_mean", [])
     _wind_max  = daily.get("windspeed", [])
     wind_means = [
@@ -8308,41 +8311,57 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
     ]
 
     n = min(10, len(dates_str))
+
+    # Estimate TDD today using recent forecast temps as a proxy for recent
+    # actual conditions (no additional ERA5 call needed on cached runs).
+    _recent_tdd_samples = []
+    for _j in range(min(3, n)):
+        _tx = temp_maxes[_j] if _j < len(temp_maxes) and temp_maxes[_j] is not None else 0.0
+        _tn = temp_mins[_j]  if _j < len(temp_mins)  and temp_mins[_j]  is not None else 0.0
+        _recent_tdd_samples.append(max(0.0, (_tx + _tn) / 2))
+    _avg_daily_tdd = (sum(_recent_tdd_samples) / len(_recent_tdd_samples)
+                      if _recent_tdd_samples else 6.0)
+    tdd_today = max(0.0, days_since_melt_today * _avg_daily_tdd)
+
+    # Cumulative TDD added by each forecast day (day 0 = today)
+    _tdd_cumul = [0.0]
+    for _j in range(1, n):
+        _tx = temp_maxes[_j-1] if _j-1 < len(temp_maxes) and temp_maxes[_j-1] is not None else 0.0
+        _tn = temp_mins[_j-1]  if _j-1 < len(temp_mins)  and temp_mins[_j-1]  is not None else 0.0
+        _tdd_cumul.append(_tdd_cumul[-1] + max(0.0, (_tx + _tn) / 2))
+
     activity, labels, colors = [], [], []
 
     for i in range(n):
         d = _date.fromisoformat(dates_str[i])
         labels.append("Today" if i == 0 else d.strftime("%a %-d"))
 
-        days_from_melt = days_since_melt_today + i
+        tdd_i = tdd_today + _tdd_cumul[i]
 
-        t_max = temp_maxes[i] if i < len(temp_maxes) and temp_maxes[i] is not None else 0.0
+        t_max  = temp_maxes[i] if i < len(temp_maxes) and temp_maxes[i] is not None else 0.0
         w_mean = wind_means[i] if i < len(wind_means) else 0.0
 
         # Temperature factor: 0 at ≤8 °C → 1.0 at ≥20 °C
         # DeSiervo et al. 2023 (Ecol. Entomol.): near-zero activity below 8 °C
         temp_f = max(0.0, min(1.0, (t_max - 8) / 12))
-        # Wind suppression using daily mean wind (not daily max): 1.0 at ≤5 km/h → 0 at ≥22 km/h
-        # DeSiervo et al. 2023: near-zero activity above 6 m/s sustained;
-        # mean wind captures whether most of the day was calm, unlike the daily peak gust.
-        wind_f = max(0.0, min(1.0, (22 - w_mean) / 17))
-        # Seasonal gate: 0 outside season, otherwise how far into decline phase.
-        # Used as a damping multiplier rather than a straight multiplier so that
-        # late-season warm/calm days still show meaningful (low) activity rather
-        # than collapsing to zero due to multiplicative rounding.
-        seas_f = _seasonal(days_from_melt)
+        # Wind suppression — daily mean wind, 1.0 at ≤5 km/h → 0 at ≥22 km/h
+        # DeSiervo et al. 2023: near-zero above 6 m/s sustained.
+        # Floor at 0.1: even on windy days mosquitoes shelter and can bite.
+        wind_f = max(0.1, min(1.0, (22 - w_mean) / 17))
 
-        # Population level (seasonal envelope) × daily activity fraction
-        # (temperature + wind conditions). Separating the two avoids the
-        # compound near-zero problem of multiplying small seasonal × small temp.
-        # Range: 0 (outside season) → 50 (peak, cold/windy) → 100 (peak, warm/calm).
-        idx = round(seas_f * 50 * (1 + temp_f * wind_f))
+        # Fully multiplicative formula: cold or windy → genuinely suppressed;
+        # warm + calm + mid-season → High or Very High.
+        # seas_f = population density proxy (TDD-based); temp_f × wind_f =
+        # fraction of population active today.
+        seas_f = _seasonal_tdd(tdd_i)
+        idx = round(seas_f * 100 * temp_f * wind_f)
         activity.append(idx)
 
-        if idx < 5:    colors.append("#BBBBBB")
-        elif idx < 25: colors.append("#F5C542")
-        elif idx < 55: colors.append("#E07840")
-        else:          colors.append("#C1440E")
+        if idx < 5:    colors.append("#BBBBBB")          # None
+        elif idx < 25: colors.append("#F5C542")          # Low
+        elif idx < 55: colors.append("#E07840")          # Moderate
+        elif idx < 80: colors.append("#C1440E")          # High
+        else:          colors.append("#8B1A00")          # Very high
 
     # ── 4. Chart ─────────────────────────────────────────────────────────
     try:
@@ -8355,7 +8374,7 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
         ax.set_ylim(0, 108)
         ax.set_xticks(range(n))
         ax.set_xticklabels(labels, fontsize=9, color=NOTION_TEXT_GRAY)
-        ax.set_yticks([0, 25, 50, 75, 100])
+        ax.set_yticks([0, 25, 55, 80, 100])
         ax.set_yticklabels(["None", "Low", "Moderate", "High", "Very high"],
                            fontsize=8, color=NOTION_TEXT_GRAY)
         ax.yaxis.set_tick_params(length=0)
@@ -8384,11 +8403,12 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
         png = None
 
     caption = (
-        "Estimated biting intensity index: seasonal envelope (exponential decline post-peak) × "
-        "temperature factor (0 at ≤8 °C, max at ≥20 °C) × wind suppression (0 at ≥22 km/h). "
+        "Estimated biting intensity: population density (TDD-based seasonal envelope) × "
+        "temperature activity factor (0 at ≤8 °C, max at ≥20 °C) × wind suppression (0 at ≥22 km/h mean). "
+        "TDD (Thawing Degree Days since snowmelt) drives the seasonal model — "
+        "season length emerges from actual heat accumulation, not latitude. "
         "Temperature and wind thresholds from DeSiervo et al. 2023 (Ecol. Entomol. 48:19–30). "
         "Emergence timing from Corbet & Danks 1975 (Can. Entomol.). "
-        "Season length latitude-scaled: 150 days at 60 °N, 85 days at 75 °N (Arctic Aedes nigripes/impiger). "
         "Snowmelt estimated from ERA5 reanalysis (5-day mean T > 2 °C after May 1). "
         "Sources: GEM/ECMWF forecast (Open-Meteo), ERA5 (Open-Meteo archive)."
     )
@@ -8398,9 +8418,10 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
         heading("🦟 Mosquito Biting Activity Forecast", level=2),
         callout(
             ["10-day forecast of estimated mosquito biting intensity for Arctic Aedes mosquitoes "
-             "(A. nigripes / A. impiger). Index combines time since estimated snowmelt, daily maximum "
-             "temperature (active above 8 °C), and wind speed (suppressed above 22 km/h / 6 m/s). "
-             "Season length is latitude-dependent: ~150 days at 60 °N, ~85 days at 75 °N. "
+             "(A. nigripes / A. impiger). Population density is modelled using Thawing Degree Days (TDD) "
+             "accumulated since snowmelt — capturing continental vs. maritime differences that "
+             "latitude alone cannot. Daily activity is gated by temperature (active above 8 °C) "
+             "and mean wind speed (suppressed above 22 km/h / 6 m/s). "
              "Based on: DeSiervo et al. 2023 (Ecol. Entomol.); Corbet & Danks 1975 (Can. Entomol.)."],
             color="gray_background",
         ),

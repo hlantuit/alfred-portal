@@ -1688,7 +1688,7 @@ def build_gem_day_strip(daily, tz_name, n_days=10):
 
 
 def _gem_chart(hours, values, color, ylabel, t0, bar=False, ymin=None, ymax=None,
-               strip_trailing_zeros=True, fill_baseline=None):
+               strip_trailing_zeros=True, fill_baseline=None, direction_vals=None):
     """
     Render one GEM forecast curve (or bar chart for precip) as PNG bytes.
     hours[0] == 0 corresponds to "now". t0 is a naive local datetime (the
@@ -1756,6 +1756,25 @@ def _gem_chart(hours, values, color, ylabel, t0, bar=False, ymin=None, ymax=None
         if ymax is not None:
             ax.set_ylim(top=ymax)
 
+        # Wind direction arrows — drawn in a gutter below the zero line.
+        # Arrow points in the direction the wind is blowing TO (met convention:
+        # direction_vals is "wind from", so arrow = from + 180°).
+        if direction_vals is not None:
+            _GUTTER   = 12
+            _base_y   = ymin if ymin is not None else 0
+            _arrow_y  = _base_y - _GUTTER * 0.5
+            ax.set_ylim(bottom=_base_y - _GUTTER)
+            ax.axhline(_base_y, color=NOTION_LIGHT_GRID, linewidth=0.8, zorder=0.5)
+            # 8-sector arrows: index = round(from_deg / 45) % 8 → wind-TO direction
+            _dir_chars = ['↓', '↙', '←', '↖', '↑', '↗', '→', '↘']
+            for _k in range(0, len(hours), 6):
+                if _k >= len(direction_vals) or direction_vals[_k] is None:
+                    continue
+                _sector = int((direction_vals[_k] % 360 + 22.5) / 45) % 8
+                ax.text(hours[_k], _arrow_y, _dir_chars[_sector],
+                        ha='center', va='center', fontsize=10,
+                        color=NOTION_TEXT_GRAY, zorder=3)
+
         # x-ticks: one per local day. t0 is already a naive local datetime,
         # so t.hour == 0 correctly finds local midnight without any tz conversion.
         tick_hours, tick_labels, minor_tick_hours = [], [], []
@@ -1782,7 +1801,15 @@ def _gem_chart(hours, values, color, ylabel, t0, bar=False, ymin=None, ymax=None
             if h > 0:
                 ax.axvline(h, color=NOTION_TEXT_GRAY, linewidth=0.6, alpha=0.18, zorder=0.5)
 
+        # Suppress y-ticks that fall inside the direction-arrow gutter.
+        if direction_vals is not None:
+            _base_y = ymin if ymin is not None else 0
+            ax.set_yticks([t for t in ax.get_yticks() if t >= _base_y])
+
         fig.tight_layout()
+        # Fixed left margin so all charts are left-aligned regardless of tick label width
+        # (pressure labels "1000" are wider than temperature labels "5", etc.).
+        fig.subplots_adjust(left=0.115)
         png = fig_to_png_bytes(fig, white_bg=True)
         return png
     except Exception as e:
@@ -1860,6 +1887,7 @@ def _gem_precip_chart(hours, rain_vals, snow_vals, t0):
                 ax.axvline(h, color=NOTION_TEXT_GRAY, linewidth=0.6, alpha=0.18, zorder=0.5)
 
         fig.tight_layout()
+        fig.subplots_adjust(left=0.115)
         return fig_to_png_bytes(fig, white_bg=True)
     except Exception as e:
         print("GEM PRECIP CHART FAILED:", e)
@@ -1897,7 +1925,8 @@ def build_gem_forecast_charts(hourly, tz_name, now_utc=None, cloud_cover_vals=No
         hours = list(range(len(times)))               # 0, 1, 2, … hours from now
 
         temp_b  = _gem_chart(hours, _safe("temperature"), "#E8A838", "Temperature (°C)",  t0)
-        wind_b  = _gem_chart(hours, _safe("windspeed"),   "#337EA9", "Wind speed (km/h)", t0, ymin=0)
+        wind_b  = _gem_chart(hours, _safe("windspeed"),   "#337EA9", "Wind speed (km/h)", t0, ymin=0,
+                             direction_vals=_safe("winddirection"))
         press_b = _gem_chart(hours, _safe("pressure"),    "#C07038", "Pressure (hPa)",    t0, ymin=990)
 
         # Separate rain from snow: rain = API "rain" field (liquid only);
@@ -8283,7 +8312,7 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
     # meaningful activity on warm/calm days (Corbet & Danks 1975).
     _tdd_rise  = 80.0
     _tdd_peak  = 160.0
-    _tdd_scale = 750.0   # e-folding scale for exponential decline
+    _tdd_scale = 850.0   # e-folding scale for exponential decline; calibrated to western Canadian Arctic (McLean et al. 1977, Inuvik 69°N, large catches mid-July; August presence documented)
 
     def _seasonal_tdd(tdd):
         if tdd < 0:

@@ -1446,7 +1446,7 @@ def gem_hourly_wind_forecast(hourly, now_utc, tz_name="UTC"):
 _GEM_SVG = {
     "sun": (
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'"
-        " stroke='{c}' stroke-width='1.5' stroke-linecap='round'>"
+        " stroke='{c}' stroke-width='2' stroke-linecap='round'>"
         "<circle cx='12' cy='12' r='4'/>"
         "<line x1='12' y1='2' x2='12' y2='5'/>"
         "<line x1='12' y1='19' x2='12' y2='22'/>"
@@ -1460,7 +1460,7 @@ _GEM_SVG = {
     ),
     "partly_cloudy": (
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'"
-        " stroke='{c}' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>"
+        " stroke='{c}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
         "<circle cx='9' cy='9' r='3'/>"
         "<line x1='9' y1='2.5' x2='9' y2='4.5'/>"
         "<line x1='9' y1='13.5' x2='9' y2='14.5'/>"
@@ -1474,7 +1474,7 @@ _GEM_SVG = {
     ),
     "cloud": (
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'"
-        " stroke='{c}' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>"
+        " stroke='{c}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
         "<path d='M6.657 18C4.085 18 2 15.993 2 13.517"
         " c0-2.475 1.982-4.482 4.573-4.482"
         " c.405-1.506 1.316-2.832 2.57-3.774"
@@ -1494,7 +1494,7 @@ _GEM_SVG = {
     ),
     "drizzle": (
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'"
-        " stroke='{c}' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>"
+        " stroke='{c}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
         "<path d='M6.657 14C4.085 14 2 11.993 2 9.517"
         " c0-2.475 1.982-4.482 4.573-4.482"
         " c.405-1.506 1.316-2.832 2.57-3.774"
@@ -1508,7 +1508,7 @@ _GEM_SVG = {
     ),
     "rain": (
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'"
-        " stroke='{c}' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>"
+        " stroke='{c}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
         "<path d='M6.657 14C4.085 14 2 11.993 2 9.517"
         " c0-2.475 1.982-4.482 4.573-4.482"
         " c.405-1.506 1.316-2.832 2.57-3.774"
@@ -1523,7 +1523,7 @@ _GEM_SVG = {
     ),
     "snow": (
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'"
-        " stroke='{c}' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>"
+        " stroke='{c}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
         "<path d='M6.657 14C4.085 14 2 11.993 2 9.517"
         " c0-2.475 1.982-4.482 4.573-4.482"
         " c.405-1.506 1.316-2.832 2.57-3.774"
@@ -1541,7 +1541,7 @@ _GEM_SVG = {
     ),
     "thunder": (
         "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'"
-        " stroke='{c}' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'>"
+        " stroke='{c}' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
         "<path d='M6.657 14C4.085 14 2 11.993 2 9.517"
         " c0-2.475 1.982-4.482 4.573-4.482"
         " c.405-1.506 1.316-2.832 2.57-3.774"
@@ -1555,7 +1555,19 @@ _GEM_SVG = {
 }
 
 
-def _wmo_to_gem_svg(code, color="#555555"):
+_WMO_ICON_COLOR = {
+    "sun":           "#F59E0B",
+    "partly_cloudy": "#78909C",
+    "cloud":         "#78909C",
+    "fog":           "#90A4AE",
+    "drizzle":       "#3B82F6",
+    "rain":          "#2563EB",
+    "snow":          "#64B5F6",
+    "thunder":       "#7C3AED",
+}
+
+
+def _wmo_to_gem_svg(code, color=None):
     """Map a WMO weather code to a GEM (Tabler-style) SVG icon string."""
     if code is None:
         key = "cloud"
@@ -1577,7 +1589,8 @@ def _wmo_to_gem_svg(code, color="#555555"):
         key = "thunder"
     else:
         key = "cloud"
-    return _GEM_SVG[key].replace("{c}", color)
+    c = color if color is not None else _WMO_ICON_COLOR.get(key, "#555555")
+    return _GEM_SVG[key].replace("{c}", c)
 
 
 def _svg_to_pil(svg_str, size_px=72):
@@ -1615,7 +1628,6 @@ def build_gem_day_strip(daily, tz_name, n_days=10):
         canvas = Image.new("RGBA", (cell_w * cols, cell_h * rows), (0, 0, 0, 0))
         draw   = ImageDraw.Draw(canvas)
 
-        _NOTO_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
         _DEJAVU_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
         _DEJAVU = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
         try:
@@ -1624,10 +1636,6 @@ def build_gem_day_strip(daily, tz_name, n_days=10):
             font_detail = ImageFont.truetype(_DEJAVU,     17)
         except Exception:
             font_day = font_temp = font_detail = ImageFont.load_default()
-        try:
-            font_emoji = ImageFont.truetype(_NOTO_EMOJI, icon_px)
-        except Exception:
-            font_emoji = None
 
         wc   = daily.get("weathercode") or []
         tmax = daily.get("temp_max")    or []
@@ -1660,30 +1668,11 @@ def build_gem_day_strip(daily, tz_name, n_days=10):
             draw.text((x0 + (cell_w - tw) // 2, y0 + 12), day_label,
                       font=font_day, fill=TEXT_DARK if i == 0 else TEXT_GRAY)
 
-            # Icon — emoji rendered with NotoColorEmoji, fallback to PIL icons
-            emoji_char = weathercode_to_emoji(code)
-            emoji_drawn = False
-            if font_emoji and emoji_char and emoji_char != "—":
-                try:
-                    em_img = Image.new("RGBA", (icon_px, icon_px), (0, 0, 0, 0))
-                    em_draw = ImageDraw.Draw(em_img)
-                    bb = em_draw.textbbox((0, 0), emoji_char, font=font_emoji, embedded_color=True)
-                    ew, eh = bb[2] - bb[0], bb[3] - bb[1]
-                    ox = (icon_px - ew) // 2 - bb[0]
-                    oy = (icon_px - eh) // 2 - bb[1]
-                    em_draw.text((ox, oy), emoji_char, font=font_emoji, embedded_color=True)
-                    canvas.paste(em_img, (x0 + (cell_w - icon_px) // 2, y0 + icon_y), em_img)
-                    emoji_drawn = True
-                except Exception:
-                    pass
-            if not emoji_drawn:
-                icon_png = render_weather_icon(code)
-                if icon_png:
-                    icon_img = Image.open(_io.BytesIO(icon_png)).convert("RGBA")
-                    icon_img = icon_img.resize((icon_px, icon_px), Image.LANCZOS)
-                else:
-                    icon_img = Image.new("RGBA", (icon_px, icon_px), (0, 0, 0, 0))
-                canvas.paste(icon_img, (x0 + (cell_w - icon_px) // 2, y0 + icon_y), icon_img)
+            # Icon — coloured SVG via cairosvg
+            icon_img = _svg_to_pil(_wmo_to_gem_svg(code), size_px=icon_px)
+            if icon_img is None:
+                icon_img = Image.new("RGBA", (icon_px, icon_px), (0, 0, 0, 0))
+            canvas.paste(icon_img, (x0 + (cell_w - icon_px) // 2, y0 + icon_y), icon_img)
 
             # Temp range
             if t_max is not None and t_min is not None:

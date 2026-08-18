@@ -1605,6 +1605,64 @@ def _svg_to_pil(svg_str, size_px=72):
         return Image.new("RGBA", (size_px, size_px), (0, 0, 0, 0))
 
 
+# Twemoji codepoints for each WMO condition group (jsDelivr CDN, no auth needed)
+_TWEMOJI_BASE = "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/{}.svg"
+_WMO_TWEMOJI = {
+    "sun":           "2600",    # ☀️
+    "partly_cloudy": "26c5",    # ⛅
+    "cloud":         "2601",    # ☁️
+    "fog":           "1f32b",   # 🌫️
+    "drizzle":       "1f326",   # 🌦️
+    "rain":          "1f327",   # 🌧️
+    "snow":          "1f328",   # 🌨️
+    "thunder":       "26c8",    # ⛈️
+}
+_twemoji_cache: dict = {}
+
+
+def _twemoji_to_pil(wmo_code, size_px=96):
+    """
+    Fetch the Twemoji SVG for a WMO weathercode and render to PIL RGBA.
+    Results are cached in-process. Falls back to the coloured _GEM_SVG on error.
+    """
+    import io as _io
+    key_map = {
+        None: "cloud",
+        **{c: "sun"           for c in [0, 1]},
+        **{c: "partly_cloudy" for c in [2]},
+        **{c: "cloud"         for c in [3]},
+        **{c: "fog"           for c in [45, 48]},
+        **{c: "drizzle"       for c in [51, 53, 55, 56, 57]},
+        **{c: "rain"          for c in [61, 63, 65, 66, 67, 80, 81, 82]},
+        **{c: "snow"          for c in [71, 73, 75, 77, 85, 86]},
+        **{c: "thunder"       for c in [95, 96, 99]},
+    }
+    condition = key_map.get(wmo_code, "cloud")
+    twemoji_code = _WMO_TWEMOJI[condition]
+
+    if twemoji_code not in _twemoji_cache:
+        try:
+            url = _TWEMOJI_BASE.format(twemoji_code)
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
+            _twemoji_cache[twemoji_code] = resp.content
+        except Exception as e:
+            print(f"TWEMOJI FETCH FAILED ({twemoji_code}): {e}")
+            _twemoji_cache[twemoji_code] = None
+
+    svg_bytes = _twemoji_cache[twemoji_code]
+    if svg_bytes:
+        try:
+            import cairosvg
+            png = cairosvg.svg2png(bytestring=svg_bytes, output_width=size_px, output_height=size_px)
+            return Image.open(_io.BytesIO(png)).convert("RGBA")
+        except Exception as e:
+            print(f"TWEMOJI RENDER FAILED: {e}")
+
+    # Fallback: coloured outline SVG
+    return _svg_to_pil(_wmo_to_gem_svg(wmo_code), size_px=size_px)
+
+
 def build_gem_day_strip(daily, tz_name, n_days=10):
     """
     Renders a 7-day forecast strip using the same PIL weather icons as the
@@ -1668,10 +1726,8 @@ def build_gem_day_strip(daily, tz_name, n_days=10):
             draw.text((x0 + (cell_w - tw) // 2, y0 + 12), day_label,
                       font=font_day, fill=TEXT_DARK if i == 0 else TEXT_GRAY)
 
-            # Icon — coloured SVG via cairosvg
-            icon_img = _svg_to_pil(_wmo_to_gem_svg(code), size_px=icon_px)
-            if icon_img is None:
-                icon_img = Image.new("RGBA", (icon_px, icon_px), (0, 0, 0, 0))
+            # Icon — Twemoji emoji via CDN + cairosvg, fallback to coloured SVG
+            icon_img = _twemoji_to_pil(code, size_px=icon_px)
             canvas.paste(icon_img, (x0 + (cell_w - icon_px) // 2, y0 + icon_y), icon_img)
 
             # Temp range

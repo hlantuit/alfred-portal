@@ -1609,16 +1609,25 @@ def build_gem_day_strip(daily, tz_name, n_days=10):
         icon_y   = 48          # top edge of icon within cell
         temp_y   = icon_y + icon_px + 12
         wind_y   = temp_y + 30
+        cols     = 5           # two rows of 5 for better mobile readability
+        rows     = (n + cols - 1) // cols
 
-        canvas = Image.new("RGBA", (cell_w * n, cell_h), (0, 0, 0, 0))
+        canvas = Image.new("RGBA", (cell_w * cols, cell_h * rows), (0, 0, 0, 0))
         draw   = ImageDraw.Draw(canvas)
 
+        _NOTO_EMOJI = "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
+        _DEJAVU_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        _DEJAVU = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
         try:
-            font_day    = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
-            font_temp   = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
-            font_detail = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",     17)
+            font_day    = ImageFont.truetype(_DEJAVU_BOLD, 22)
+            font_temp   = ImageFont.truetype(_DEJAVU_BOLD, 22)
+            font_detail = ImageFont.truetype(_DEJAVU,     17)
         except Exception:
             font_day = font_temp = font_detail = ImageFont.load_default()
+        try:
+            font_emoji = ImageFont.truetype(_NOTO_EMOJI, icon_px)
+        except Exception:
+            font_emoji = None
 
         wc   = daily.get("weathercode") or []
         tmax = daily.get("temp_max")    or []
@@ -1631,7 +1640,10 @@ def build_gem_day_strip(daily, tz_name, n_days=10):
         SEP_COLOR = (220, 218, 215, 120)
 
         for i in range(n):
-            x0      = i * cell_w
+            col     = i % cols
+            row     = i // cols
+            x0      = col * cell_w
+            y0      = row * cell_h
             code    = int(wc[i])   if i < len(wc)   and wc[i]   is not None else None
             t_max   = tmax[i]      if i < len(tmax) and tmax[i]  is not None else None
             t_min   = tmin[i]      if i < len(tmin) and tmin[i]  is not None else None
@@ -1645,24 +1657,40 @@ def build_gem_day_strip(daily, tz_name, n_days=10):
             # Day name
             bb = draw.textbbox((0, 0), day_label, font=font_day)
             tw = bb[2] - bb[0]
-            draw.text((x0 + (cell_w - tw) // 2, 12), day_label,
+            draw.text((x0 + (cell_w - tw) // 2, y0 + 12), day_label,
                       font=font_day, fill=TEXT_DARK if i == 0 else TEXT_GRAY)
 
-            # Icon — same PIL renderer as the weather block
-            icon_png = render_weather_icon(code)
-            if icon_png:
-                icon_img = Image.open(_io.BytesIO(icon_png)).convert("RGBA")
-                icon_img = icon_img.resize((icon_px, icon_px), Image.LANCZOS)
-            else:
-                icon_img = Image.new("RGBA", (icon_px, icon_px), (0, 0, 0, 0))
-            canvas.paste(icon_img, (x0 + (cell_w - icon_px) // 2, icon_y), icon_img)
+            # Icon — emoji rendered with NotoColorEmoji, fallback to PIL icons
+            emoji_char = weathercode_to_emoji(code)
+            emoji_drawn = False
+            if font_emoji and emoji_char and emoji_char != "—":
+                try:
+                    em_img = Image.new("RGBA", (icon_px, icon_px), (0, 0, 0, 0))
+                    em_draw = ImageDraw.Draw(em_img)
+                    bb = em_draw.textbbox((0, 0), emoji_char, font=font_emoji, embedded_color=True)
+                    ew, eh = bb[2] - bb[0], bb[3] - bb[1]
+                    ox = (icon_px - ew) // 2 - bb[0]
+                    oy = (icon_px - eh) // 2 - bb[1]
+                    em_draw.text((ox, oy), emoji_char, font=font_emoji, embedded_color=True)
+                    canvas.paste(em_img, (x0 + (cell_w - icon_px) // 2, y0 + icon_y), em_img)
+                    emoji_drawn = True
+                except Exception:
+                    pass
+            if not emoji_drawn:
+                icon_png = render_weather_icon(code)
+                if icon_png:
+                    icon_img = Image.open(_io.BytesIO(icon_png)).convert("RGBA")
+                    icon_img = icon_img.resize((icon_px, icon_px), Image.LANCZOS)
+                else:
+                    icon_img = Image.new("RGBA", (icon_px, icon_px), (0, 0, 0, 0))
+                canvas.paste(icon_img, (x0 + (cell_w - icon_px) // 2, y0 + icon_y), icon_img)
 
             # Temp range
             if t_max is not None and t_min is not None:
                 temp_label = f"{fmt_temp(t_min)}–{fmt_temp(t_max)}°"
                 bb = draw.textbbox((0, 0), temp_label, font=font_temp)
                 tw = bb[2] - bb[0]
-                draw.text((x0 + (cell_w - tw) // 2, temp_y), temp_label,
+                draw.text((x0 + (cell_w - tw) // 2, y0 + temp_y), temp_label,
                           font=font_temp, fill=TEXT_DARK)
 
             # Wind
@@ -1671,12 +1699,15 @@ def build_gem_day_strip(daily, tz_name, n_days=10):
                 wind_label = f"{wind_spd:.0f} km/h {compass}".strip()
                 bb = draw.textbbox((0, 0), wind_label, font=font_detail)
                 tw = bb[2] - bb[0]
-                draw.text((x0 + (cell_w - tw) // 2, wind_y), wind_label,
+                draw.text((x0 + (cell_w - tw) // 2, y0 + wind_y), wind_label,
                           font=font_detail, fill=TEXT_GRAY)
 
-            # Cell separator
-            if i > 0:
-                draw.line([(x0, 12), (x0, cell_h - 12)], fill=SEP_COLOR, width=1)
+            # Column separator (vertical line within each row)
+            if col > 0:
+                draw.line([(x0, y0 + 12), (x0, y0 + cell_h - 12)], fill=SEP_COLOR, width=1)
+            # Row separator (horizontal line between rows)
+            if row > 0 and col == 0:
+                draw.line([(0, y0), (cell_w * cols, y0)], fill=SEP_COLOR, width=1)
 
         out = _io.BytesIO()
         canvas.save(out, format="PNG")

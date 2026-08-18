@@ -19,6 +19,8 @@ jobs:
         with:
           python-version: "3.11"
 
+      - run: sudo apt-get install -y fonts-noto-color-emoji
+
       - run: pip install requests pillow matplotlib numpy notion-client cairosvg xarray netcdf4 scipy cartopy shapely
 
       # All communities, fast blocks only (no satellite imagery)

@@ -1599,9 +1599,9 @@ def _svg_to_pil(svg_str, size_px=72):
         return Image.new("RGBA", (size_px, size_px), (0, 0, 0, 0))
 
 
-# Twemoji codepoints for each WMO condition group (jsDelivr CDN, no auth needed)
-_TWEMOJI_BASE = "https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/{}.svg"
-_WMO_TWEMOJI = {
+# Noto Emoji SVG codepoints for each WMO condition group (Google, jsDelivr CDN)
+_NOTO_EMOJI_BASE = "https://cdn.jsdelivr.net/gh/googlefonts/noto-emoji@main/svg/emoji_u{}.svg"
+_WMO_NOTO_EMOJI = {
     "sun":           "2600",    # ☀️
     "partly_cloudy": "26c5",    # ⛅
     "cloud":         "2601",    # ☁️
@@ -1611,12 +1611,12 @@ _WMO_TWEMOJI = {
     "snow":          "1f328",   # 🌨️
     "thunder":       "26c8",    # ⛈️
 }
-_twemoji_cache: dict = {}
+_emoji_icon_cache: dict = {}
 
 
 def _twemoji_to_pil(wmo_code, size_px=96):
     """
-    Fetch the Twemoji SVG for a WMO weathercode and render to PIL RGBA.
+    Fetch the Noto Emoji SVG for a WMO weathercode and render to PIL RGBA.
     Results are cached in-process. Falls back to the coloured _GEM_SVG on error.
     """
     import io as _io
@@ -1632,26 +1632,26 @@ def _twemoji_to_pil(wmo_code, size_px=96):
         **{c: "thunder"       for c in [95, 96, 99]},
     }
     condition = key_map.get(wmo_code, "cloud")
-    twemoji_code = _WMO_TWEMOJI[condition]
+    noto_code = _WMO_NOTO_EMOJI[condition]
 
-    if twemoji_code not in _twemoji_cache:
+    if noto_code not in _emoji_icon_cache:
         try:
-            url = _TWEMOJI_BASE.format(twemoji_code)
+            url = _NOTO_EMOJI_BASE.format(noto_code)
             resp = requests.get(url, timeout=10)
             resp.raise_for_status()
-            _twemoji_cache[twemoji_code] = resp.content
+            _emoji_icon_cache[noto_code] = resp.content
         except Exception as e:
-            print(f"TWEMOJI FETCH FAILED ({twemoji_code}): {e}")
-            _twemoji_cache[twemoji_code] = None
+            print(f"NOTO EMOJI FETCH FAILED ({noto_code}): {e}")
+            _emoji_icon_cache[noto_code] = None
 
-    svg_bytes = _twemoji_cache[twemoji_code]
+    svg_bytes = _emoji_icon_cache[noto_code]
     if svg_bytes:
         try:
             import cairosvg
             png = cairosvg.svg2png(bytestring=svg_bytes, output_width=size_px, output_height=size_px)
             return Image.open(_io.BytesIO(png)).convert("RGBA")
         except Exception as e:
-            print(f"TWEMOJI RENDER FAILED: {e}")
+            print(f"NOTO EMOJI RENDER FAILED: {e}")
 
     # Fallback: coloured outline SVG
     return _svg_to_pil(_wmo_to_gem_svg(wmo_code), size_px=size_px)

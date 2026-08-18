@@ -923,6 +923,12 @@ def update_community(community, now_utc):
         institution_text=institution_text, tz_name=tz_name,
     )
 
+    if "quick_links" in enabled:
+        blocks += lib.build_quick_links_section(
+            external_links=community.get("external_links", []),
+            windy_links=community.get("windy_links"),
+        )
+
     if "weather" in enabled and weather is not None:
         blocks += lib.build_todays_conditions_section(
             weather_text, weather_source_text, weather_icon_block, mini_forecast_strip_block,
@@ -943,6 +949,12 @@ def update_community(community, now_utc):
         blocks += lib.build_marine_forecast_section(
             marine_text, marine_source_text, marine_zone_name, marine_zone_id,
         )
+
+    if "windy_embed" in enabled:
+        blocks += lib.build_windy_embed_section(lat, lon)
+
+    if "gem_day_strip" in enabled and gem_forecast:
+        blocks += lib.build_gem_day_strip_only_section(gem_forecast, tz_name)
 
     if "wildfire" in enabled:
         _wf_h = 150_000 * getattr(lib, "MODIS_OVERSIZE_FACTOR", 1.2)

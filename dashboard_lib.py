@@ -7385,6 +7385,111 @@ DISCLAIMER_FOOTER = (
 )
 
 
+def build_quick_links_section(external_links, windy_links=None):
+    """
+    Compact header strip: Windy shortcut links + other external data sources.
+    Rendered as two callout blocks side-by-side (Notion doesn't support true
+    columns via API, so we use a two-item table row instead).
+
+    external_links: list of {"label": str, "url": str}
+    windy_links:    list of {"label": str, "url": str}  (optional)
+    """
+    blocks = []
+    blocks.append({"object": "block", "type": "heading_2", "heading_2": {
+        "rich_text": [{"type": "text", "text": {"content": "🔗 Quick links"}}],
+        "color": "default",
+    }})
+
+    # Windy links
+    if windy_links:
+        windy_rt = []
+        for i, lnk in enumerate(windy_links):
+            if i > 0:
+                windy_rt.append({"type": "text", "text": {"content": "   "}})
+            windy_rt.append({
+                "type": "text",
+                "text": {"content": lnk["label"], "link": {"url": lnk["url"]}},
+                "annotations": {"bold": True, "color": "blue"},
+            })
+        blocks.append({"object": "block", "type": "callout", "callout": {
+            "rich_text": windy_rt,
+            "icon": {"type": "emoji", "emoji": "🌬️"},
+            "color": "blue_background",
+        }})
+
+    # Data source links
+    if external_links:
+        src_rt = []
+        for i, lnk in enumerate(external_links):
+            if i > 0:
+                src_rt.append({"type": "text", "text": {"content": "\n"}})
+            src_rt.append({
+                "type": "text",
+                "text": {"content": lnk["label"], "link": {"url": lnk["url"]}},
+            })
+        blocks.append({"object": "block", "type": "callout", "callout": {
+            "rich_text": src_rt,
+            "icon": {"type": "emoji", "emoji": "📊"},
+            "color": "gray_background",
+        }})
+
+    blocks.append(divider())
+    return blocks
+
+
+def build_windy_embed_section(lat, lon):
+    """
+    Embeds a Windy map iframe centred on the community, defaulting to the
+    fog/low-cloud overlay — the layer rangers trust most.
+    Notion embed blocks render as iframes on the published page.
+    """
+    params = (
+        f"lat={lat:.3f}&lon={lon:.3f}"
+        f"&detailLat={lat:.3f}&detailLon={lon:.3f}"
+        f"&width=650&height=450&zoom=8"
+        f"&level=surface&overlay=fog&product=ecmwf"
+        f"&menu=&message=true&marker=true"
+        f"&calendar=now&pressure=&type=map&location=coordinates"
+        f"&detail=&metricWind=km%2Fh&metricTemp=%C2%B0C&radarRange=-1"
+    )
+    embed_url = f"https://embed.windy.com/embed2.html?{params}"
+    blocks = []
+    blocks.append({"object": "block", "type": "heading_2", "heading_2": {
+        "rich_text": [{"type": "text", "text": {"content": "🌫️ Windy — fog, wind & waves"}}],
+        "color": "default",
+    }})
+    blocks.append({"object": "block", "type": "embed", "embed": {"url": embed_url}})
+    blocks.append({"object": "block", "type": "paragraph", "paragraph": {
+        "rich_text": [{"type": "text",
+                       "text": {"content": "Default overlay: fog/low cloud. Switch overlays inside the map.",
+                                "link": None},
+                       "annotations": {"color": "gray"}}],
+    }})
+    blocks.append(divider())
+    return blocks
+
+
+def build_gem_day_strip_only_section(gem_forecast, tz_name):
+    """
+    Lightweight forecast section: just the 10-day emoji strip, no charts.
+    Used in the redesigned dummy dashboard.
+    """
+    if not gem_forecast:
+        return []
+    blocks = []
+    blocks.append({"object": "block", "type": "heading_2", "heading_2": {
+        "rich_text": [{"type": "text", "text": {"content": "📅 Weather forecast — next 10 days"}}],
+        "color": "default",
+    }})
+    strip_bytes = build_gem_day_strip(gem_forecast.get("daily", {}), tz_name)
+    if strip_bytes:
+        strip_block, _ = _upload_chart_or_caption(strip_bytes, "gem_day_strip.png", None)
+        if strip_block:
+            blocks.append(strip_block)
+    blocks.append(divider())
+    return blocks
+
+
 def build_disclaimer_section(sources):
     """
     sources: list of keys from DISCLAIMER_SOURCES (e.g. ["gem", "open_meteo", "modis", "sentinel1"]).

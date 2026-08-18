@@ -1062,11 +1062,8 @@ def build_mini_forecast_strip(days_data):
 
         for i, d in enumerate(days_data):
             x0 = i * cell_w
-            icon_bytes = render_weather_icon(d["weathercode"])
-            if icon_bytes:
-                icon_img = Image.open(_io.BytesIO(icon_bytes)).convert("RGBA")
-                icon_img = icon_img.resize((76, 76), Image.LANCZOS)
-                canvas.paste(icon_img, (x0 + (cell_w - 76) // 2, 42), icon_img)
+            icon_img = _twemoji_to_pil(d["weathercode"], size_px=76)
+            canvas.paste(icon_img, (x0 + (cell_w - 76) // 2, 42), icon_img)
 
             day_label = d["day_label"]
             temp_label = f"{fmt_temp(d['temp_min'])}–{fmt_temp(d['temp_max'])}°"
@@ -1118,11 +1115,8 @@ def build_large_forecast_strip(days_data):
 
         for i, d in enumerate(days_data):
             x0 = i * cell_w
-            icon_bytes = render_weather_icon(d["weathercode"])
-            if icon_bytes:
-                icon_img = Image.open(_io.BytesIO(icon_bytes)).convert("RGBA")
-                icon_img = icon_img.resize((icon_size, icon_size), Image.LANCZOS)
-                canvas.paste(icon_img, (x0 + (cell_w - icon_size) // 2, 36), icon_img)
+            icon_img = _twemoji_to_pil(d["weathercode"], size_px=icon_size)
+            canvas.paste(icon_img, (x0 + (cell_w - icon_size) // 2, 36), icon_img)
 
             day_label = d["day_label"]
             day_bbox = draw.textbbox((0, 0), day_label, font=font_day)

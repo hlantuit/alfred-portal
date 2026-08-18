@@ -7503,6 +7503,36 @@ def build_disclaimer_section(sources):
     return [disclaimer_paragraph(text)]
 
 
+def build_gem_forecast_compact_section(gem_forecast, tz_name, now_utc=None):
+    """
+    Reduced GEM forecast: 10-day icon strip + temperature chart only.
+    Wind, pressure, precipitation, and cloud cover charts are omitted.
+    """
+    if not gem_forecast:
+        return [paragraph("GEM/GDPS forecast unavailable.")]
+
+    daily  = gem_forecast.get("daily",  {})
+    hourly = gem_forecast.get("hourly", {})
+    source = gem_forecast.get("source", "GEM")
+    source_label = "GDPS (GEM-seamless) via Open-Meteo" if source == "gem_seamless" else "Open-Meteo (ECMWF fallback)"
+
+    blocks = [heading("Weather forecast — next 10 days", level=2)]
+
+    strip_bytes = build_gem_day_strip(daily, tz_name)
+    img_block, caption = _upload_chart_or_caption(
+        strip_bytes, "gem_day_strip.png", "10-day forecast strip could not be rendered."
+    )
+    blocks.append(img_block if img_block else paragraph(caption))
+    blocks.append(gray_caption(f"Source: {source_label}"))
+    blocks.append(divider())
+
+    temp_b, _, _, _, _ = build_gem_forecast_charts(hourly, tz_name, now_utc=now_utc)
+    blk, cap = _upload_chart_or_caption(temp_b, "gem_temp.png", "GEM temperature forecast unavailable.")
+    blocks.append(blk if blk else paragraph(cap))
+
+    return blocks
+
+
 def build_gem_forecast_section(gem_forecast, tz_name, now_utc=None, cloud_cover_vals=None):
     """
     Assembles all GEM-based forecast Notion blocks:
@@ -8431,6 +8461,56 @@ def _detect_snowmelt(daily_temps, year):
                 return d - _td(days=4)  # start of the window
         d += _td(days=1)
     return None
+
+
+def mosquito_peak_activity(gem_forecast, lat, lon, now_utc, cache_path=None, tz_name="UTC"):
+    """
+    Returns the peak hourly mosquito activity value (0–100) over the 10-day
+    forecast window, without rendering any chart. Used for threshold checks.
+    Returns 0 on any error.
+    """
+    import math as _math, json as _json, os as _os
+    from datetime import date as _date, timedelta as _td
+    try:
+        today = now_utc.date()
+        year  = today.year
+        _cache = {}
+        if cache_path and _os.path.exists(cache_path):
+            try:
+                with open(cache_path) as _cf:
+                    _cache = _json.load(_cf)
+            except Exception:
+                pass
+        if _cache.get("year") == year and _cache.get("snowmelt_date"):
+            snowmelt = _date.fromisoformat(_cache["snowmelt_date"])
+        else:
+            return 0  # no cached snowmelt — can't compute
+        tdd_today = max(0.0, sum(
+            max(0.0, t) for t in (gem_forecast.get("daily", {}).get("temp_mean") or [])
+        ))
+        _tdd_peak, _tdd_scale = 160.0, 850.0
+        def _sf(tdd):
+            if tdd < 40:
+                return 0.0
+            if tdd <= _tdd_peak:
+                return min(1.0, (tdd - 40) / 120)
+            f = _math.exp(-(tdd - _tdd_peak) / _tdd_scale)
+            return f if f >= 0.02 else 0.0
+        hourly = gem_forecast.get("hourly", {})
+        temps  = hourly.get("temperature_2m") or []
+        winds  = hourly.get("windspeed_10m")  or []
+        peak = 0.0
+        for k, ht in enumerate(temps):
+            if ht is None:
+                continue
+            hw = winds[k] if k < len(winds) and winds[k] is not None else 0.0
+            tf = max(0.0, min(1.0, (ht - 8) / 12))
+            wf = max(0.1, min(1.0, (22 - hw) / 17))
+            sf = _sf(tdd_today)
+            peak = max(peak, sf * 100 * tf * wf)
+        return peak
+    except Exception:
+        return 0
 
 
 def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,

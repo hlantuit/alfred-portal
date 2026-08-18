@@ -43,23 +43,6 @@
   "modis_center_y": 95916,
   "modis_rotation_deg": 92.0,
   "modis_bbox_3413": "-2478373,-84084,-2118373,275916",
-  "windy_links": [
-    {
-      "label": "Wind & Fog",
-      "overlay": "fog",
-      "url": "https://www.windy.com/68.994/-137.390?fog,68.994,-137.390,8"
-    },
-    {
-      "label": "Waves",
-      "overlay": "waves",
-      "url": "https://www.windy.com/68.994/-137.390?waves,68.994,-137.390,8"
-    },
-    {
-      "label": "Rain",
-      "overlay": "rain",
-      "url": "https://www.windy.com/68.994/-137.390?rain,68.994,-137.390,8"
-    }
-  ],
   "external_links": [
     {
       "label": "Tide gauge — Shingle Point",
@@ -78,18 +61,25 @@
       "url": "https://weather.gc.ca/warnings/index_e.html?prov=yt"
     }
   ],
+  "mosquito_min_activity": 40,
   "blocks": [
-    "quick_links",
-    "alerts",
     "sentinel1",
     "modis",
-    "windy_embed",
     "weather",
-    "gem_day_strip",
+    "alerts",
+    "wildfire",
+    "aurora",
+    "gem_forecast_compact",
+    "marine",
+    "wave_forecast",
     "water_level",
     "hydrometric",
     "sea_ice",
-    "sea_ice_zoom"
+    "sea_ice_zoom",
+    "wind_chart",
+    "temperature",
+    "mosquito",
+    "quick_links_footer"
   ],
   "sea_seed_from": "top"
 }

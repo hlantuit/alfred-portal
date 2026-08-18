@@ -956,6 +956,9 @@ def update_community(community, now_utc):
     if "gem_day_strip" in enabled and gem_forecast:
         blocks += lib.build_gem_day_strip_only_section(gem_forecast, tz_name)
 
+    if "gem_forecast_compact" in enabled and gem_forecast:
+        blocks += lib.build_gem_forecast_compact_section(gem_forecast, tz_name, now_utc=now_utc)
+
     if "wildfire" in enabled:
         _wf_h = 150_000 * getattr(lib, "MODIS_OVERSIZE_FACTOR", 1.2)
         _wf_bbox = f"{modis_cx-_wf_h:.0f},{modis_cy-_wf_h:.0f},{modis_cx+_wf_h:.0f},{modis_cy+_wf_h:.0f}"
@@ -1045,9 +1048,19 @@ def update_community(community, now_utc):
 
     if "mosquito" in enabled and gem_forecast:
         _mosq_cache = os.path.join(COMMUNITIES_DIR, sid, "charts", "mosquito_meta.json")
+        _mosq_threshold = community.get("mosquito_min_activity", 0)  # 0 = always show; 40 = moderate+
         try:
-            blocks += lib.build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
-                                                           cache_path=_mosq_cache, tz_name=tz_name)
+            _mosq_blocks = lib.build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
+                                                                cache_path=_mosq_cache, tz_name=tz_name)
+            if _mosq_threshold > 0:
+                # Only include if peak activity exceeds threshold (skip off-season)
+                _peak = lib.mosquito_peak_activity(gem_forecast, lat, lon, now_utc, _mosq_cache, tz_name)
+                if _peak >= _mosq_threshold:
+                    blocks += _mosq_blocks
+                else:
+                    print(f"[{sid}] MOSQUITO: peak {_peak:.0f} < threshold {_mosq_threshold} — block suppressed")
+            else:
+                blocks += _mosq_blocks
         except Exception as _me:
             import traceback
             print(f"[{sid}] MOSQUITO BLOCK FAILED: {_me}")
@@ -1055,6 +1068,12 @@ def update_community(community, now_utc):
 
     if "harvesting" in enabled:
         blocks += lib.build_harvesting_section(now_utc, site_id=sid)
+
+    if "quick_links_footer" in enabled:
+        blocks += lib.build_quick_links_section(
+            external_links=community.get("external_links", []),
+            windy_links=community.get("windy_links"),
+        )
 
     # Build disclaimer from active blocks
     sources = []

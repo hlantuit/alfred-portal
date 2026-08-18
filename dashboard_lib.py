@@ -964,17 +964,23 @@ def windspeed_to_beaufort_color(speed_kmh):
     return scale[-1][1], scale[-1][2]
 
 
-def render_weather_icon(weathercode):
+def render_weather_icon(weathercode, size_px=140):
     """
-    Renders a small PNG icon matching the given WMO weathercode.
-    Returns PNG bytes, or None if rendering fails for any reason (so a
-    drawing bug never blocks the rest of the dashboard from updating).
+    Returns PNG bytes for a Noto Emoji weather icon matching the WMO weathercode.
+    Falls back to the legacy PIL-drawn icon if the Noto fetch/render fails.
     """
+    import io as _io
     try:
-        import io as _io
+        img = _twemoji_to_pil(weathercode, size_px=size_px)
+        out_buf = _io.BytesIO()
+        img.save(out_buf, format="PNG")
+        return out_buf.getvalue()
+    except Exception:
+        pass
 
+    # Legacy PIL fallback
+    try:
         code = weathercode if weathercode is not None else -1
-
         if code in (0, 1):
             img = _icon_sun()
         elif code == 2:
@@ -996,14 +1002,10 @@ def render_weather_icon(weathercode):
         elif code in (95, 96, 99):
             img = _icon_thunder()
         else:
-            # Unrecognized code: fall back to a plain cloud rather than
-            # guessing, since an unknown code shouldn't be shown as sunny.
             img = _icon_cloud()
-
         out_buf = _io.BytesIO()
         img.save(out_buf, format="PNG")
         return out_buf.getvalue()
-
     except Exception as e:
         print("WEATHER ICON RENDER FAILED:", e)
         return None

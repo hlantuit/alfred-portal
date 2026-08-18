@@ -1170,7 +1170,7 @@ def build_wind_forecast_mini_chart(hourly_wind_forecast):
         fig.patch.set_alpha(0)
         ax.set_facecolor("none")
 
-        ax.fill_between(hours, speeds, 0, color=NOTION_BLUE, alpha=0.15, linewidth=0)
+        _gradient_fill(ax, hours, speeds, 0, NOTION_BLUE)
         ax.plot(hours, speeds, color=NOTION_BLUE, linewidth=3)
 
         NOTION_RED = "#E16259"
@@ -1687,6 +1687,37 @@ def build_gem_day_strip(daily, tz_name, n_days=10):
         return None
 
 
+def _gradient_fill(ax, x, y, baseline, color, alpha_bot=0.04, alpha_top=0.28, zorder=1):
+    """
+    Vertical gradient fill below a curve.
+    Replaces a flat fill_between: lighter (alpha_bot) at the baseline,
+    richer (alpha_top) near the curve peak, same hue as `color`.
+    """
+    import numpy as _np
+    import matplotlib.colors as _mcolors
+    from matplotlib.patches import PathPatch as _PathPatch
+    finite = [v for v in y if v is not None and isinstance(v, (int, float)) and not _np.isnan(v)]
+    if not finite:
+        return
+    y_top = max(finite)
+    if y_top <= baseline:
+        return
+    poly = ax.fill_between(x, y, baseline, alpha=0.0, linewidth=0, zorder=zorder)
+    rgba = _mcolors.to_rgba(color)
+    grad = _np.zeros((256, 1, 4), dtype=float)
+    grad[:, 0, :3] = rgba[:3]
+    grad[:, 0, 3] = _np.linspace(alpha_bot, alpha_top, 256)
+    img = ax.imshow(grad, aspect='auto', zorder=zorder,
+                    extent=[min(x), max(x), baseline, y_top],
+                    origin='lower', interpolation='bilinear')
+    paths = poly.get_paths()
+    if paths:
+        clip_patch = _PathPatch(paths[0], transform=ax.transData,
+                                facecolor='none', edgecolor='none')
+        ax.add_patch(clip_patch)
+        img.set_clip_path(clip_patch)
+
+
 def _gem_chart(hours, values, color, ylabel, t0, bar=False, ymin=None, ymax=None,
                strip_trailing_zeros=True, fill_baseline=None, direction_vals=None):
     """
@@ -1733,8 +1764,7 @@ def _gem_chart(hours, values, color, ylabel, t0, bar=False, ymin=None, ymax=None
         else:
             finite_vals = [v for v in values if v is not None]
             baseline = fill_baseline if fill_baseline is not None else (min(finite_vals) if finite_vals else 0)
-            ax.fill_between(hours, values, baseline,
-                            color=color, alpha=0.12, linewidth=0, zorder=1)
+            _gradient_fill(ax, hours, values, baseline, color)
             ax.plot(hours, values, color=color, linewidth=2.5, zorder=2)
 
             # "now" dot at hour 0
@@ -5019,7 +5049,7 @@ def build_tide_chart(tide_points, now_utc, tz_name):
         fig.patch.set_alpha(0)
         ax.set_facecolor("none")
 
-        ax.fill_between(hours, levels, min(levels), color=NOTION_BLUE, alpha=0.12, linewidth=0, zorder=1)
+        _gradient_fill(ax, hours, levels, min(levels), NOTION_BLUE)
         ax.plot(hours, levels, linewidth=3, color=NOTION_BLUE, zorder=2)
         ax.plot([current_hour], [current_level], marker="o", markersize=10,
                  color=NOTION_RED, markeredgecolor="white", markeredgewidth=1.5, zorder=3)
@@ -5565,7 +5595,7 @@ def build_water_level_chart(times, values, tz_name, yearly_mean=None,
                     color=PALE_VIOLET, markeredgecolor="white", markeredgewidth=1.5, zorder=4)
 
         # TOPAZ6 on top with fill.
-        ax.fill_between(hours, plot_values, min(plot_values), color=DEEP_VIOLET, alpha=0.10, linewidth=0, zorder=2)
+        _gradient_fill(ax, hours, plot_values, min(plot_values), DEEP_VIOLET, zorder=2)
         ax.plot(hours, plot_values, linewidth=2.5, color=DEEP_VIOLET, zorder=3,
                 label="TOPAZ6 (SSH, vs. yearly mean)")
 
@@ -5925,7 +5955,7 @@ def build_hydrometric_chart(times, values_m, station_id, river_name, tz_name="Am
         fig.patch.set_alpha(0)
         ax.set_facecolor("none")
 
-        ax.fill_between(hours, values_m, min(values_m), color=RIVER_TEAL, alpha=0.12, linewidth=0, zorder=1)
+        _gradient_fill(ax, hours, values_m, min(values_m), RIVER_TEAL)
         ax.plot(hours, values_m, linewidth=2.5, color=RIVER_TEAL, zorder=2)
         ax.plot([hours[-1]], [values_m[-1]], marker="o", markersize=10,
                  color=NOTION_RED, markeredgecolor="white", markeredgewidth=1.5, zorder=3)
@@ -6993,7 +7023,7 @@ def build_wave_forecast_chart(wave_data, tz_name, now_utc):
         fig.patch.set_alpha(0)
         ax.set_facecolor("none")
 
-        ax.fill_between(hours, heights, 0, color=NOTION_BLUE, alpha=0.15, linewidth=0)
+        _gradient_fill(ax, hours, heights, 0, NOTION_BLUE)
         ax.plot(hours, heights, color=NOTION_BLUE, linewidth=2.5)
 
         # Rough sea thresholds
@@ -8400,8 +8430,7 @@ def build_mosquito_forecast_section(gem_forecast, lat, lon, now_utc, site_label,
         ax.set_facecolor("none")
 
         if _h_activity:
-            ax.fill_between(_h_hours, _h_activity, 0,
-                            color=PINK, alpha=0.12, linewidth=0, zorder=1)
+            _gradient_fill(ax, _h_hours, _h_activity, 0, PINK)
             ax.plot(_h_hours, _h_activity, color=PINK, linewidth=2.5, zorder=2)
             _NOTION_RED = "#E16259"
             ax.plot([0], [_h_activity[0]], marker="o", markersize=9,

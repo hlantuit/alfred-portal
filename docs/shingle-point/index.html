@@ -396,16 +396,16 @@ svg.sp{width:100%;height:100%;display:block}
   <div id="ice" class="sec"><div class="sec-hd">Sea ice · Sentinel-1 SAR</div></div>
   <div class="img-row-3" id="sar-card">
     <div class="img-card" onclick="openLb(this.querySelector('img'))">
+      <img src="img/sentinel1.png" alt="Sentinel-1 SAR" onerror="this.closest('.img-card').style.display='none'">
+      <div class="img-cap">Sentinel-1 SAR · VV polarisation · Shingle Point area · click to zoom</div>
+    </div>
+    <div class="img-card" onclick="openLb(this.querySelector('img'))">
       <img src="img/sea_ice.png" alt="Sea ice 150 km" onerror="this.closest('.img-card').style.display='none'">
       <div class="img-cap">150 km frame · click to zoom</div>
     </div>
     <div class="img-card" onclick="openLb(this.querySelector('img'))">
       <img src="img/sea_ice_zoom.png" alt="Sea ice 50 km" onerror="this.closest('.img-card').style.display='none'">
       <div class="img-cap">50 km frame · click to zoom</div>
-    </div>
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/sentinel1.png" alt="Sentinel-1 SAR" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Sentinel-1 SAR · VV polarisation · Shingle Point area · click to zoom</div>
     </div>
   </div>
 

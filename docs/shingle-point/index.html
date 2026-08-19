@@ -70,19 +70,14 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 
 /* ── Satellite ── */
 .sat-wrap{position:relative;background:#0A1520;line-height:0;overflow:hidden}
-/* Banner image: wide landscape (modis_banner.jpg) → cover so it fills width;
-   SAR/portrait fallback: contain so the full image stays visible */
-.sat-wrap img{width:100%;height:50vh;max-height:480px;min-height:220px;display:block;cursor:zoom-in;transition:opacity .3s;object-fit:cover;object-position:var(--sat-pos,62% 50%);background:#0A1520}
-.sat-wrap img.sat-portrait{object-fit:contain;object-position:center}
+/* MODIS banner: pre-cropped to 4:1 server-side — display at natural ratio, no browser cropping */
+.sat-wrap img{width:100%;height:auto;display:block;cursor:zoom-in;transition:opacity .3s;background:#0A1520}
 .sat-wrap img.hidden{display:none}
 .sat-no-img{height:180px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.35);font-size:13px}
-.sat-bar{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(7,16,26,.88));padding:10px 16px 12px;display:flex;align-items:flex-end;justify-content:space-between}
+.sat-bar{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(7,16,26,.88));padding:10px 16px 12px}
 .sat-info .sat-label{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.5)}
 .sat-info .sat-title{font-size:13px;font-weight:700;color:#fff;margin-top:1px}
 .sat-info .sat-date{font-size:10px;color:rgba(255,255,255,.45);margin-top:1px}
-.sat-switch{display:flex;gap:5px}
-.sat-btn{padding:6px 14px;border-radius:4px;font-size:11px;font-weight:800;letter-spacing:.3px;cursor:pointer;background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.15);text-transform:uppercase}
-.sat-btn.on{background:var(--acc);border-color:var(--acc);color:#fff}
 
 /* ── Section ── */
 .sec{padding:18px 20px 0}
@@ -153,6 +148,8 @@ svg.sp{width:100%;height:100%;display:block}
 .img-card{background:var(--surf);border-radius:8px;overflow:hidden;border:1px solid var(--bdr2);line-height:0;cursor:zoom-in;display:block;width:100%}
 .img-card img{width:100%;min-width:100%;height:auto;display:block}
 .img-cap{font-size:10px;color:var(--muted);padding:6px 10px;line-height:1.4;background:var(--surf)}
+/* Portrait image cards (e.g. SAR): cap width so they don't balloon on wide screens */
+.img-card.portrait{max-width:480px}
 
 /* ── Marine ── */
 .marine-text{font-size:13px;color:var(--txt2);line-height:1.7}
@@ -258,21 +255,17 @@ svg.sp{width:100%;height:100%;display:block}
   <!-- Imagery -->
   <div id="imagery">
     <div class="sat-wrap">
-      <!-- Default: wide MODIS banner (landscape, covers the banner); fallback to portrait modis.png -->
+      <!-- MODIS banner: pre-cropped to 4:1, displays at natural ratio on all screens -->
       <div class="sat-no-img" id="satPlaceholder">Loading imagery…</div>
       <img id="satImg" src="img/modis_banner.jpg" alt="MODIS satellite"
            onclick="openLb(this)"
            onload="this.classList.remove('hidden');document.getElementById('satPlaceholder').style.display='none'"
-           onerror="this.src='img/modis.png';this.classList.add('sat-portrait')">
+           onerror="this.src='img/modis.png'">
       <div class="sat-bar">
         <div class="sat-info">
-          <div class="sat-label" id="sat-label">MODIS · True colour</div>
+          <div class="sat-label">MODIS Terra · True colour</div>
           <div class="sat-title">Shingle Point — Beaufort Sea</div>
-          <div class="sat-date">Updated each full workflow run · click to zoom</div>
-        </div>
-        <div class="sat-switch">
-          <div class="sat-btn" onclick="switchSat('sar',this)">SAR</div>
-          <div class="sat-btn on" onclick="switchSat('modis',this)">MODIS</div>
+          <div class="sat-date">Updated each workflow run · click to zoom · <a href="#sar-card" style="color:rgba(255,255,255,.55);text-decoration:underline">↓ SAR image below</a></div>
         </div>
       </div>
     </div>
@@ -386,7 +379,7 @@ svg.sp{width:100%;height:100%;display:block}
         <div class="ch-title">Total water level · Stn 06505</div>
         <div><span class="ch-val" id="cv-tide">—</span><span class="ch-unit"> m</span></div>
       </div>
-      <div class="ch-area"><svg class="sp" id="tideSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
+      <div class="ch-area" id="tideSVG" style="height:80px;overflow:hidden"></div>
       <div style="font-size:10px;color:var(--muted);margin-top:6px">DFO IWLS tide prediction · 7-day</div>
     </div>
     <div class="ch" id="riverCard">
@@ -409,6 +402,13 @@ svg.sp{width:100%;height:100%;display:block}
     <div class="img-card" onclick="openLb(this.querySelector('img'))">
       <img src="img/sea_ice_zoom.png" alt="Sea ice zoom" onerror="this.closest('.img-card').style.display='none'">
       <div class="img-cap">50 km frame · click to zoom</div>
+    </div>
+  </div>
+  <!-- SAR image card -->
+  <div class="chart-1" style="padding-top:10px" id="sar-card">
+    <div class="img-card portrait" onclick="openLb(this.querySelector('img'))">
+      <img src="img/sentinel1.png" alt="Sentinel-1 SAR" onerror="this.closest('.img-card').style.display='none'">
+      <div class="img-cap">Sentinel-1 SAR · VV polarisation · Shingle Point area · click to zoom</div>
     </div>
   </div>
 
@@ -497,24 +497,6 @@ function openLb(img){
 function closeLb(){document.getElementById('lb').classList.remove('show')}
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLb()})
 
-// ── Satellite switch ──
-function switchSat(mode,btn){
-  document.querySelectorAll('.sat-btn').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
-  const img=document.getElementById('satImg');
-  const lbl=document.getElementById('sat-label');
-  if(mode==='sar'){
-    img.src='img/sentinel1.png';
-    img.classList.add('sat-portrait');   // portrait → contain
-    lbl.textContent='Sentinel-1 SAR · VV polarisation';
-  } else {
-    // Try wide banner first, fall back to portrait modis.png
-    img.classList.remove('sat-portrait');
-    img.onerror=()=>{img.src='img/modis.png';img.classList.add('sat-portrait');img.onerror=null;};
-    img.src='img/modis_banner.jpg';
-    lbl.textContent='MODIS · True colour';
-  }
-}
 
 // ── Expand/collapse ──
 function toggleDetail(){
@@ -691,16 +673,13 @@ function renderWaveChart(containerId, series, tz){
   const nowX=Math.max(ML,Math.min(ML+cW,px(now)));
   const nowMark=(now>=tMin&&now<=tMax)?`<line x1="${nowX.toFixed(1)}" y1="${MT}" x2="${nowX.toFixed(1)}" y2="${(MT+cH).toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/><text x="${nowX.toFixed(1)}" y="${MT-3}" text-anchor="middle" font-size="10" fill="#C0392B" font-weight="700" font-family="system-ui,sans-serif">now</text>`:'';
   // Thresholds
-  const roughMark=ROUGH<maxH?`<line x1="${ML}" y1="${py(ROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(ROUGH).toFixed(1)}" stroke="#B86F00" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW+3).toFixed(1)}" y="${(py(ROUGH)+4).toFixed(1)}" font-size="10" fill="#B86F00" opacity="0.8" font-family="system-ui,sans-serif">rough</text>`:'';
-  const vroughMark=VROUGH<maxH?`<line x1="${ML}" y1="${py(VROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(VROUGH).toFixed(1)}" stroke="#C0392B" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW+3).toFixed(1)}" y="${(py(VROUGH)+4).toFixed(1)}" font-size="10" fill="#C0392B" opacity="0.8" font-family="system-ui,sans-serif">v.rough</text>`:'';
-  // Y-axis label
-  const cy=(MT+cH/2).toFixed(1);
-  const svgStr=`<svg id="waveSVGinner" viewBox="0 0 ${W} ${H}" style="width:100%;display:block;overflow:visible;cursor:crosshair">
+  const roughMark=ROUGH<maxH?`<line x1="${ML}" y1="${py(ROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(ROUGH).toFixed(1)}" stroke="#B86F00" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+6).toFixed(1)}" y="${(py(ROUGH)-3).toFixed(1)}" font-size="10" fill="#B86F00" opacity="0.8" font-family="system-ui,sans-serif">rough</text>`:'';
+  const vroughMark=VROUGH<maxH?`<line x1="${ML}" y1="${py(VROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(VROUGH).toFixed(1)}" stroke="#C0392B" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+6).toFixed(1)}" y="${(py(VROUGH)-3).toFixed(1)}" font-size="10" fill="#C0392B" opacity="0.8" font-family="system-ui,sans-serif">v.rough</text>`:'';
+  const svgStr=`<svg id="waveSVGinner" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;overflow:hidden;cursor:crosshair">
     <defs><linearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#005FA3" stop-opacity="0.3"/><stop offset="100%" stop-color="#005FA3" stop-opacity="0.02"/></linearGradient></defs>
     ${yticks}${xlabels}${nowMark}${roughMark}${vroughMark}
     <polygon points="${areaPts}" fill="url(#waveGrad)"/>
     <polyline points="${linePts}" fill="none" stroke="#005FA3" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-    <text x="14" y="${cy}" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.45" font-family="system-ui,sans-serif" transform="rotate(-90,14,${cy})">Wave ht. (m)</text>
   </svg>`;
   el.innerHTML=svgStr;
   // Hover tooltip
@@ -865,16 +844,16 @@ async function loadData(){
 
   // 10-day hourly times for interactive chart tooltips
   const htimes=w.hourly_times_10d||[];
-  const BLUE='#005FA3', STEEL='#5B7A94', GREY='#6B8499', TEAL='#1A7A52', AMBER='#B86F00';
+  const BLUE='#005FA3', BROWN='#7D5A3C', GREY='#6B8499', TEAL='#1A7A52', YELLOW='#C9A227';
 
   // Temperature — hourly line
   document.getElementById('cv-temp').textContent=w.temperature??'—';
-  renderChart('tempChart', w.hourly_temperature_10d||[], {times:htimes,tz,unit:'°C',stroke:AMBER});
+  renderChart('tempChart', w.hourly_temperature_10d||[], {times:htimes,tz,unit:'°C',stroke:YELLOW});
 
   // Expandable detail charts — all 10-day hourly
   renderChart('windChart',   w.hourly_wind_10d||[],     {times:htimes,tz,unit:' km/h',stroke:BLUE});
   renderChart('precipChart', w.hourly_precip_10d||[],   {times:htimes,tz,unit:' mm',  stroke:TEAL});
-  renderChart('presChart',   w.hourly_pressure_10d||[], {times:htimes,tz,unit:' hPa', stroke:STEEL});
+  renderChart('presChart',   w.hourly_pressure_10d||[], {times:htimes,tz,unit:' hPa', stroke:BROWN});
   renderChart('cloudChart',  w.hourly_cloud_10d||[],    {times:htimes,tz,unit:'%',    stroke:GREY});
 
   // Current values for expandable section headers

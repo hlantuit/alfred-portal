@@ -534,8 +534,23 @@ def main():
                 )
                 ct = r.headers.get("content-type","")
                 if r.status_code==200 and "image" in ct:
-                    out_path.write_bytes(r.content)
-                    print(f"  MODIS banner: {d} → {out_path.name} ({len(r.content)//1024} kB)")
+                    # Crop to exact 4:1 aspect ratio so every browser sees the same geographic crop
+                    try:
+                        from PIL import Image as _Img
+                        import io as _io
+                        img = _Img.open(_io.BytesIO(r.content))
+                        iw, ih = img.size
+                        target_h = iw // 4
+                        if ih > target_h:
+                            top = (ih - target_h) // 2
+                            img = img.crop((0, top, iw, top + target_h))
+                        buf = _io.BytesIO()
+                        img.save(buf, "JPEG", quality=88)
+                        out_path.write_bytes(buf.getvalue())
+                    except Exception as crop_err:
+                        print(f"  MODIS crop failed ({crop_err}), saving raw")
+                        out_path.write_bytes(r.content)
+                    print(f"  MODIS banner: {d} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
                     return True
             except Exception as e:
                 print(f"  MODIS banner day -{delta} failed: {e}")

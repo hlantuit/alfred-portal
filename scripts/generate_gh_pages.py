@@ -211,19 +211,29 @@ def fetch_tide(station_code, station_name, now_utc):
     from_dt = now_utc - timedelta(hours=6)
     to_dt = now_utc + timedelta(days=7)
 
-    try:
-        r = get_with_retry(
-            f"https://api-iwls.dfo-mpo.gc.ca/api/v1/stations/{station_id}/data",
-            params={
-                "time-series-code": "wlp",
-                "from": from_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "to": to_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
-            },
-            timeout=30,
-        )
-        points = r.json()
-    except Exception as e:
-        print(f"  IWLS data fetch failed: {e}")
+    # Try observed (wlo) first — predicted (wlp) is not available at all stations
+    points = None
+    for ts_code in ("wlo", "wlp"):
+        try:
+            r = requests.get(
+                f"https://api-iwls.dfo-mpo.gc.ca/api/v1/stations/{station_id}/data",
+                params={
+                    "time-series-code": ts_code,
+                    "from": from_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "to": to_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                },
+                timeout=30,
+            )
+            if r.status_code == 200:
+                pts = r.json()
+                if pts:
+                    print(f"  IWLS: using time-series-code={ts_code}")
+                    points = pts
+                    break
+        except Exception as e:
+            print(f"  IWLS {ts_code} attempt failed: {e}")
+    if not points:
+        print(f"  IWLS data fetch failed: no data for station {station_id}")
         return None
 
     if not points:
@@ -289,8 +299,7 @@ def fetch_river(station_id, provterr):
     try:
         r = get_with_retry(
             "https://api.weather.gc.ca/collections/hydrometric-realtime/items",
-            params={"station_number": station_id, "limit": 200,
-                    "sortby": "-datetime"},
+            params={"station_number": station_id, "limit": 200},
             timeout=30,
         )
         features = r.json().get("features", [])
@@ -434,28 +443,35 @@ def fetch_marine_forecast(zone_id):
 # ── EC alerts ─────────────────────────────────────────────────────────────
 
 def fetch_ec_alerts(prov="yt"):
-    import re
-    url = f"https://weather.gc.ca/rss/warning/{prov}_e.xml"
-    try:
-        r = get_with_retry(url, timeout=20,
-                           headers={"User-Agent": "alfred-portal/1.0 (research dashboard)"})
-        text = r.text
-        text = re.sub(r' xmlns[^"]*"[^"]*"', '', text)
-        text = re.sub(r'<(\w+):(\w+)', r'<\2', text)
-        text = re.sub(r'</(\w+):(\w+)', r'</\2', text)
-        import xml.etree.ElementTree as ET
-        root = ET.fromstring(text)
-        alerts = []
-        for e in root.findall(".//entry"):
-            title_el = e.find("title")
-            if title_el is not None:
-                t = (title_el.text or "").strip()
-                if t and "No watches" not in t:
-                    alerts.append(t)
-        return alerts[:5]
-    except Exception as e:
-        print(f"  EC alerts fetch failed: {e}")
-        return []
+    import re, xml.etree.ElementTree as ET
+    # Try province feed; fall back to NT (Shingle Point is near the YT/NT border)
+    for p in (prov, "nt"):
+        url = f"https://weather.gc.ca/rss/warning/{p}_e.xml"
+        try:
+            r = requests.get(url, timeout=20,
+                             headers={"User-Agent": "alfred-portal/1.0 (research dashboard)"})
+            if r.status_code == 404:
+                print(f"  EC alerts {p}_e.xml: 404, skipping")
+                continue
+            r.raise_for_status()
+            text = r.text
+            text = re.sub(r' xmlns[^"]*"[^"]*"', '', text)
+            text = re.sub(r'<(\w+):(\w+)', r'<\2', text)
+            text = re.sub(r'</(\w+):(\w+)', r'</\2', text)
+            root = ET.fromstring(text)
+            alerts = []
+            for e in root.findall(".//entry"):
+                title_el = e.find("title")
+                if title_el is not None:
+                    t = (title_el.text or "").strip()
+                    if t and "No watches" not in t:
+                        alerts.append(t)
+            if alerts:
+                print(f"  EC alerts ({p}): {len(alerts)} entries")
+                return alerts[:5]
+        except Exception as e:
+            print(f"  EC alerts {p} failed: {e}")
+    return []
 
 
 # ── Main ──────────────────────────────────────────────────────────────────

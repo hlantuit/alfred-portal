@@ -6,6 +6,9 @@
 <title>Shingle Point · Taqpaq</title>
 <meta name="description" content="Environmental conditions dashboard — Shingle Point / Taqpaq, Yukon Coast">
 <meta name="theme-color" content="#005FA3">
+<link rel="icon" type="image/png" href="alfred-logo.png">
+<link rel="apple-touch-icon" href="alfred-logo.png">
+<link rel="manifest" href="manifest.json">
 <style>
 :root {
   --bg:     #EEF3F8;
@@ -725,6 +728,11 @@ function fmtTime(utcStr,tz){
 }
 
 loadData();
+
+// Register service worker for PWA / offline shell
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
 </script>
 </body>
 </html>

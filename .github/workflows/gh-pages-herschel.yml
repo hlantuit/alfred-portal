@@ -21,7 +21,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install requests Pillow
+        run: pip install requests Pillow xarray netcdf4 scipy
 
       - name: Generate data.json and copy images
         run: python scripts/generate_gh_pages.py --community herschel

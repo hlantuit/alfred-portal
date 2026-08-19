@@ -322,6 +322,166 @@ def fetch_tide(station_code, station_name, now_utc):
     }
 
 
+# ── Total water level: TOPAZ6 (Copernicus) + GDSPS (MSC) ────────────────
+
+def _latlon_to_topaz6(lat_deg, lon_deg):
+    import math as _math
+    R = 6378273.0
+    lon0 = _math.radians(-45)
+    lat = _math.radians(lat_deg)
+    lon = _math.radians(lon_deg)
+    rho = 2 * R * _math.tan(_math.pi / 4 - lat / 2)
+    x = rho * _math.sin(lon - lon0)
+    y = -rho * _math.cos(lon - lon0)
+    return x, y
+
+
+def fetch_topaz_water_level(lat, lon, now_utc, site_label, yearly_mean=None):
+    """TOPAZ6 sea surface height via Copernicus THREDDS (tide + surge, 10-day forecast).
+    Returns (times_iso, values_m_anomaly, yearly_mean) or (None, None, None)."""
+    try:
+        import math as _math
+        import xarray as xr
+
+        url = "https://thredds.met.no/thredds/dodsC/cmems/topaz6/dataset-topaz6-arc-15min-3km-be.ncml"
+        target_x_m, target_y_m = _latlon_to_topaz6(lat, lon)
+        UNIT_SCALE = 100_000
+        target_x = target_x_m / UNIT_SCALE
+        target_y = target_y_m / UNIT_SCALE
+
+        ds = xr.open_dataset(url)
+        search_r = 50_000 / UNIT_SCALE
+        x_coords = ds["x"].values
+        y_coords = ds["y"].values
+        x_asc = x_coords[0] < x_coords[-1] if len(x_coords) > 1 else True
+        y_asc = y_coords[0] < y_coords[-1] if len(y_coords) > 1 else True
+        x_sl = slice(target_x - search_r, target_x + search_r) if x_asc else slice(target_x + search_r, target_x - search_r)
+        y_sl = slice(target_y - search_r, target_y + search_r) if y_asc else slice(target_y + search_r, target_y - search_r)
+
+        start = now_utc.replace(tzinfo=None)
+        end = (now_utc + timedelta(days=10)).replace(tzinfo=None)
+        time_coords = ds["zos"]["time"].values
+        t_asc = time_coords[0] < time_coords[-1] if len(time_coords) > 1 else True
+        t_sl = slice(start, end) if t_asc else slice(end, start)
+
+        nearby = ds["zos"].sel(x=x_sl, y=y_sl, time=t_sl)
+        if nearby.size == 0:
+            print(f"  TOPAZ6: no cells near {site_label}")
+            return None, None, None
+
+        has_valid = nearby.notnull().any(dim="time").values
+        xs = nearby["x"].values
+        ys = nearby["y"].values
+        best_pt, best_d = None, None
+        for yi, yv in enumerate(ys):
+            for xi, xv in enumerate(xs):
+                if has_valid[yi, xi]:
+                    d = _math.hypot(xv - target_x, yv - target_y)
+                    if best_d is None or d < best_d:
+                        best_d = d; best_pt = (xv, yv)
+        if not best_pt:
+            print(f"  TOPAZ6: no valid cells near {site_label}")
+            return None, None, None
+
+        point = nearby.sel(x=best_pt[0], y=best_pt[1])
+        times = [str(t) for t in point["time"].values]
+        raw = [float(v) for v in point.values.flatten()]
+        times_c, vals_c = zip(*[(t, v) for t, v in zip(times, raw) if not _math.isnan(v)]) if raw else ([], [])
+        times_c, vals_c = list(times_c), list(vals_c)
+
+        if not vals_c:
+            return None, None, None
+
+        if yearly_mean is None:
+            hist_start = (now_utc - timedelta(days=30)).replace(tzinfo=None)
+            hist_sl = slice(hist_start, start) if t_asc else slice(start, hist_start)
+            hist = ds["zos"].sel(x=best_pt[0], y=best_pt[1], time=hist_sl)
+            hist_v = [float(v) for v in hist.values.flatten() if not _math.isnan(float(v))]
+            yearly_mean = sum(hist_v) / len(hist_v) if hist_v else sum(vals_c) / len(vals_c)
+
+        anomaly = [round(v - yearly_mean, 4) for v in vals_c]
+        print(f"  TOPAZ6: {len(times_c)} steps for {site_label} (mean={yearly_mean:.3f}m)")
+        step = max(1, len(times_c) // 300)
+        return times_c[::step], anomaly[::step], yearly_mean
+
+    except Exception as e:
+        print(f"  TOPAZ6 fetch failed for {site_label}: {e}")
+        return None, None, None
+
+
+def fetch_gdsps_water_level(lat, lon, now_utc, site_label, yearly_mean=None):
+    """GDSPS SSH (tide + surge) 10-day forecast via MSC GeoMet WMS GetFeatureInfo.
+    Returns (times_iso, values_m_anomaly, yearly_mean) or (None, None, None)."""
+    try:
+        import re as _re
+        import concurrent.futures as _cf
+
+        caps = get_with_retry(
+            "https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0"
+            "&request=GetCapabilities&LAYERS=GDSPS_15km_SeaSfcHeight",
+            timeout=30, retries=2,
+        )
+        caps.raise_for_status()
+        m = _re.search(r'<Dimension[^>]*name=["\']time["\'][^>]*>([^<]+)</Dimension>', caps.text)
+        if not m:
+            raise ValueError("No time dimension in GDSPS capabilities")
+        parts = m.group(1).strip().split("/")
+        t_start = datetime.fromisoformat(parts[0].replace("Z", "+00:00")).replace(tzinfo=None)
+        t_end   = datetime.fromisoformat(parts[1].replace("Z", "+00:00")).replace(tzinfo=None)
+        now_n = now_utc.replace(tzinfo=None)
+
+        timestamps = []
+        t = t_start
+        while t <= t_end:
+            if t >= now_n:
+                timestamps.append(t)
+            t += timedelta(hours=1)
+
+        bbox = f"{lon - 0.5},{lat - 0.5},{lon + 0.5},{lat + 0.5}"
+
+        def _one(ts):
+            try:
+                r = requests.get(
+                    "https://geo.weather.gc.ca/geomet?service=WMS&version=1.3.0"
+                    "&request=GetFeatureInfo&layers=GDSPS_15km_SeaSfcHeight"
+                    "&query_layers=GDSPS_15km_SeaSfcHeight"
+                    f"&bbox={bbox}&width=10&height=10&crs=CRS:84&i=5&j=5"
+                    "&info_format=application/json"
+                    f"&time={ts.strftime('%Y-%m-%dT%H:%M:%SZ')}",
+                    timeout=15,
+                )
+                feats = r.json().get("features", [])
+                if feats:
+                    v = feats[0]["properties"].get("value")
+                    if v is not None:
+                        return ts.strftime("%Y-%m-%dT%H:%M:%SZ"), float(v)
+            except Exception:
+                pass
+            return None
+
+        with _cf.ThreadPoolExecutor(max_workers=20) as pool:
+            raw = list(pool.map(_one, timestamps))
+
+        pairs = [item for item in raw if item]
+        if not pairs:
+            raise ValueError(f"No GDSPS data for {site_label}")
+
+        times_out = [p[0] for p in pairs]
+        vals_out  = [p[1] for p in pairs]
+
+        if yearly_mean is None:
+            yearly_mean = sum(vals_out) / len(vals_out)
+
+        anomaly = [round(v - yearly_mean, 4) for v in vals_out]
+        print(f"  GDSPS: {len(times_out)} steps for {site_label}")
+        step = max(1, len(times_out) // 300)
+        return times_out[::step], anomaly[::step], yearly_mean
+
+    except Exception as e:
+        print(f"  GDSPS fetch failed for {site_label}: {e}")
+        return None, None, None
+
+
 # ── River level (WSC — OGC real-time API then Datamart CSV fallback) ─────
 
 def fetch_river(station_id, provterr):
@@ -547,9 +707,38 @@ def main():
     weather = fetch_weather(lat, lon, tz)
 
     tide = None
-    if cfg.get("tide_station_code"):
-        print(f"Fetching tides ({cfg['tide_station_code']})…")
-        tide = fetch_tide(cfg["tide_station_code"], cfg.get("tide_station_name", ""), now_utc)
+    total_water_level = None
+    yearly_mean = cfg.get("water_level_yearly_mean")
+    if cfg.get("tide_station_code") or cfg.get("type") == "coastal":
+        # Try TOPAZ6 (Copernicus) first, then GDSPS (MSC), then IWLS tide prediction
+        print("Fetching total water level (TOPAZ6)…")
+        twl_times, twl_vals, _ = fetch_topaz_water_level(lat, lon, now_utc, cfg.get("site_display_name", cid), yearly_mean)
+        source_label = None
+        if twl_times:
+            source_label = "TOPAZ6 (Copernicus) · tide + surge"
+        else:
+            print("Fetching total water level (GDSPS)…")
+            twl_times, twl_vals, _ = fetch_gdsps_water_level(lat, lon, now_utc, cfg.get("site_display_name", cid), yearly_mean)
+            if twl_times:
+                source_label = "GDSPS (MSC/ECCC) · tide + surge"
+        if twl_times:
+            now_ts = now_utc.timestamp()
+            def _parse_iso(s):
+                s = s.replace("Z", "+00:00") if s.endswith("Z") else s
+                try:
+                    return datetime.fromisoformat(s).timestamp()
+                except Exception:
+                    return 0.0
+            idx_now = min(range(len(twl_times)), key=lambda i: abs(_parse_iso(twl_times[i]) - now_ts))
+            current_m = round(twl_vals[idx_now], 3)
+            total_water_level = {
+                "current_m": current_m,
+                "series": [{"t": t, "m": v} for t, v in zip(twl_times, twl_vals)],
+                "source": source_label,
+            }
+        if cfg.get("tide_station_code"):
+            print(f"Fetching tides (IWLS {cfg['tide_station_code']})…")
+            tide = fetch_tide(cfg["tide_station_code"], cfg.get("tide_station_name", ""), now_utc)
 
     rivers = []
     for stn in cfg.get("hydrometric_stations", []):
@@ -668,6 +857,7 @@ def main():
         },
         "updated_utc": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "weather": weather,
+        "total_water_level": total_water_level,
         "tide": tide,
         "rivers": rivers,
         "wave": wave,

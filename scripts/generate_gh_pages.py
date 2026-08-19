@@ -63,7 +63,7 @@ def fetch_weather(lat, lon, tz):
                 "windspeed_10m", "winddirection_10m", "weathercode",
                 "surface_pressure", "cloudcover",
             ]),
-            "hourly": "cloudcover,windspeed_10m,winddirection_10m,pressure_msl,temperature_2m,precipitation",
+            "hourly": "cloudcover,windspeed_10m,winddirection_10m,pressure_msl,temperature_2m,precipitation,rain,snowfall",
             "daily": ",".join([
                 "temperature_2m_max", "temperature_2m_min",
                 "precipitation_probability_max", "precipitation_sum",
@@ -197,6 +197,8 @@ def fetch_weather(lat, lon, tz):
         "hourly_pressure_10d": h_10d("pressure_msl"),
         "hourly_cloud_10d": h_10d("cloudcover"),
         "hourly_precip_10d": h_10d("precipitation", decimals=2),
+        "hourly_rain_10d": h_10d("rain", decimals=2),
+        "hourly_snow_10d": [round(v * 10, 2) if v is not None else None for v in h_10d("snowfall", decimals=3)],
     }
 
 

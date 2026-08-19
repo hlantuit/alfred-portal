@@ -136,7 +136,7 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .ch-title{font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
 .ch-val{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
 .ch-unit{font-size:12px;font-weight:400;color:var(--muted)}
-.ch-area{height:64px;position:relative;overflow:hidden}
+.ch-area{min-height:64px;height:auto;position:relative;overflow:visible}
 svg.sp{width:100%;height:100%;display:block}
 
 /* ── Expandable weather details ── */
@@ -147,8 +147,8 @@ svg.sp{width:100%;height:100%;display:block}
 .expand-body.open{display:block}
 
 /* ── Image cards ── */
-.img-card{background:var(--surf);border-radius:8px;overflow:hidden;border:1px solid var(--bdr2);line-height:0;cursor:zoom-in}
-.img-card img{width:100%;height:auto;display:block}
+.img-card{background:var(--surf);border-radius:8px;overflow:hidden;border:1px solid var(--bdr2);line-height:0;cursor:zoom-in;display:block;width:100%}
+.img-card img{width:100%;min-width:100%;height:auto;display:block}
 .img-cap{font-size:10px;color:var(--muted);padding:6px 10px;line-height:1.4;background:var(--surf)}
 
 /* ── Marine ── */
@@ -359,12 +359,17 @@ svg.sp{width:100%;height:100%;display:block}
 
   <!-- Marine & waves -->
   <div id="marine" class="sec"><div class="sec-hd">Marine forecast · Yukon Coast</div></div>
-  <div class="chart-row">
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/wave_forecast.png" alt="Wave forecast" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Wave height — GDWPS. Click to zoom.</div>
+  <div class="chart-1">
+    <div class="ch">
+      <div class="ch-hd">
+        <div class="ch-title">Wave height — Open-Meteo GWAM · 8-day</div>
+      </div>
+      <div id="waveChartEl" style="height:180px;position:relative"></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px">Thresholds: 1.25 m rough · 2.5 m very rough</div>
     </div>
-    <div class="ch" style="min-height:120px">
+  </div>
+  <div class="chart-1" style="padding-top:10px">
+    <div class="ch">
       <div class="ch-title" style="margin-bottom:10px">Text forecast</div>
       <div class="marine-text" id="marineTxt"><span style="color:var(--muted)">Loading…</span></div>
     </div>
@@ -517,39 +522,151 @@ function navTo(id,btn){
   document.querySelector(id)?.scrollIntoView({behavior:'smooth'});
 }
 
-// ── Sparkline (range band for hi/lo) ──
-function sparkline(svgId, data, stroke){
+// ── Sparkline with Y-axis labels and optional X-axis date labels ──
+function sparkline(svgId, data, stroke, opts){
+  opts=opts||{};
   const svg=document.getElementById(svgId); if(!svg) return;
   const vals=data.filter(v=>v!=null);
   if(vals.length<2) return;
   const min=Math.min(...vals), max=Math.max(...vals), rng=max-min||1;
-  const W=800,H=64,P=4;
-  const pts=vals.map((v,i)=>[P+(W-2*P)*i/(vals.length-1),H-P-(H-2*P)*(v-min)/rng]);
+  const xLabels=opts.xLabels||[];
+  const showX=xLabels.length>0;
+  const W=800, ML=38, MR=8, MT=10, MB=showX?28:8;
+  const cW=W-ML-MR, cH=80-MT-MB;
+  const H=80;
+  const x=i=>ML+cW*i/(vals.length-1);
+  const y=v=>MT+cH*(1-(v-min)/rng);
+  const pts=vals.map((v,i)=>[x(i),y(v)]);
   const dL=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
-  const dF=dL+`L${pts[pts.length-1][0]},${H} L${pts[0][0]},${H} Z`;
+  const dF=dL+`L${pts[pts.length-1][0]},${MT+cH} L${pts[0][0]},${MT+cH} Z`;
   const last=pts[pts.length-1];
-  svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.22"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.02"/></linearGradient></defs><path d="${dF}" fill="url(#g${svgId})"/><path d="${dL}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="${stroke}"/>`;
+  let html=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.22"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.02"/></linearGradient></defs>`;
+  html+=`<text x="${ML-4}" y="${MT+9}" fill="${stroke}" font-size="11" text-anchor="end" opacity="0.65" font-family="system-ui,sans-serif">${max}</text>`;
+  html+=`<text x="${ML-4}" y="${MT+cH}" fill="${stroke}" font-size="11" text-anchor="end" opacity="0.65" font-family="system-ui,sans-serif">${min}</text>`;
+  html+=`<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT+cH}" stroke="${stroke}" stroke-width="0.5" opacity="0.15"/>`;
+  html+=`<path d="${dF}" fill="url(#g${svgId})"/><path d="${dL}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="${stroke}"/>`;
+  if(showX){
+    const step=Math.max(1,Math.ceil(xLabels.length/7));
+    xLabels.forEach((lbl,i)=>{
+      if(i===0||i===xLabels.length-1||i%step===0){
+        const anchor=i===0?'start':i===xLabels.length-1?'end':'middle';
+        html+=`<text x="${x(i).toFixed(1)}" y="${H-4}" fill="${stroke}" font-size="9.5" text-anchor="${anchor}" opacity="0.5" font-family="system-ui,sans-serif">${lbl}</text>`;
+      }
+    });
+  }
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.parentElement.style.minHeight=H+'px';
+  svg.innerHTML=html;
 }
 
-// 10-day temperature: hi line (solid) + lo line (dashed) + filled band between
-function sparklineRange(svgId, hiData, loData, stroke){
+// 10-day temperature band: hi (solid) + lo (dashed) + fill + Y/X labels
+function sparklineRange(svgId, hiData, loData, stroke, opts){
+  opts=opts||{};
   const svg=document.getElementById(svgId); if(!svg) return;
   const all=[...hiData,...loData].filter(v=>v!=null);
   if(all.length<2) return;
   const min=Math.min(...all), max=Math.max(...all), rng=max-min||1;
-  const W=800,H=64,P=6;
+  const xLabels=opts.xLabels||[];
+  const W=800, ML=38, MR=8, MT=10, MB=28;
+  const cW=W-ML-MR, cH=80-MT-MB, H=80;
   const n=hiData.length;
-  const x=i=>P+(W-2*P)*i/(n-1);
-  const yhi=v=>H-P-(H-2*P)*(v-min)/rng;
-  const ylo=v=>H-P-(H-2*P)*(v-min)/rng;
-  // Build polygon points: hi left→right, then lo right→left
+  const x=i=>ML+cW*i/(n-1);
+  const yv=v=>MT+cH*(1-(v-min)/rng);
   const polyPts=[
-    ...hiData.map((v,i)=>x(i).toFixed(1)+','+yhi(v).toFixed(1)),
-    ...loData.slice().reverse().map((v,i)=>x(n-1-i).toFixed(1)+','+ylo(v).toFixed(1))
+    ...hiData.map((v,i)=>x(i).toFixed(1)+','+yv(v).toFixed(1)),
+    ...loData.slice().reverse().map((v,i)=>x(n-1-i).toFixed(1)+','+yv(v).toFixed(1))
   ].join(' ');
-  const dHi=hiData.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+','+yhi(v).toFixed(1)).join(' ');
-  const dLo=loData.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+','+ylo(v).toFixed(1)).join(' ');
-  svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.2"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.04"/></linearGradient></defs><polygon points="${polyPts}" fill="url(#g${svgId})"/><path d="${dHi}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><path d="${dLo}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-dasharray="4,3" stroke-linejoin="round" stroke-linecap="round" opacity="0.55"/>`;
+  const dHi=hiData.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+','+yv(v).toFixed(1)).join(' ');
+  const dLo=loData.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+','+yv(v).toFixed(1)).join(' ');
+  let html=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.2"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.04"/></linearGradient></defs>`;
+  html+=`<text x="${ML-4}" y="${MT+9}" fill="${stroke}" font-size="11" text-anchor="end" opacity="0.65" font-family="system-ui,sans-serif">${max}°</text>`;
+  html+=`<text x="${ML-4}" y="${MT+cH}" fill="${stroke}" font-size="11" text-anchor="end" opacity="0.65" font-family="system-ui,sans-serif">${min}°</text>`;
+  html+=`<line x1="${ML}" y1="${MT}" x2="${ML}" y2="${MT+cH}" stroke="${stroke}" stroke-width="0.5" opacity="0.15"/>`;
+  html+=`<polygon points="${polyPts}" fill="url(#g${svgId})"/><path d="${dHi}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><path d="${dLo}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-dasharray="4,3" stroke-linejoin="round" stroke-linecap="round" opacity="0.55"/>`;
+  if(xLabels.length){
+    const step=Math.max(1,Math.ceil(xLabels.length/7));
+    xLabels.forEach((lbl,i)=>{
+      if(i===0||i===xLabels.length-1||i%step===0){
+        const anchor=i===0?'start':i===xLabels.length-1?'end':'middle';
+        html+=`<text x="${x(i).toFixed(1)}" y="${H-4}" fill="${stroke}" font-size="9.5" text-anchor="${anchor}" opacity="0.5" font-family="system-ui,sans-serif">${lbl}</text>`;
+      }
+    });
+  }
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.parentElement.style.minHeight=H+'px';
+  svg.innerHTML=html;
+}
+
+// ── Interactive wave height chart ──
+function renderWaveChart(containerId, series, tz){
+  const el=document.getElementById(containerId);
+  if(!el||!series||!series.length){if(el)el.innerHTML='<span style="color:var(--muted);font-size:12px;padding:8px;display:block">Wave data unavailable</span>';return;}
+  const W=1000,H=170,ML=48,MR=20,MT=16,MB=42;
+  const cW=W-ML-MR, cH=H-MT-MB;
+  const now=Date.now();
+  const pts=series.map(p=>({t:new Date(p.t).getTime(),h:p.h}));
+  const tMin=pts[0].t, tMax=pts[pts.length-1].t, tRange=tMax-tMin;
+  const maxH=Math.max(...pts.map(p=>p.h),2.6);
+  const ROUGH=1.25, VROUGH=2.5;
+  const px=t=>ML+(t-tMin)/tRange*cW;
+  const py=h=>MT+cH*(1-h/maxH);
+  const linePts=pts.map(p=>`${px(p.t).toFixed(1)},${py(p.h).toFixed(1)}`).join(' ');
+  const areaPts=[...pts.map(p=>`${px(p.t).toFixed(1)},${py(p.h).toFixed(1)}`),`${(ML+cW).toFixed(1)},${(MT+cH).toFixed(1)}`,`${ML},${(MT+cH).toFixed(1)}`].join(' ');
+  // Y ticks
+  let yticks='';
+  const ystep=maxH<=2?0.5:maxH<=4?1:2;
+  for(let v=0;v<=maxH+0.01;v+=ystep){
+    const yy=py(v);
+    yticks+=`<line x1="${ML-3}" y1="${yy.toFixed(1)}" x2="${ML+cW}" y2="${yy.toFixed(1)}" stroke="currentColor" stroke-width="0.5" opacity="0.1"/>`;
+    yticks+=`<text x="${ML-6}" y="${(yy+4).toFixed(1)}" text-anchor="end" font-size="11" fill="currentColor" opacity="0.55" font-family="system-ui,sans-serif">${v.toFixed(v%1?1:0)}</text>`;
+  }
+  // X date labels
+  let xlabels='';
+  const dayMs=86400000;
+  let d=new Date(tMin); d.setHours(0,0,0,0); d=new Date(d.getTime()+dayMs);
+  while(d.getTime()<=tMax){
+    const xx=px(d.getTime());
+    if(xx>ML+15&&xx<ML+cW-15){
+      const lbl=d.toLocaleDateString('en',{timeZone:tz,month:'short',day:'numeric'});
+      xlabels+=`<line x1="${xx.toFixed(1)}" y1="${MT}" x2="${xx.toFixed(1)}" y2="${(MT+cH+4).toFixed(1)}" stroke="currentColor" stroke-width="0.5" opacity="0.15"/>`;
+      xlabels+=`<text x="${xx.toFixed(1)}" y="${(H-MB+16).toFixed(1)}" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.55" font-family="system-ui,sans-serif">${lbl}</text>`;
+    }
+    d=new Date(d.getTime()+dayMs);
+  }
+  // "now" marker
+  const nowX=Math.max(ML,Math.min(ML+cW,px(now)));
+  const nowMark=(now>=tMin&&now<=tMax)?`<line x1="${nowX.toFixed(1)}" y1="${MT}" x2="${nowX.toFixed(1)}" y2="${(MT+cH).toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/><text x="${nowX.toFixed(1)}" y="${MT-3}" text-anchor="middle" font-size="10" fill="#C0392B" font-weight="700" font-family="system-ui,sans-serif">now</text>`:'';
+  // Thresholds
+  const roughMark=ROUGH<maxH?`<line x1="${ML}" y1="${py(ROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(ROUGH).toFixed(1)}" stroke="#B86F00" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW+3).toFixed(1)}" y="${(py(ROUGH)+4).toFixed(1)}" font-size="10" fill="#B86F00" opacity="0.8" font-family="system-ui,sans-serif">rough</text>`:'';
+  const vroughMark=VROUGH<maxH?`<line x1="${ML}" y1="${py(VROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(VROUGH).toFixed(1)}" stroke="#C0392B" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW+3).toFixed(1)}" y="${(py(VROUGH)+4).toFixed(1)}" font-size="10" fill="#C0392B" opacity="0.8" font-family="system-ui,sans-serif">v.rough</text>`:'';
+  // Y-axis label
+  const cy=(MT+cH/2).toFixed(1);
+  const svgStr=`<svg id="waveSVGinner" viewBox="0 0 ${W} ${H}" style="width:100%;display:block;overflow:visible;cursor:crosshair">
+    <defs><linearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#005FA3" stop-opacity="0.3"/><stop offset="100%" stop-color="#005FA3" stop-opacity="0.02"/></linearGradient></defs>
+    ${yticks}${xlabels}${nowMark}${roughMark}${vroughMark}
+    <polygon points="${areaPts}" fill="url(#waveGrad)"/>
+    <polyline points="${linePts}" fill="none" stroke="#005FA3" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <text x="14" y="${cy}" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.45" font-family="system-ui,sans-serif" transform="rotate(-90,14,${cy})">Wave ht. (m)</text>
+  </svg>`;
+  el.innerHTML=svgStr;
+  // Hover tooltip
+  const svgEl=el.querySelector('#waveSVGinner');
+  const tip=Object.assign(document.createElement('div'),{style:'position:absolute;background:var(--surf);border:1px solid var(--bdr2);border-radius:6px;padding:5px 10px;font-size:12px;pointer-events:none;display:none;z-index:10;white-space:nowrap;color:var(--txt)'});
+  el.style.position='relative';
+  el.appendChild(tip);
+  svgEl.addEventListener('mousemove',e=>{
+    const rect=svgEl.getBoundingClientRect();
+    const svgX=(e.clientX-rect.left)/rect.width*W;
+    const t=tMin+(svgX-ML)/cW*tRange;
+    const near=pts.reduce((a,b)=>Math.abs(b.t-t)<Math.abs(a.t-t)?b:a);
+    const lbl=new Date(near.t).toLocaleString('en-CA',{timeZone:tz,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
+    tip.innerHTML=`<b>${near.h} m</b> · ${lbl}`;
+    tip.style.display='block';
+    const tx=Math.min(e.clientX-rect.left+14,rect.width-160);
+    tip.style.left=tx+'px';
+    tip.style.top=Math.max(0,e.clientY-rect.top-32)+'px';
+  });
+  svgEl.addEventListener('mouseleave',()=>{tip.style.display='none';});
 }
 
 // ── Forecast day click → detail panel ──
@@ -584,13 +701,13 @@ function showDayDetail(idx, fc, tz){
     </div>
     <div class="fcd-item">
       <div class="fcd-lbl">Temperature</div>
-      <div class="fcd-val">${fc.hi}° / ${fc.lo}°</div>
+      <div class="fcd-val">${fc.hi!=null?fc.hi+'°':'—'} / ${fc.lo!=null?fc.lo+'°':'—'}</div>
       <div class="fcd-sub">High / Low · °C</div>
     </div>
     <div class="fcd-item">
       <div class="fcd-lbl">Wind</div>
-      <div class="fcd-val">${fc.wind_max} km/h</div>
-      <div class="fcd-sub">${fc.wind_dir_label||''} · Gusts ${fc.gusts_max||'—'} km/h</div>
+      <div class="fcd-val">${fc.wind_max!=null?fc.wind_max+' km/h':'—'}</div>
+      <div class="fcd-sub">${fc.wind_dir_label||''} · Gusts ${fc.gusts_max!=null?fc.gusts_max+' km/h':'—'}</div>
     </div>
     <div class="fcd-item">
       <div class="fcd-lbl">Precipitation</div>
@@ -692,24 +809,35 @@ async function loadData(){
     fcRow.appendChild(el);
   });
 
+  // Date labels for 10-day X-axis
+  const dayLabels=(w.daily_dates||[]).map(d=>{
+    try{return new Date(d+'T12:00:00').toLocaleDateString('en',{month:'short',day:'numeric'});}
+    catch{return d;}
+  });
+
   // Temperature 10-day range chart
   if(w.daily_hi?.length){
-    sparklineRange('tempSVG', w.daily_hi, w.daily_lo, '#B86F00');
+    sparklineRange('tempSVG', w.daily_hi, w.daily_lo, '#B86F00', {xLabels:dayLabels});
     document.getElementById('cv-temp').textContent=w.temperature??'—';
   }
 
-  // Detail charts — wind & precip are 10-day daily; pressure & cloud stay 48h hourly
+  // Detail charts — all 10-day daily
   const BLUE='#005FA3', STEEL='#6B8499', GREY='#7A94A8', TEAL='#1A7A52';
-  sparkline('windSVG',   w.daily_wind||[], BLUE);
-  sparkline('precipSVG', w.daily_precip_prob||[], TEAL);
-  sparkline('presSVG',   w.hourly_pressure||[], STEEL);
-  sparkline('cloudSVG',  w.hourly_cloud||[], GREY);
-  if(w.daily_wind&&w.daily_wind.length)
-    document.getElementById('cv-wind').textContent=Math.round(Math.max(...w.daily_wind));
-  if(w.daily_precip_prob&&w.daily_precip_prob.length)
-    document.getElementById('cv-precip').textContent=Math.round(Math.max(...w.daily_precip_prob));
+  sparkline('windSVG',   w.daily_wind||[], BLUE, {xLabels:dayLabels});
+  sparkline('precipSVG', w.daily_precip_prob||[], TEAL, {xLabels:dayLabels});
+  sparkline('presSVG',   w.daily_pressure||w.hourly_pressure||[], STEEL,
+            {xLabels: w.daily_pressure?.length ? dayLabels : []});
+  sparkline('cloudSVG',  w.daily_cloud||w.hourly_cloud||[], GREY,
+            {xLabels: w.daily_cloud?.length ? dayLabels : []});
+  if(w.daily_wind?.length)
+    document.getElementById('cv-wind').textContent=Math.round(Math.max(...w.daily_wind.filter(v=>v!=null)));
+  if(w.daily_precip_prob?.length)
+    document.getElementById('cv-precip').textContent=Math.round(Math.max(...w.daily_precip_prob.filter(v=>v!=null)));
   if(w.pressure!=null)    document.getElementById('cv-pres').textContent=w.pressure;
   if(w.cloudcover!=null)  document.getElementById('cv-cloud').textContent=w.cloudcover;
+
+  // Wave chart
+  renderWaveChart('waveChartEl', d.wave, tz);
 
   // Tide sparkline (7-day series, blue)
   if(tide?.series?.length){

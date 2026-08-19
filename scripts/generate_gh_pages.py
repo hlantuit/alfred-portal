@@ -116,18 +116,30 @@ def fetch_weather(lat, lon, tz):
             "sunset": dget("sunset", i),
         })
 
-    # 10-day daily temp arrays for chart
-    daily_hi = [fc["hi"] for fc in forecast]
-    daily_lo = [fc["lo"] for fc in forecast]
-    daily_dates = [fc["date"] for fc in forecast]
+    # 10-day daily arrays
+    daily_hi    = [fc["hi"]         for fc in forecast]
+    daily_lo    = [fc["lo"]         for fc in forecast]
+    daily_wind  = [fc["wind_max"]   for fc in forecast]
+    daily_precip_prob = [fc["precip_prob"] for fc in forecast]
+    daily_precip_mm   = [fc["precip_mm"]   for fc in forecast]
+    daily_dates = [fc["date"]       for fc in forecast]
 
-    # Hourly (next 48h) for wind/pressure/cloud detail charts
+    # Hourly (next 48h) for pressure & cloud detail
     times_h = hourly.get("time", [])
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
     start_i = next((i for i, t in enumerate(times_h) if t[:13] >= now_str), 0)
     def h_slice(key, n=48):
         vals = hourly.get(key, [])
         return [round(v, 1) if v is not None else None for v in vals[start_i:start_i+n]]
+
+    # Daily means from full 10-day hourly (240h)
+    def daily_from_hourly(key, n_days=10):
+        vals = hourly.get(key, [])
+        out = []
+        for d in range(n_days):
+            day = [v for v in vals[d*24:(d+1)*24] if v is not None]
+            out.append(round(sum(day)/len(day), 1) if day else None)
+        return out
 
     return {
         "temperature": _r1(cur.get("temperature_2m")),
@@ -143,11 +155,14 @@ def fetch_weather(lat, lon, tz):
         "forecast": forecast,
         "daily_hi": daily_hi,
         "daily_lo": daily_lo,
+        "daily_wind": daily_wind,
+        "daily_precip_prob": daily_precip_prob,
+        "daily_precip_mm": daily_precip_mm,
         "daily_dates": daily_dates,
-        "hourly_wind": h_slice("windspeed_10m"),
-        "hourly_wind_dir": h_slice("winddirection_10m"),
         "hourly_pressure": h_slice("pressure_msl"),
         "hourly_cloud": h_slice("cloudcover"),
+        "daily_pressure": daily_from_hourly("pressure_msl"),
+        "daily_cloud": daily_from_hourly("cloudcover"),
     }
 
 
@@ -248,11 +263,39 @@ def fetch_tide(station_code, station_name, now_utc):
     }
 
 
-# ── River level (MSC Datamart CSV) ───────────────────────────────────────
+# ── River level (WSC — OGC real-time API then Datamart CSV fallback) ─────
 
 def fetch_river(station_id, provterr):
-    """Fetch latest water level from the MSC Datamart hourly CSV — more stable
-    than wateroffice.ec.gc.ca scraping endpoints."""
+    """Fetch latest water level. Tries OGC API first, falls back to
+    MSC Datamart hourly CSV."""
+
+    # ── Method 1: OGC real-time API (same source as dashboard_lib) ──
+    try:
+        r = get_with_retry(
+            "https://api.weather.gc.ca/collections/hydrometric-realtime/items",
+            params={"station_number": station_id, "limit": 200,
+                    "sortby": "-datetime"},
+            timeout=30,
+        )
+        features = r.json().get("features", [])
+        rows = []
+        for f in features:
+            props = f.get("properties", {})
+            level = props.get("LEVEL")
+            ts = props.get("DATETIME")
+            if level is not None and ts:
+                rows.append({"t": ts, "m": round(float(level), 3)})
+        if rows:
+            rows.sort(key=lambda x: x["t"])
+            current_m = rows[-1]["m"]
+            step = max(1, len(rows) // 48)
+            print(f"  WSC OGC API: {len(rows)} rows for {station_id}, current={current_m}")
+            return {"current_m": current_m, "series": rows[::step]}
+        print(f"  WSC OGC API: 0 features for {station_id}")
+    except Exception as e:
+        print(f"  WSC OGC API failed for {station_id}: {e}")
+
+    # ── Method 2: MSC Datamart hourly CSV ──
     prov = provterr.upper()
     url = (
         f"https://dd.weather.gc.ca/hydrometric/csv/{prov}/hourly/"
@@ -261,73 +304,111 @@ def fetch_river(station_id, provterr):
     try:
         r = get_with_retry(url, timeout=30)
         lines = [l for l in r.text.strip().splitlines() if l.strip()]
-        # Header: ID,Date,Water Level (m),Grade,Symbol,QA/QC,Discharge (cms),...
         header = [c.strip().strip('"') for c in lines[0].split(',')]
         level_idx = next(
             (i for i, h in enumerate(header) if "Water Level" in h or "Niveau" in h),
             2,
         )
-        data_rows = []
+        rows = []
         for line in lines[1:]:
             parts = line.split(',')
             if len(parts) > level_idx and parts[level_idx].strip():
                 try:
                     m = float(parts[level_idx].strip().strip('"'))
                     ts = parts[1].strip().strip('"') if len(parts) > 1 else ""
-                    data_rows.append({"t": ts, "m": round(m, 3)})
+                    rows.append({"t": ts, "m": round(m, 3)})
                 except ValueError:
                     continue
-
-        if not data_rows:
-            print(f"  WSC: no valid rows for {station_id}")
+        if not rows:
+            print(f"  WSC Datamart: no valid rows for {station_id}")
             return None
-
-        current_m = data_rows[-1]["m"]
-        # Thin to ~48 points
-        step = max(1, len(data_rows) // 48)
-        series = data_rows[::step]
-
-        return {"current_m": current_m, "series": series}
-
+        current_m = rows[-1]["m"]
+        step = max(1, len(rows) // 48)
+        print(f"  WSC Datamart CSV: {len(rows)} rows, current={current_m}")
+        return {"current_m": current_m, "series": rows[::step]}
     except Exception as e:
-        print(f"  WSC Datamart fetch failed for {station_id}: {e}")
+        print(f"  WSC Datamart failed for {station_id}: {e}")
         return None
 
 
 # ── Marine forecast (EC RSS) ──────────────────────────────────────────────
 
+def fetch_wave(lat, lon, tz):
+    """Hourly wave height from Open-Meteo Marine API, downsampled to 2-hourly."""
+    try:
+        r = get_with_retry(
+            "https://marine-api.open-meteo.com/v1/marine",
+            params={
+                "latitude": lat, "longitude": lon,
+                "hourly": "wave_height",
+                "forecast_days": 8,
+                "timezone": tz,
+            },
+            timeout=30,
+        )
+        data = r.json()
+        hourly = data.get("hourly", {})
+        times = hourly.get("time", [])
+        heights = hourly.get("wave_height", [])
+        pairs = [
+            {"t": t, "h": round(float(h), 2)}
+            for t, h in zip(times, heights) if h is not None
+        ]
+        out = pairs[::2]  # 2-hourly to reduce payload
+        print(f"  Wave: {len(out)} points")
+        return out
+    except Exception as e:
+        print(f"  Wave fetch failed: {e}")
+        return []
+
+
 def fetch_marine_forecast(zone_id):
+    import re
     url = f"https://weather.gc.ca/rss/marine/{zone_id}_e.xml"
     try:
         r = get_with_retry(url, timeout=30,
-                           headers={"User-Agent": "alfred-portal/1.0 (research dashboard)"})
-        # Namespace-agnostic parse: strip namespace prefixes for simplicity
+                           headers={"User-Agent": "alfred-portal/1.0 (research)"})
         text = r.text
-        import re
-        # Remove namespace declarations and prefixes
-        text = re.sub(r' xmlns[^"]*"[^"]*"', '', text)
-        text = re.sub(r'<(\w+):(\w+)', r'<\2', text)
-        text = re.sub(r'</(\w+):(\w+)', r'</\2', text)
 
-        import xml.etree.ElementTree as ET
-        root = ET.fromstring(text)
-        entries = root.findall(".//entry")
+        def clean(s):
+            cdata = re.search(r'<!\[CDATA\[(.*?)\]\]>', s, re.DOTALL)
+            if cdata:
+                s = cdata.group(1)
+            s = re.sub(r'<(?:br|BR)\s*/?>', '\n', s)
+            s = re.sub(r'<[^>]+>', ' ', s)
+            for ent, rep in [('&lt;','<'),('&gt;','>'),('&amp;','&'),('&nbsp;',' '),('&#13;','\n'),('&#10;','\n')]:
+                s = s.replace(ent, rep)
+            s = re.sub(r'\n{3,}', '\n\n', s)
+            return s.strip()[:800]
+
+        # Parse per-item (RSS 2.0 <item> or Atom <entry>)
+        items = re.findall(r'<item[^>]*>(.*?)</item>', text, re.DOTALL)
+        if not items:
+            items = re.findall(r'<entry[^>]*>(.*?)</entry>', text, re.DOTALL)
+
         out = []
-        for e in entries[:5]:
-            title_el = e.find("title")
-            summary_el = e.find("summary") or e.find("content") or e.find("description")
-            if title_el is not None:
-                title = (title_el.text or "").strip()
-                # Skip "No watches or warnings" entries
-                if "No watches" in title or not title:
-                    continue
-                summary = ""
-                if summary_el is not None:
-                    summary = (summary_el.text or "").strip()
-                    # Strip HTML tags if present
-                    summary = re.sub(r'<[^>]+>', '', summary)
-                    summary = summary[:500]
-                out.append({"title": title, "text": summary})
+        for item in items:
+            title_m = re.search(r'<title[^>]*>(.*?)</title>', item, re.DOTALL)
+            content_m = (
+                re.search(r'<description[^>]*>(.*?)</description>', item, re.DOTALL) or
+                re.search(r'<summary[^>]*>(.*?)</summary>', item, re.DOTALL)
+            )
+            if not (title_m and content_m):
+                continue
+            title = clean(title_m.group(1))
+            body = clean(content_m.group(1))
+            if not title or "No watches" in title or "Aucune veille" in title:
+                continue
+            if len(body) < 15:
+                continue
+            out.append({"title": title, "text": body})
+            if len(out) >= 5:
+                break
+
+        if out:
+            print(f"  Marine forecast: {len(out)} entries for zone {zone_id}")
+        else:
+            print(f"  Marine forecast: no usable entries for zone {zone_id}")
         return out or None
     except Exception as e:
         print(f"  Marine forecast fetch failed for zone {zone_id}: {e}")
@@ -410,6 +491,9 @@ def main():
         else:
             print(f"  River fetch failed for {sid}")
 
+    print("Fetching wave height…")
+    wave = fetch_wave(lat, lon, tz)
+
     marine = None
     if cfg.get("marine_zone_id"):
         print(f"Fetching marine forecast (zone {cfg['marine_zone_id']})…")
@@ -435,6 +519,7 @@ def main():
         "weather": weather,
         "tide": tide,
         "rivers": rivers,
+        "wave": wave,
         "marine": marine,
         "alerts": {"weather": alerts},
         "external_links": cfg.get("external_links", []),

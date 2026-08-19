@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Shingle Point · Taqpaq</title>
-<meta name="description" content="Environmental conditions dashboard — Shingle Point / Taqpaq, Yukon Coast">
+<title>Qikiqtaruk · Herschel Island</title>
+<meta name="description" content="Environmental conditions dashboard — Qikiqtaruk / Herschel Island, Yukon Coast">
 <meta name="theme-color" content="#005FA3">
 <link rel="icon" type="image/png" href="alfred-logo.png">
 <link rel="apple-touch-icon" href="alfred-logo.png">
@@ -213,8 +213,8 @@ svg.sp{width:100%;height:100%;display:block}
 <aside class="sidebar">
   <div class="sb-head">
     <div class="sb-eyebrow">Yukon Coast</div>
-    <div class="sb-name">Shingle Point<br><span class="sb-name-alt">Taqpaq</span></div>
-    <div class="sb-meta">68.994°N · 137.390°W</div>
+    <div class="sb-name">Qikiqtaruk<br><span class="sb-name-alt">Herschel Island</span></div>
+    <div class="sb-meta">69.590°N · 139.099°W</div>
   </div>
   <div class="sb-cond">
     <div class="sb-row">
@@ -233,7 +233,6 @@ svg.sp{width:100%;height:100%;display:block}
     <a class="nav-a" href="#marine"><span class="nav-i">🌊</span>Waves · Marine</a>
     <div class="nav-grp">Water</div>
     <a class="nav-a" href="#water"><span class="nav-i">📈</span>Water level</a>
-    <a class="nav-a" href="#water"><span class="nav-i">💧</span>River level</a>
     <div class="nav-grp">Environment</div>
     <a class="nav-a" href="#ice"><span class="nav-i">🧊</span>Sea ice</a>
     <a class="nav-a" href="#climate"><span class="nav-i">🌡️</span>Climate</a>
@@ -251,7 +250,7 @@ svg.sp{width:100%;height:100%;display:block}
 <div class="main">
 
   <div class="topbar">
-    <div><div class="tb-title">Shingle Point · Taqpaq</div><div class="tb-sub">68.994°N · 137.390°W</div></div>
+    <div><div class="tb-title">Qikiqtaruk · Herschel Island</div><div class="tb-sub">69.590°N · 139.099°W</div></div>
     <div class="tb-time" id="tb-time"></div>
   </div>
 
@@ -270,7 +269,7 @@ svg.sp{width:100%;height:100%;display:block}
       <div class="sat-bar">
         <div class="sat-info">
           <div class="sat-label">MODIS Terra · True colour</div>
-          <div class="sat-title">Shingle Point — Beaufort Sea</div>
+          <div class="sat-title">Qikiqtaruk — Beaufort Sea</div>
           <div class="sat-date">Updated each workflow run · click to zoom · <a href="#sar-card" style="color:rgba(255,255,255,.55);text-decoration:underline">↓ SAR image below</a></div>
         </div>
       </div>
@@ -379,19 +378,11 @@ svg.sp{width:100%;height:100%;display:block}
   <div class="chart-row">
     <div class="ch">
       <div class="ch-hd">
-        <div class="ch-title">Total water level · Stn 06505</div>
+        <div class="ch-title">Total water level · Stn 06525</div>
         <div><span class="ch-val" id="cv-tide">—</span><span class="ch-unit"> m</span></div>
       </div>
       <div class="ch-area" id="tideSVG" style="height:80px;overflow:hidden"></div>
       <div style="font-size:10px;color:var(--muted);margin-top:6px">DFO IWLS tide prediction · 7-day</div>
-    </div>
-    <div class="ch" id="riverCard">
-      <div class="ch-hd">
-        <div class="ch-title" id="river-title">River level</div>
-        <div><span class="ch-val" id="cv-river">—</span><span class="ch-unit"> m</span></div>
-      </div>
-      <div class="ch-area"><svg class="sp" id="riverSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
-      <div style="font-size:10px;color:var(--muted);margin-top:6px">MSC Datamart · hourly</div>
     </div>
   </div>
 
@@ -400,7 +391,7 @@ svg.sp{width:100%;height:100%;display:block}
   <div class="img-row-3" id="sar-card">
     <div class="img-card" onclick="openLb(this.querySelector('img'))">
       <img src="img/sentinel1.png" alt="Sentinel-1 SAR" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Sentinel-1 SAR · VV polarisation · Shingle Point area · click to zoom</div>
+      <div class="img-cap">Sentinel-1 SAR · VV polarisation · Herschel Island area · click to zoom</div>
     </div>
     <div class="img-card" onclick="openLb(this.querySelector('img'))">
       <img src="img/sea_ice.png" alt="Sea ice 150 km" onerror="this.closest('.img-card').style.display='none'">
@@ -423,23 +414,15 @@ svg.sp{width:100%;height:100%;display:block}
       <img src="img/wind_chart.png" alt="Wind rose" onerror="this.closest('.img-card').style.display='none'">
       <div class="img-cap">Wind rose + daily vectors — last 30 days · ERA5</div>
     </div>
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/hydrometric_clim.png" alt="River level — multi-year" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Napoiak Channel water level — multi-year record · Water Survey of Canada</div>
-    </div>
   </div>
 
   <!-- Data sources -->
   <div id="links" class="sec"><div class="sec-hd">Data sources</div></div>
   <div class="links-grid" id="linksGrid">
     <!-- Populated from data.json; fallback static links shown if JSON missing -->
-    <a class="lk" href="https://www.tides.gc.ca/en/stations/06505" target="_blank" rel="noopener">
+    <a class="lk" href="https://www.tides.gc.ca/en/stations/06525" target="_blank" rel="noopener">
       <span class="lk-ico">🌊</span>
-      <div><div class="lk-label">Tide gauge — Shingle Point</div><div class="lk-src">Fisheries & Oceans Canada · Stn 06505</div></div>
-    </a>
-    <a class="lk" href="https://wateroffice.ec.gc.ca/report/real_time_e.html?stn=10MC023" target="_blank" rel="noopener">
-      <span class="lk-ico">💧</span>
-      <div><div class="lk-label">Napoiak Channel water level</div><div class="lk-src">Water Survey of Canada · WSC 10MC023</div></div>
+      <div><div class="lk-label">Tide gauge — Herschel Island</div><div class="lk-src">Fisheries & Oceans Canada · Stn 06525</div></div>
     </a>
     <a class="lk" href="https://weather.gc.ca/marine/region_e.html?id=MID" target="_blank" rel="noopener">
       <span class="lk-ico">⛅</span>
@@ -507,7 +490,6 @@ window.addEventListener('appinstalled',()=>{
   const btn=document.getElementById('installBtn');
   if(btn)btn.style.display='none';
 });
-// iOS detection — show hint
 if(/iphone|ipad|ipod/i.test(navigator.userAgent)&&!navigator.standalone){
   const h=document.getElementById('iosHint');
   if(h)h.style.display='block';
@@ -1003,11 +985,9 @@ function fmtTime(utcStr,tz){
 }
 
 let _lastFetch=0;
-// Refresh when tab becomes visible after >15 min since last fetch
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='visible'&&Date.now()-_lastFetch>15*60*1000) loadData();
 });
-// Also poll every 30 min in case the tab stays active
 setInterval(()=>{if(Date.now()-_lastFetch>29*60*1000) loadData();},5*60*1000);
 loadData();
 

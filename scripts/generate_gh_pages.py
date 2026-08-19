@@ -231,25 +231,38 @@ def fetch_tide(station_code, station_name, now_utc):
     from_dt = now_utc - timedelta(hours=6)
     to_dt = now_utc + timedelta(days=7)
 
-    # Try observed (wlo) first — predicted (wlp) is not available at all stations
+    # Try wlo (observed), wlp (predicted), wlf (forecast) — vary time window per code
+    to_dt_48h = now_utc + timedelta(hours=48)
     points = None
-    for ts_code in ("wlo", "wlp"):
+    attempts = [
+        ("wlo", from_dt, to_dt),       # observed: past 6h + 7d forward
+        ("wlp", now_utc, to_dt),       # predicted: 7d forward
+        ("wlp", now_utc, to_dt_48h),   # predicted: 48h (shorter window)
+        ("wlf", now_utc, to_dt),       # forecast: 7d forward
+        ("wlf", now_utc, to_dt_48h),   # forecast: 48h
+        ("wlp", from_dt, to_dt_48h),   # predicted: past+48h
+    ]
+    for ts_code, fr, to in attempts:
         try:
             r = requests.get(
                 f"https://api-iwls.dfo-mpo.gc.ca/api/v1/stations/{station_id}/data",
                 params={
                     "time-series-code": ts_code,
-                    "from": from_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    "to": to_dt.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "from": fr.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    "to": to.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 },
                 timeout=30,
             )
             if r.status_code == 200:
                 pts = r.json()
                 if pts:
-                    print(f"  IWLS: using time-series-code={ts_code}")
+                    print(f"  IWLS: using time-series-code={ts_code} ({len(pts)} pts)")
                     points = pts
                     break
+                else:
+                    print(f"  IWLS {ts_code} returned 0 points")
+            else:
+                print(f"  IWLS {ts_code} HTTP {r.status_code}")
         except Exception as e:
             print(f"  IWLS {ts_code} attempt failed: {e}")
     if not points:
@@ -340,13 +353,18 @@ def fetch_river(station_id, provterr):
     except Exception as e:
         print(f"  WSC OGC API failed for {station_id}: {e}")
 
-    # ── Method 2: MSC Datamart hourly CSV ──
+    # ── Method 2: MSC Datamart daily CSV (hourly is not available for all stations) ──
     prov = provterr.upper()
-    url = (
-        f"https://dd.weather.gc.ca/hydrometric/csv/{prov}/hourly/"
-        f"{prov}_{station_id}_hourly_hydrometric.csv"
+    url_daily = (
+        f"https://dd.weather.gc.ca/hydrometric/csv/{prov}/daily/"
+        f"{prov}_{station_id}_daily_hydrometric.csv"
     )
-    try:
+    url_today = (
+        f"https://dd.weather.gc.ca/today/hydrometric/csv/{prov}/daily/"
+        f"{prov}_{station_id}_daily_hydrometric.csv"
+    )
+    for url in (url_daily, url_today):
+      try:
         r = get_with_retry(url, timeout=30)
         lines = [l for l in r.text.strip().splitlines() if l.strip()]
         header = [c.strip().strip('"') for c in lines[0].split(',')]
@@ -371,9 +389,10 @@ def fetch_river(station_id, provterr):
         step = max(1, len(rows) // 48)
         print(f"  WSC Datamart CSV: {len(rows)} rows, current={current_m}")
         return {"current_m": current_m, "series": rows[::step]}
-    except Exception as e:
-        print(f"  WSC Datamart failed for {station_id}: {e}")
-        return None
+      except Exception as e:
+        print(f"  WSC Datamart failed ({url}): {e}")
+        continue
+    return None
 
 
 # ── Marine forecast (EC RSS) ──────────────────────────────────────────────

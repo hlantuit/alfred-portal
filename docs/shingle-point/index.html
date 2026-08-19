@@ -775,12 +775,12 @@ function showDayDetail(idx, fc, tz){
     </div>
     <div class="fcd-item">
       <div class="fcd-lbl">Sunrise</div>
-      <div class="fcd-val" style="font-size:16px">${fmtLocalTime(fc.sunrise,tz)}</div>
+      <div class="fcd-val" style="font-size:16px">${fc.sunrise?fc.sunrise.slice(11,16):'—'}</div>
       <div class="fcd-sub">Local time</div>
     </div>
     <div class="fcd-item">
       <div class="fcd-lbl">Sunset</div>
-      <div class="fcd-val" style="font-size:16px">${fmtLocalTime(fc.sunset,tz)}</div>
+      <div class="fcd-val" style="font-size:16px">${fc.sunset?fc.sunset.slice(11,16):'—'}</div>
       <div class="fcd-sub">Local time</div>
     </div>
   `;

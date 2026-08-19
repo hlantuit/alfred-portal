@@ -71,7 +71,7 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 /* ── Satellite ── */
 .sat-wrap{position:relative;background:#0A1520;line-height:0;overflow:hidden;
           max-height:55vh;/* prevent dominating large screens */}
-.sat-wrap img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in;transition:opacity .3s}
+.sat-wrap img{width:100%;display:block;cursor:zoom-in;transition:opacity .3s;object-fit:contain;background:#0A1520}
 .sat-wrap img.hidden{display:none}
 .sat-no-img{height:180px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.35);font-size:13px}
 .sat-bar{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(7,16,26,.88));padding:10px 16px 12px;display:flex;align-items:flex-end;justify-content:space-between}
@@ -148,9 +148,8 @@ svg.sp{width:100%;height:100%;display:block}
 .expand-body.open{display:block}
 
 /* ── Image cards ── */
-.img-card{background:var(--surf);border-radius:8px;overflow:hidden;border:1px solid var(--bdr2);line-height:0;cursor:zoom-in;
-          max-height:420px;/* prevent huge images on wide screens */}
-.img-card img{width:100%;height:100%;object-fit:contain;display:block;max-height:420px}
+.img-card{background:var(--surf);border-radius:8px;overflow:hidden;border:1px solid var(--bdr2);line-height:0;cursor:zoom-in}
+.img-card img{width:100%;height:auto;display:block}
 .img-cap{font-size:10px;color:var(--muted);padding:6px 10px;line-height:1.4;background:var(--surf)}
 
 /* ── Marine ── */
@@ -321,30 +320,37 @@ svg.sp{width:100%;height:100%;display:block}
     </div>
   </div>
 
-  <!-- Expandable: wind / pressure / cloud -->
+  <!-- Expandable: wind / precip / pressure / cloud — 10-day -->
   <div class="expand-btn" id="detToggle" onclick="toggleDetail()">
-    <span>Wind speed · Pressure · Cloud cover — next 48 h</span>
+    <span>Wind · Precipitation · Pressure · Cloud cover — 10-day</span>
     <i class="chev">▾</i>
   </div>
   <div class="expand-body" id="detBody">
     <div class="chart-row" style="padding-top:14px;padding-bottom:14px">
       <div class="ch">
         <div class="ch-hd">
-          <div class="ch-title">Wind speed</div>
+          <div class="ch-title">Max wind speed — 10-day</div>
           <div><span class="ch-val" id="cv-wind">—</span><span class="ch-unit"> km/h</span></div>
         </div>
         <div class="ch-area"><svg class="sp" id="windSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
       </div>
       <div class="ch">
         <div class="ch-hd">
-          <div class="ch-title">Pressure</div>
+          <div class="ch-title">Precipitation probability — 10-day</div>
+          <div><span class="ch-val" id="cv-precip">—</span><span class="ch-unit"> %</span></div>
+        </div>
+        <div class="ch-area"><svg class="sp" id="precipSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
+      </div>
+      <div class="ch">
+        <div class="ch-hd">
+          <div class="ch-title">Pressure — next 48 h</div>
           <div><span class="ch-val" id="cv-pres">—</span><span class="ch-unit"> hPa</span></div>
         </div>
         <div class="ch-area"><svg class="sp" id="presSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
       </div>
       <div class="ch">
         <div class="ch-hd">
-          <div class="ch-title">Cloud cover</div>
+          <div class="ch-title">Cloud cover — next 48 h</div>
           <div><span class="ch-val" id="cv-cloud">—</span><span class="ch-unit"> %</span></div>
         </div>
         <div class="ch-area"><svg class="sp" id="cloudSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
@@ -403,20 +409,18 @@ svg.sp{width:100%;height:100%;display:block}
   <div id="climate" class="sec"><div class="sec-hd">Climate</div></div>
   <div class="chart-row">
     <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/temperature.png" alt="Temperature vs. baseline" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Daily temperature vs. 30-year baseline · ERA5</div>
-    </div>
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
       <img src="img/tdd_histogram.png" alt="Thawing degree days" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Thawing degree days · current year vs. historic</div>
+      <div class="img-cap">Thawing degree days · current year vs. historic · ERA5</div>
     </div>
     <div class="img-card" onclick="openLb(this.querySelector('img'))">
       <img src="img/wind_chart.png" alt="Wind rose" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Wind rose — last 30 days · ERA5</div>
+      <div class="img-cap">Wind rose + daily vectors — last 30 days · ERA5</div>
     </div>
+  </div>
+  <div class="chart-1" style="padding-top:10px">
     <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/sun_chart.png" alt="Sunrise/sunset" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Sunrise / sunset times · current season</div>
+      <img src="img/hydrometric_clim.png" alt="River level — multi-year" onerror="this.closest('.img-card').style.display='none'">
+      <div class="img-cap">Napoiak Channel water level — multi-year record · Water Survey of Canada</div>
     </div>
   </div>
 
@@ -528,20 +532,25 @@ function sparkline(svgId, data, stroke){
   svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.22"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.02"/></linearGradient></defs><path d="${dF}" fill="url(#g${svgId})"/><path d="${dL}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="${stroke}"/>`;
 }
 
-// 10-day temperature: render hi band + lo band as two lines + fill between
+// 10-day temperature: hi line (solid) + lo line (dashed) + filled band between
 function sparklineRange(svgId, hiData, loData, stroke){
   const svg=document.getElementById(svgId); if(!svg) return;
   const all=[...hiData,...loData].filter(v=>v!=null);
   if(all.length<2) return;
   const min=Math.min(...all), max=Math.max(...all), rng=max-min||1;
-  const W=800,H=64,P=4;
+  const W=800,H=64,P=6;
   const n=hiData.length;
-  const hiPts=hiData.map((v,i)=>[P+(W-2*P)*i/(n-1),H-P-(H-2*P)*(v-min)/rng]);
-  const loPts=loData.map((v,i)=>[P+(W-2*P)*i/(n-1),H-P-(H-2*P)*(v-min)/rng]);
-  const dHi=hiPts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
-  const dLo=loPts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
-  const dFill=dHi+' '+loPts.slice().reverse().map((p,i)=>(i?'L':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')+' Z';
-  svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.18"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.04"/></linearGradient></defs><path d="${dFill}" fill="url(#g${svgId})"/><path d="${dHi}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><path d="${dLo}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-dasharray="4,3" stroke-linejoin="round" stroke-linecap="round" opacity="0.6"/>`;
+  const x=i=>P+(W-2*P)*i/(n-1);
+  const yhi=v=>H-P-(H-2*P)*(v-min)/rng;
+  const ylo=v=>H-P-(H-2*P)*(v-min)/rng;
+  // Build polygon points: hi left→right, then lo right→left
+  const polyPts=[
+    ...hiData.map((v,i)=>x(i).toFixed(1)+','+yhi(v).toFixed(1)),
+    ...loData.slice().reverse().map((v,i)=>x(n-1-i).toFixed(1)+','+ylo(v).toFixed(1))
+  ].join(' ');
+  const dHi=hiData.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+','+yhi(v).toFixed(1)).join(' ');
+  const dLo=loData.map((v,i)=>(i?'L':'M')+x(i).toFixed(1)+','+ylo(v).toFixed(1)).join(' ');
+  svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.2"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.04"/></linearGradient></defs><polygon points="${polyPts}" fill="url(#g${svgId})"/><path d="${dHi}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><path d="${dLo}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-dasharray="4,3" stroke-linejoin="round" stroke-linecap="round" opacity="0.55"/>`;
 }
 
 // ── Forecast day click → detail panel ──
@@ -687,12 +696,16 @@ async function loadData(){
     document.getElementById('cv-temp').textContent=w.temperature??'—';
   }
 
-  // Hourly detail charts
-  const BLUE='#005FA3', STEEL='#6B8499', GREY='#7A94A8';
-  sparkline('windSVG',  w.hourly_wind||[], BLUE);
-  sparkline('presSVG',  w.hourly_pressure||[], STEEL);
-  sparkline('cloudSVG', w.hourly_cloud||[], GREY);
-  if(w.wind_speed!=null)  document.getElementById('cv-wind').textContent=w.wind_speed;
+  // Detail charts — wind & precip are 10-day daily; pressure & cloud stay 48h hourly
+  const BLUE='#005FA3', STEEL='#6B8499', GREY='#7A94A8', TEAL='#1A7A52';
+  sparkline('windSVG',   w.daily_wind||[], BLUE);
+  sparkline('precipSVG', w.daily_precip_prob||[], TEAL);
+  sparkline('presSVG',   w.hourly_pressure||[], STEEL);
+  sparkline('cloudSVG',  w.hourly_cloud||[], GREY);
+  if(w.daily_wind&&w.daily_wind.length)
+    document.getElementById('cv-wind').textContent=Math.round(Math.max(...w.daily_wind));
+  if(w.daily_precip_prob&&w.daily_precip_prob.length)
+    document.getElementById('cv-precip').textContent=Math.round(Math.max(...w.daily_precip_prob));
   if(w.pressure!=null)    document.getElementById('cv-pres').textContent=w.pressure;
   if(w.cloudcover!=null)  document.getElementById('cv-cloud').textContent=w.cloudcover;
 

@@ -417,11 +417,14 @@ def fetch_marine_forecast(zone_id):
             cdata = re.search(r'<!\[CDATA\[(.*?)\]\]>', s, re.DOTALL)
             if cdata:
                 s = cdata.group(1)
+            # Decode entities first so entity-encoded tags become real tags
+            for ent, rep in [('&amp;','&'),('&lt;','<'),('&gt;','>'),('&nbsp;',' '),('&#13;','\n'),('&#10;','\n')]:
+                s = s.replace(ent, rep)
             s = re.sub(r'<(?:br|BR)\s*/?>', '\n', s)
             s = re.sub(r'<[^>]+>', ' ', s)
-            for ent, rep in [('&lt;','<'),('&gt;','>'),('&amp;','&'),('&nbsp;',' '),('&#13;','\n'),('&#10;','\n')]:
-                s = s.replace(ent, rep)
             s = re.sub(r'\n{3,}', '\n\n', s)
+            # Strip "Issued …" trailing line
+            s = re.sub(r'\n?Issued\s+\d.*$', '', s, flags=re.DOTALL)
             return s.strip()[:800]
 
         # Parse per-item (RSS 2.0 <item> or Atom <entry>)
@@ -439,6 +442,8 @@ def fetch_marine_forecast(zone_id):
             if not (title_m and content_m):
                 continue
             title = clean(title_m.group(1))
+            # Strip repeated zone name suffix from title (e.g. "- Yukon Coast")
+            title = re.sub(r'\s*[-–]\s*[A-Z][a-z].*$', '', title).strip()
             body = clean(content_m.group(1))
             if not title or "No watches" in title or "Aucune veille" in title:
                 continue
@@ -548,7 +553,7 @@ def main():
     def fetch_modis_banner(lat, lon, out_path):
         from datetime import timedelta, date as _date
         # Wide bounding box: extend 10° west past Alaska, 4° east, 3° N/S
-        lon_w, lon_e = lon - 15, lon + 5
+        lon_w, lon_e = lon - 15, lon + 15
         lat_s, lat_n = lat - 2.5, lat + 2.5
         bbox = f"{lon_w},{lat_s},{lon_e},{lat_n}"
         # Shingle Point fraction from left: (lon - lon_w) / (lon_e - lon_w)

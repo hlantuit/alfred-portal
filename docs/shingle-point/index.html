@@ -74,7 +74,7 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .sat-wrap img{width:100%;height:auto;display:block;cursor:zoom-in;transition:opacity .3s;background:#0A1520}
 .sat-wrap img.hidden{display:none}
 .sat-no-img{height:180px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.35);font-size:13px}
-.sat-bar{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(7,16,26,.88));padding:10px 16px 12px}
+.sat-bar{background:#0d1c2b;padding:6px 14px 8px;line-height:1.4}
 .sat-info .sat-label{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.5)}
 .sat-info .sat-title{font-size:13px;font-weight:700;color:#fff;margin-top:1px}
 .sat-info .sat-date{font-size:10px;color:rgba(255,255,255,.45);margin-top:1px}
@@ -145,9 +145,10 @@ svg.sp{width:100%;height:100%;display:block}
 .expand-body.open{display:block}
 
 /* ── Image cards ── */
-.img-card{background:var(--surf);border-radius:8px;overflow:hidden;border:1px solid var(--bdr2);line-height:0;cursor:zoom-in;display:block;width:100%}
+.img-card{background:var(--surf);border-radius:8px;overflow:hidden;border:1px solid var(--bdr2);line-height:0;cursor:zoom-in;display:flex;flex-direction:column;width:100%}
+.img-card img{flex:1 1 auto;min-height:0}
 .img-card img{width:100%;min-width:100%;height:auto;display:block}
-.img-cap{font-size:10px;color:var(--muted);padding:6px 10px;line-height:1.4;background:var(--surf)}
+.img-cap{font-size:10px;color:var(--muted);padding:6px 10px;line-height:1.4;background:var(--surf);margin-top:auto}
 /* Portrait image cards (e.g. SAR): cap width so they don't balloon on wide screens */
 .img-card.portrait{max-width:480px}
 /* 3-column imagery row */
@@ -534,8 +535,8 @@ function renderChart(containerId, vals, opts){
   const tz=opts.tz||'UTC';
   const unit=opts.unit||'';
   const stroke=opts.stroke||'var(--acc)';
-  const W=1000, ML=40, MR=10, MT=12, MB=times.length?32:8;
-  const H=100, cW=W-ML-MR, cH=H-MT-MB;
+  const W=1000, ML=55, MR=12, MT=18, MB=times.length?42:10;
+  const H=120, cW=W-ML-MR, cH=H-MT-MB;
   const n=vals.length;
   const minV=Math.min(...clean), maxV=Math.max(...clean), rng=maxV-minV||1;
   const px=i=>ML+cW*i/(n-1);
@@ -557,7 +558,7 @@ function renderChart(containerId, vals, opts){
     const yy=py(v);
     yticks+=`<line x1="${ML}" y1="${yy.toFixed(1)}" x2="${ML+cW}" y2="${yy.toFixed(1)}" stroke="currentColor" stroke-width="0.5" opacity="0.07"/>`;
     const label=Number.isInteger(v)?v:v.toFixed(1);
-    yticks+=`<text x="${ML-4}" y="${(yy+3.5).toFixed(1)}" text-anchor="end" font-size="8.5" fill="currentColor" opacity="0.5" font-family="system-ui,sans-serif">${label}</text>`;
+    yticks+=`<text x="${ML-6}" y="${(yy+4).toFixed(1)}" text-anchor="end" font-size="13" fill="currentColor" opacity="0.55" font-family="system-ui,sans-serif">${label}</text>`;
   });
 
   // X labels — one per calendar day (label at midnight boundary)
@@ -572,8 +573,8 @@ function renderChart(containerId, vals, opts){
         lastDay=dayKey;
         const xx=px(i);
         if(xx>ML+12&&xx<ML+cW-12){
-          xlabels+=`<line x1="${xx.toFixed(1)}" y1="${(MT+cH).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(MT+cH+3).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.2"/>`;
-          xlabels+=`<text x="${xx.toFixed(1)}" y="${(H-4).toFixed(1)}" text-anchor="middle" font-size="8.5" fill="currentColor" opacity="0.5" font-family="system-ui,sans-serif">${dayKey}</text>`;
+          xlabels+=`<line x1="${xx.toFixed(1)}" y1="${(MT+cH).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(MT+cH+4).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.2"/>`;
+          xlabels+=`<text x="${xx.toFixed(1)}" y="${(H-5).toFixed(1)}" text-anchor="middle" font-size="13" fill="currentColor" opacity="0.55" font-family="system-ui,sans-serif">${dayKey}</text>`;
         }
       }
     });
@@ -632,7 +633,7 @@ function renderChart(containerId, vals, opts){
 function renderWaveChart(containerId, series, tz){
   const el=document.getElementById(containerId);
   if(!el||!series||!series.length){if(el)el.innerHTML='<span style="color:var(--muted);font-size:12px;padding:8px;display:block">Wave data unavailable</span>';return;}
-  const W=1000,H=170,ML=48,MR=20,MT=16,MB=42;
+  const W=1000,H=200,ML=60,MR=24,MT=20,MB=50;
   const cW=W-ML-MR, cH=H-MT-MB;
   const now=Date.now();
   const pts=series.map(p=>({t:new Date(p.t).getTime(),h:p.h}));
@@ -649,7 +650,7 @@ function renderWaveChart(containerId, series, tz){
   for(let v=0;v<=maxH+0.01;v+=ystep){
     const yy=py(v);
     yticks+=`<line x1="${ML-3}" y1="${yy.toFixed(1)}" x2="${ML+cW}" y2="${yy.toFixed(1)}" stroke="currentColor" stroke-width="0.5" opacity="0.1"/>`;
-    yticks+=`<text x="${ML-6}" y="${(yy+4).toFixed(1)}" text-anchor="end" font-size="11" fill="currentColor" opacity="0.55" font-family="system-ui,sans-serif">${v.toFixed(v%1?1:0)}</text>`;
+    yticks+=`<text x="${ML-8}" y="${(yy+5).toFixed(1)}" text-anchor="end" font-size="16" fill="currentColor" opacity="0.55" font-family="system-ui,sans-serif">${v.toFixed(v%1?1:0)}</text>`;
   }
   // X date labels
   let xlabels='';
@@ -660,22 +661,22 @@ function renderWaveChart(containerId, series, tz){
     if(xx>ML+15&&xx<ML+cW-15){
       const lbl=d.toLocaleDateString('en',{timeZone:tz,month:'short',day:'numeric'});
       xlabels+=`<line x1="${xx.toFixed(1)}" y1="${MT}" x2="${xx.toFixed(1)}" y2="${(MT+cH+4).toFixed(1)}" stroke="currentColor" stroke-width="0.5" opacity="0.15"/>`;
-      xlabels+=`<text x="${xx.toFixed(1)}" y="${(H-MB+16).toFixed(1)}" text-anchor="middle" font-size="11" fill="currentColor" opacity="0.55" font-family="system-ui,sans-serif">${lbl}</text>`;
+      xlabels+=`<text x="${xx.toFixed(1)}" y="${(H-MB+20).toFixed(1)}" text-anchor="middle" font-size="16" fill="currentColor" opacity="0.55" font-family="system-ui,sans-serif">${lbl}</text>`;
     }
     d=new Date(d.getTime()+dayMs);
   }
   // "now" marker
   const nowX=Math.max(ML,Math.min(ML+cW,px(now)));
-  const nowMark=(now>=tMin&&now<=tMax)?`<line x1="${nowX.toFixed(1)}" y1="${MT}" x2="${nowX.toFixed(1)}" y2="${(MT+cH).toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/><text x="${nowX.toFixed(1)}" y="${MT-3}" text-anchor="middle" font-size="10" fill="#C0392B" font-weight="700" font-family="system-ui,sans-serif">now</text>`:'';
-  // Thresholds
-  // Threshold labels: right-aligned inside the chart, below the line
-  const roughMark=ROUGH<maxH?`<line x1="${ML}" y1="${py(ROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(ROUGH).toFixed(1)}" stroke="#B86F00" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW-4).toFixed(1)}" y="${(py(ROUGH)+11).toFixed(1)}" text-anchor="end" font-size="10" fill="#B86F00" opacity="0.75" font-family="system-ui,sans-serif">rough 1.25 m</text>`:'';
-  const vroughMark=VROUGH<maxH?`<line x1="${ML}" y1="${py(VROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(VROUGH).toFixed(1)}" stroke="#C0392B" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW-4).toFixed(1)}" y="${(py(VROUGH)+11).toFixed(1)}" text-anchor="end" font-size="10" fill="#C0392B" opacity="0.75" font-family="system-ui,sans-serif">very rough 2.5 m</text>`:'';
+  // "now" label offset right of line to avoid overlap
+  const nowMark=(now>=tMin&&now<=tMax)?`<line x1="${nowX.toFixed(1)}" y1="${MT}" x2="${nowX.toFixed(1)}" y2="${(MT+cH).toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/><text x="${(nowX+6).toFixed(1)}" y="${(MT+18).toFixed(1)}" text-anchor="start" font-size="14" fill="#C0392B" font-weight="700" font-family="system-ui,sans-serif">now</text>`:'';
+  // Threshold labels: right-aligned inside chart, below each line
+  const roughMark=ROUGH<maxH?`<line x1="${ML}" y1="${py(ROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(ROUGH).toFixed(1)}" stroke="#B86F00" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW-6).toFixed(1)}" y="${(py(ROUGH)+15).toFixed(1)}" text-anchor="end" font-size="14" fill="#B86F00" opacity="0.8" font-family="system-ui,sans-serif">rough 1.25 m</text>`:'';
+  const vroughMark=VROUGH<maxH?`<line x1="${ML}" y1="${py(VROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(VROUGH).toFixed(1)}" stroke="#C0392B" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW-6).toFixed(1)}" y="${(py(VROUGH)+15).toFixed(1)}" text-anchor="end" font-size="14" fill="#C0392B" opacity="0.8" font-family="system-ui,sans-serif">very rough 2.5 m</text>`:'';
   const svgStr=`<svg id="waveSVGinner" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;overflow:hidden;cursor:crosshair">
     <defs><linearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#005FA3" stop-opacity="0.3"/><stop offset="100%" stop-color="#005FA3" stop-opacity="0.02"/></linearGradient></defs>
     ${yticks}${xlabels}${nowMark}${roughMark}${vroughMark}
     <polygon points="${areaPts}" fill="url(#waveGrad)"/>
-    <polyline points="${linePts}" fill="none" stroke="#005FA3" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    <polyline points="${linePts}" fill="none" stroke="#005FA3" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
   </svg>`;
   el.innerHTML=svgStr;
   // Hover tooltip
@@ -882,7 +883,7 @@ async function loadData(){
   const marine=d.marine||[];
   const mt=document.getElementById('marineTxt');
   if(marine.length){
-    mt.innerHTML=marine.map(e=>`<div class="m-period">${e.title}</div>${e.text}`).join('<br>');
+    mt.innerHTML=marine.map(e=>`<div class="m-period">${e.title}</div><div style="margin-bottom:8px">${e.text.replace(/\n/g,'<br>')}</div>`).join('');
   } else {
     mt.innerHTML='<span style="color:var(--muted)">Marine forecast unavailable — check Environment Canada directly.</span>';
   }

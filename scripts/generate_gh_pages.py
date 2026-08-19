@@ -10,8 +10,6 @@ The existing Notion pipeline is not touched.
 
 import argparse
 import json
-import math
-import shutil
 import sys
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -40,10 +38,10 @@ def wind_dir_label(deg):
     return _WIND_DIRS[round(float(deg) / 22.5) % 16]
 
 
-def get_with_retry(url, params=None, timeout=30, retries=3):
+def get_with_retry(url, params=None, timeout=30, retries=3, headers=None):
     for attempt in range(retries):
         try:
-            r = requests.get(url, params=params, timeout=timeout)
+            r = requests.get(url, params=params, timeout=timeout, headers=headers)
             r.raise_for_status()
             return r
         except Exception as e:
@@ -53,7 +51,7 @@ def get_with_retry(url, params=None, timeout=30, retries=3):
     raise RuntimeError("unreachable")
 
 
-# ── Weather ──────────────────────────────────────────────────────────────────
+# ── Weather ───────────────────────────────────────────────────────────────
 
 def fetch_weather(lat, lon, tz):
     r = get_with_retry(
@@ -65,11 +63,14 @@ def fetch_weather(lat, lon, tz):
                 "windspeed_10m", "winddirection_10m", "weathercode",
                 "surface_pressure", "cloudcover",
             ]),
-            "hourly": "cloudcover,windspeed_10m,winddirection_10m,pressure_msl",
+            "hourly": "cloudcover,windspeed_10m,winddirection_10m,pressure_msl,temperature_2m",
             "daily": ",".join([
                 "temperature_2m_max", "temperature_2m_min",
-                "precipitation_probability_max", "windspeed_10m_max",
-                "windgusts_10m_max", "weathercode",
+                "precipitation_probability_max", "precipitation_sum",
+                "windspeed_10m_max", "windgusts_10m_max",
+                "winddirection_10m_dominant",
+                "weathercode", "uv_index_max",
+                "sunrise", "sunset",
             ]),
             "timezone": tz,
             "forecast_days": 10,
@@ -79,31 +80,48 @@ def fetch_weather(lat, lon, tz):
     d = r.json()
     cur = d.get("current", {})
     daily = d.get("daily", {})
+    hourly = d.get("hourly", {})
 
-    now_label_idx = 0  # today
+    # Daily forecast
+    def dget(key, i, default=None):
+        arr = daily.get(key, [])
+        return arr[i] if i < len(arr) else default
+
     forecast = []
-    dates = daily.get("time", [])
-    for i, date in enumerate(dates):
+    for i, date in enumerate(daily.get("time", [])):
         dt = datetime.strptime(date, "%Y-%m-%d")
         if i == 0:
             day_label = "Today"
         elif i == 1:
             day_label = "Tomorrow"
         else:
-            day_label = dt.strftime("%a %-d")
+            day_label = dt.strftime("%a %-d %b")
+        wcode = dget("weathercode", i, 0)
+        wind_deg = dget("winddirection_10m_dominant", i)
         forecast.append({
             "date": date,
             "day": day_label,
-            "weathercode": daily.get("weathercode", [None] * 10)[i],
-            "hi": round(daily.get("temperature_2m_max", [None] * 10)[i] or 0),
-            "lo": round(daily.get("temperature_2m_min", [None] * 10)[i] or 0),
-            "precip_prob": daily.get("precipitation_probability_max", [0] * 10)[i] or 0,
-            "wind_max": round(daily.get("windspeed_10m_max", [0] * 10)[i] or 0),
-            "gusts_max": round(daily.get("windgusts_10m_max", [0] * 10)[i] or 0),
+            "weathercode": wcode,
+            "condition": WMO_LABELS.get(wcode, ""),
+            "hi": _r1(dget("temperature_2m_max", i)),
+            "lo": _r1(dget("temperature_2m_min", i)),
+            "precip_prob": dget("precipitation_probability_max", i, 0) or 0,
+            "precip_mm": _r1(dget("precipitation_sum", i)),
+            "wind_max": _ri(dget("windspeed_10m_max", i)),
+            "gusts_max": _ri(dget("windgusts_10m_max", i)),
+            "wind_dir_deg": _ri(wind_deg),
+            "wind_dir_label": wind_dir_label(wind_deg) if wind_deg is not None else None,
+            "uv_max": _r1(dget("uv_index_max", i)),
+            "sunrise": dget("sunrise", i),
+            "sunset": dget("sunset", i),
         })
 
-    # Hourly series for sparklines (next 48h)
-    hourly = d.get("hourly", {})
+    # 10-day daily temp arrays for chart
+    daily_hi = [fc["hi"] for fc in forecast]
+    daily_lo = [fc["lo"] for fc in forecast]
+    daily_dates = [fc["date"] for fc in forecast]
+
+    # Hourly (next 48h) for wind/pressure/cloud detail charts
     times_h = hourly.get("time", [])
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
     start_i = next((i for i, t in enumerate(times_h) if t[:13] >= now_str), 0)
@@ -112,18 +130,20 @@ def fetch_weather(lat, lon, tz):
         return [round(v, 1) if v is not None else None for v in vals[start_i:start_i+n]]
 
     return {
-        "temperature": round(cur.get("temperature_2m", 0) or 0, 1),
-        "feels_like": round(cur.get("apparent_temperature", 0) or 0, 1),
-        "humidity": round(cur.get("relativehumidity_2m", 0) or 0),
-        "wind_speed": round(cur.get("windspeed_10m", 0) or 0),
-        "wind_direction": round(cur.get("winddirection_10m", 0) or 0),
-        "wind_dir_label": wind_dir_label(cur.get("winddirection_10m", 0) or 0),
+        "temperature": _r1(cur.get("temperature_2m")),
+        "feels_like": _r1(cur.get("apparent_temperature")),
+        "humidity": _ri(cur.get("relativehumidity_2m")),
+        "wind_speed": _ri(cur.get("windspeed_10m")),
+        "wind_direction": _ri(cur.get("winddirection_10m")),
+        "wind_dir_label": wind_dir_label(cur.get("winddirection_10m") or 0),
         "weathercode": cur.get("weathercode", 0),
-        "condition": WMO_LABELS.get(cur.get("weathercode", 0), "Unknown"),
-        "pressure": round(cur.get("surface_pressure", 0) or 0),
-        "cloudcover": round(cur.get("cloudcover", 0) or 0),
+        "condition": WMO_LABELS.get(cur.get("weathercode", 0), ""),
+        "pressure": _ri(cur.get("surface_pressure")),
+        "cloudcover": _ri(cur.get("cloudcover")),
         "forecast": forecast,
-        "hourly_temp": h_slice("temperature_2m"),
+        "daily_hi": daily_hi,
+        "daily_lo": daily_lo,
+        "daily_dates": daily_dates,
         "hourly_wind": h_slice("windspeed_10m"),
         "hourly_wind_dir": h_slice("winddirection_10m"),
         "hourly_pressure": h_slice("pressure_msl"),
@@ -131,7 +151,14 @@ def fetch_weather(lat, lon, tz):
     }
 
 
-# ── Tides / Total Water Level ─────────────────────────────────────────────
+def _r1(v):
+    return round(float(v), 1) if v is not None else None
+
+def _ri(v):
+    return round(float(v)) if v is not None else None
+
+
+# ── Tides (IWLS — 7-day prediction) ──────────────────────────────────────
 
 def _find_iwls_station_id(code):
     try:
@@ -147,10 +174,11 @@ def _find_iwls_station_id(code):
 def fetch_tide(station_code, station_name, now_utc):
     station_id = _find_iwls_station_id(station_code)
     if not station_id:
+        print(f"  IWLS: station {station_code} not found")
         return None
 
-    from_dt = now_utc - timedelta(hours=1)
-    to_dt = now_utc + timedelta(hours=36)
+    from_dt = now_utc - timedelta(hours=6)
+    to_dt = now_utc + timedelta(days=7)
 
     try:
         r = get_with_retry(
@@ -168,27 +196,27 @@ def fetch_tide(station_code, station_name, now_utc):
         return None
 
     if not points:
+        print("  IWLS: empty response")
         return None
 
-    # Find current value (closest to now)
     now_ts = now_utc.timestamp()
     best = min(points, key=lambda p: abs(
         datetime.fromisoformat(p["eventDate"].replace("Z", "+00:00")).timestamp() - now_ts
     ))
     current_m = round(best.get("value", 0), 3)
 
-    # Trend: compare now vs 30 min ago
-    trend = "steady"
+    # Trend from previous few points
     idx_now = points.index(best)
-    if idx_now > 0:
-        prev = points[max(0, idx_now - 6)]  # ~30 min back (5-min intervals)
+    trend = "steady"
+    if idx_now >= 6:
+        prev = points[idx_now - 6]
         delta = best.get("value", 0) - prev.get("value", 0)
         if delta > 0.03:
             trend = "rising"
         elif delta < -0.03:
             trend = "falling"
 
-    # Next high and low
+    # Next high and low from future points
     def parse_t(p):
         return datetime.fromisoformat(p["eventDate"].replace("Z", "+00:00"))
 
@@ -201,120 +229,143 @@ def fetch_tide(station_code, station_name, now_utc):
         elif v < future[i-1].get("value", 0) and v < future[i+1].get("value", 0):
             lows.append(future[i])
 
-    def fmt_extreme(pts_list):
-        if not pts_list:
+    def fmt_extreme(lst):
+        if not lst:
             return None
-        p = pts_list[0]
-        return {
-            "time_utc": p["eventDate"],
-            "m": round(p.get("value", 0), 2),
-        }
+        return {"time_utc": lst[0]["eventDate"], "m": round(lst[0].get("value", 0), 2)}
 
-    # 48-hour series for sparkline
-    series = [{"t": p["eventDate"], "m": round(p.get("value", 0), 3)} for p in points]
+    # Thin series to ~200 points for the chart
+    step = max(1, len(points) // 200)
+    series = [{"t": p["eventDate"], "m": round(p.get("value", 0), 3)}
+              for p in points[::step]]
 
     return {
         "current_m": current_m,
         "trend": trend,
         "next_high": fmt_extreme(highs),
         "next_low": fmt_extreme(lows),
-        "series_48h": series,
+        "series": series,
     }
 
 
-# ── River level (WSC) ────────────────────────────────────────────────────
+# ── River level (MSC Datamart CSV) ───────────────────────────────────────
 
-def fetch_river(station_id):
+def fetch_river(station_id, provterr):
+    """Fetch latest water level from the MSC Datamart hourly CSV — more stable
+    than wateroffice.ec.gc.ca scraping endpoints."""
+    prov = provterr.upper()
+    url = (
+        f"https://dd.weather.gc.ca/hydrometric/csv/{prov}/hourly/"
+        f"{prov}_{station_id}_hourly_hydrometric.csv"
+    )
     try:
-        # Get axes to find the right parameter
-        axes_r = get_with_retry(
-            f"https://wateroffice.ec.gc.ca/services/real_time_graph_axes/json/inline"
-            f"?station_id={station_id}",
-            timeout=20,
+        r = get_with_retry(url, timeout=30)
+        lines = [l for l in r.text.strip().splitlines() if l.strip()]
+        # Header: ID,Date,Water Level (m),Grade,Symbol,QA/QC,Discharge (cms),...
+        header = [c.strip().strip('"') for c in lines[0].split(',')]
+        level_idx = next(
+            (i for i, h in enumerate(header) if "Water Level" in h or "Niveau" in h),
+            2,
         )
-        axes = axes_r.json()
-        param_ids = [a["parameterid"] for a in axes]
-        param1 = next((p for p in param_ids if p in ("46", "3")), param_ids[0] if param_ids else "46")
+        data_rows = []
+        for line in lines[1:]:
+            parts = line.split(',')
+            if len(parts) > level_idx and parts[level_idx].strip():
+                try:
+                    m = float(parts[level_idx].strip().strip('"'))
+                    ts = parts[1].strip().strip('"') if len(parts) > 1 else ""
+                    data_rows.append({"t": ts, "m": round(m, 3)})
+                except ValueError:
+                    continue
 
-        import datetime as _dt
-        today = _dt.date.today()
-        yesterday = today - _dt.timedelta(days=2)
-        wo_url = (
-            f"https://wateroffice.ec.gc.ca/services/real_time_graph/json/inline"
-            f"?station={station_id}&start_date={yesterday}&end_date={today}"
-            f"&param1={param1}&param2={param1}"
-        )
-        data_r = get_with_retry(wo_url, timeout=60)
-        data = data_r.json()
-
-        series_raw = data.get("series", {}).get(param1, {}).get("data", [])
-        if not series_raw:
+        if not data_rows:
+            print(f"  WSC: no valid rows for {station_id}")
             return None
 
-        series_sorted = sorted(series_raw, key=lambda x: x[0])
-        latest = series_sorted[-1]
-        current_m = round(latest[1], 3) if latest[1] is not None else None
+        current_m = data_rows[-1]["m"]
+        # Thin to ~48 points
+        step = max(1, len(data_rows) // 48)
+        series = data_rows[::step]
 
-        # Build a thinned 48h series (every 15 min → ~192 pts, thin to ~48)
-        step = max(1, len(series_sorted) // 48)
-        series = [{"t": p[0], "m": round(p[1], 3)} for p in series_sorted[::step] if p[1] is not None]
+        return {"current_m": current_m, "series": series}
 
-        return {"current_m": current_m, "series_48h": series}
     except Exception as e:
-        print(f"  WSC fetch failed for {station_id}: {e}")
+        print(f"  WSC Datamart fetch failed for {station_id}: {e}")
         return None
 
 
-# ── Marine forecast ─────────────────────────────────────────────────────
+# ── Marine forecast (EC RSS) ──────────────────────────────────────────────
 
 def fetch_marine_forecast(zone_id):
-    import xml.etree.ElementTree as ET
+    url = f"https://weather.gc.ca/rss/marine/{zone_id}_e.xml"
     try:
-        r = get_with_retry(f"https://weather.gc.ca/rss/marine/{zone_id}_e.xml", timeout=20)
-        root = ET.fromstring(r.text)
-        ns = {"atom": "http://www.w3.org/2005/Atom"}
-        entries = root.findall(".//atom:entry", ns) or root.findall(".//entry")
+        r = get_with_retry(url, timeout=30,
+                           headers={"User-Agent": "alfred-portal/1.0 (research dashboard)"})
+        # Namespace-agnostic parse: strip namespace prefixes for simplicity
+        text = r.text
+        import re
+        # Remove namespace declarations and prefixes
+        text = re.sub(r' xmlns[^"]*"[^"]*"', '', text)
+        text = re.sub(r'<(\w+):(\w+)', r'<\2', text)
+        text = re.sub(r'</(\w+):(\w+)', r'</\2', text)
+
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(text)
+        entries = root.findall(".//entry")
         out = []
-        for e in entries[:4]:
-            title_el = e.find("atom:title", ns) or e.find("title")
-            summary_el = e.find("atom:summary", ns) or e.find("summary")
-            if title_el is not None and summary_el is not None:
-                out.append({
-                    "title": (title_el.text or "").strip(),
-                    "text": (summary_el.text or "").strip()[:400],
-                })
+        for e in entries[:5]:
+            title_el = e.find("title")
+            summary_el = e.find("summary") or e.find("content") or e.find("description")
+            if title_el is not None:
+                title = (title_el.text or "").strip()
+                # Skip "No watches or warnings" entries
+                if "No watches" in title or not title:
+                    continue
+                summary = ""
+                if summary_el is not None:
+                    summary = (summary_el.text or "").strip()
+                    # Strip HTML tags if present
+                    summary = re.sub(r'<[^>]+>', '', summary)
+                    summary = summary[:500]
+                out.append({"title": title, "text": summary})
         return out or None
     except Exception as e:
         print(f"  Marine forecast fetch failed for zone {zone_id}: {e}")
         return None
 
 
-# ── Alerts (EC atom) ─────────────────────────────────────────────────────
+# ── EC alerts ─────────────────────────────────────────────────────────────
 
 def fetch_ec_alerts(prov="yt"):
-    import xml.etree.ElementTree as ET
+    import re
+    url = f"https://weather.gc.ca/rss/warning/{prov}_e.xml"
     try:
-        r = get_with_retry(f"https://weather.gc.ca/rss/warning/{prov}_e.xml", timeout=20)
-        root = ET.fromstring(r.text)
-        ns = {"atom": "http://www.w3.org/2005/Atom"}
-        entries = root.findall(".//atom:entry", ns) or root.findall(".//entry")
+        r = get_with_retry(url, timeout=20,
+                           headers={"User-Agent": "alfred-portal/1.0 (research dashboard)"})
+        text = r.text
+        text = re.sub(r' xmlns[^"]*"[^"]*"', '', text)
+        text = re.sub(r'<(\w+):(\w+)', r'<\2', text)
+        text = re.sub(r'</(\w+):(\w+)', r'</\2', text)
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(text)
         alerts = []
-        for e in entries[:10]:
-            title_el = e.find("atom:title", ns) or e.find("title")
-            t = (title_el.text or "").strip() if title_el is not None else ""
-            if t and "No watches or warnings" not in t:
-                alerts.append(t)
-        return alerts
+        for e in root.findall(".//entry"):
+            title_el = e.find("title")
+            if title_el is not None:
+                t = (title_el.text or "").strip()
+                if t and "No watches" not in t:
+                    alerts.append(t)
+        return alerts[:5]
     except Exception as e:
         print(f"  EC alerts fetch failed: {e}")
         return []
 
 
-# ── Main ─────────────────────────────────────────────────────────────────
+# ── Main ──────────────────────────────────────────────────────────────────
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--community", required=True, help="Community ID, e.g. shingle-point")
+    ap.add_argument("--community", required=True)
     args = ap.parse_args()
 
     cid = args.community
@@ -343,22 +394,33 @@ def main():
         print(f"Fetching tides ({cfg['tide_station_code']})…")
         tide = fetch_tide(cfg["tide_station_code"], cfg.get("tide_station_name", ""), now_utc)
 
-    river_data = []
+    rivers = []
     for stn in cfg.get("hydrometric_stations", []):
-        print(f"Fetching river level ({stn['station_id']})…")
-        rd = fetch_river(stn["station_id"])
+        sid = stn["station_id"]
+        prov = stn.get("provterr", "NT")
+        print(f"Fetching river level ({sid})…")
+        rd = fetch_river(sid, prov)
         if rd:
-            river_data.append({**rd, "station_id": stn["station_id"], "river_name": stn.get("river_name", "")})
+            rivers.append({
+                **rd,
+                "station_id": sid,
+                "river_name": stn.get("river_name", ""),
+                "heading": stn.get("heading", ""),
+            })
+        else:
+            print(f"  River fetch failed for {sid}")
 
     marine = None
     if cfg.get("marine_zone_id"):
         print(f"Fetching marine forecast (zone {cfg['marine_zone_id']})…")
         marine = fetch_marine_forecast(cfg["marine_zone_id"])
+        if not marine:
+            print("  Marine forecast unavailable")
 
     print("Fetching EC alerts…")
     alerts = fetch_ec_alerts()
 
-    # ── Assemble data.json ──
+    # ── Write data.json ──
     data = {
         "community": {
             "id": cid,
@@ -372,11 +434,9 @@ def main():
         "updated_utc": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "weather": weather,
         "tide": tide,
-        "rivers": river_data,
+        "rivers": rivers,
         "marine": marine,
-        "alerts": {
-            "weather": alerts,
-        },
+        "alerts": {"weather": alerts},
         "external_links": cfg.get("external_links", []),
     }
 
@@ -386,13 +446,15 @@ def main():
 
     # ── Copy chart PNGs ──
     charts_src = COMMUNITIES_DIR / cid / "charts"
+    copied = 0
     if charts_src.exists():
-        for png in charts_src.glob("*.png"):
-            dst = img_dir / png.name
-            shutil.copy2(png, dst)
-            print(f"  copied {png.name}")
+        for png in sorted(charts_src.glob("*.png")):
+            import shutil
+            shutil.copy2(png, img_dir / png.name)
+            copied += 1
+        print(f"Copied {copied} chart PNGs")
     else:
-        print(f"  no charts/ folder found for {cid}")
+        print(f"  No charts/ folder for {cid}")
 
     print("Done.")
 

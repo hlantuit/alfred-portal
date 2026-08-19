@@ -6,7 +6,6 @@
 <title>Shingle Point · Taqpaq</title>
 <meta name="description" content="Environmental conditions dashboard — Shingle Point / Taqpaq, Yukon Coast">
 <meta name="theme-color" content="#005FA3">
-<link rel="manifest" href="../manifest.json">
 <style>
 :root {
   --bg:     #EEF3F8;
@@ -41,7 +40,6 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .sb-name{font-size:17px;font-weight:800;line-height:1.2}
 .sb-name-alt{font-size:13px;font-weight:400;color:var(--muted)}
 .sb-meta{font-size:11px;color:var(--muted);margin-top:6px}
-
 .sb-cond{padding:14px 16px;border-bottom:1px solid var(--bdr2)}
 .sb-row{display:flex;align-items:center;gap:8px;margin-bottom:4px}
 .sb-icon{font-size:30px}
@@ -49,14 +47,12 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .sb-label{font-size:12px;color:var(--txt2)}
 .sb-stat{font-size:12px;color:var(--txt2);margin-top:5px}
 .sb-stat b{color:var(--txt);font-weight:700}
-
 .sb-nav{flex:1;padding:8px 0}
 .nav-grp{padding:10px 16px 2px;font-size:9px;font-weight:900;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
 .nav-a{display:flex;align-items:center;gap:9px;padding:8px 16px;font-size:12px;font-weight:500;color:var(--txt2);border-left:2px solid transparent;text-decoration:none;transition:background .1s}
 .nav-a:hover{background:var(--surf2)}
 .nav-a.on{color:var(--acc);border-left-color:var(--acc);background:var(--acc-l);font-weight:700}
 .nav-i{font-size:14px;width:18px;text-align:center;flex-shrink:0}
-
 .sb-updated{padding:10px 16px;font-size:10px;color:var(--muted);border-top:1px solid var(--bdr2)}
 
 /* ── Topbar (mobile) ── */
@@ -66,22 +62,22 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .tb-time{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
 
 /* ── Alert banner ── */
-.alert-banner{background:var(--warn-l);border-left:4px solid var(--warn);padding:10px 16px;font-size:13px;font-weight:600;color:var(--warn);display:none}
+.alert-banner{background:var(--warn-l);border-left:4px solid var(--warn);padding:10px 18px;font-size:13px;font-weight:600;color:var(--warn);display:none}
 .alert-banner.show{display:block}
-.alert-banner a{color:var(--warn)}
 
-/* ── Satellite image ── */
-.sat-wrap{position:relative;background:#0A1520;line-height:0;overflow:hidden;cursor:zoom-in}
-.sat-wrap img{width:100%;display:block;transition:opacity .3s}
-.sat-wrap img.loading{opacity:.4}
-.sat-bar{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(7,16,26,.88));padding:12px 16px 14px;display:flex;align-items:flex-end;justify-content:space-between;pointer-events:none}
+/* ── Satellite ── */
+.sat-wrap{position:relative;background:#0A1520;line-height:0;overflow:hidden;
+          max-height:55vh;/* prevent dominating large screens */}
+.sat-wrap img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in;transition:opacity .3s}
+.sat-wrap img.hidden{display:none}
+.sat-no-img{height:180px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.35);font-size:13px}
+.sat-bar{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(7,16,26,.88));padding:10px 16px 12px;display:flex;align-items:flex-end;justify-content:space-between}
 .sat-info .sat-label{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.5)}
-.sat-info .sat-title{font-size:14px;font-weight:700;color:#fff;margin-top:1px}
-.sat-info .sat-date{font-size:11px;color:rgba(255,255,255,.45);margin-top:1px}
-.sat-switch{display:flex;gap:6px;pointer-events:all}
-.sat-btn{padding:3px 10px;border-radius:3px;font-size:10px;font-weight:800;letter-spacing:.4px;cursor:pointer;background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.15);text-transform:uppercase}
+.sat-info .sat-title{font-size:13px;font-weight:700;color:#fff;margin-top:1px}
+.sat-info .sat-date{font-size:10px;color:rgba(255,255,255,.45);margin-top:1px}
+.sat-switch{display:flex;gap:5px}
+.sat-btn{padding:3px 9px;border-radius:3px;font-size:10px;font-weight:800;letter-spacing:.3px;cursor:pointer;background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.15);text-transform:uppercase}
 .sat-btn.on{background:var(--acc);border-color:var(--acc);color:#fff}
-.sat-no-img{height:220px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);font-size:13px}
 
 /* ── Section ── */
 .sec{padding:18px 20px 0}
@@ -91,8 +87,8 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .cond-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:14px 20px 0}
 .cc{background:var(--surf);border-radius:8px;padding:14px;border:1px solid var(--bdr2)}
 .cc-lbl{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-.cc-val{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.5px;line-height:1}
-.cc-unit{font-size:15px;font-weight:400;color:var(--txt2)}
+.cc-val{font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.5px;line-height:1}
+.cc-unit{font-size:14px;font-weight:400;color:var(--txt2)}
 .cc-sub{font-size:11px;color:var(--muted);margin-top:4px}
 .cc-pill{margin-top:8px}
 .pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700}
@@ -102,14 +98,17 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .pill-dan{background:var(--dan-l);color:var(--dan)}
 
 /* ── Forecast strip ── */
-.fc-wrap{padding:14px 20px 0;overflow:hidden}
+.fc-wrap{padding:14px 20px 0}
 .fc-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
 .fc-scroll::-webkit-scrollbar{height:3px}
 .fc-scroll::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px}
 .fc-row{display:flex;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;min-width:max-content;background:var(--surf)}
-.fc-cell{padding:10px 14px;text-align:center;border-right:1px solid var(--bdr2);min-width:84px}
+.fc-cell{padding:10px 14px;text-align:center;border-right:1px solid var(--bdr2);min-width:86px;cursor:pointer;transition:background .1s;user-select:none}
 .fc-cell:last-child{border-right:none}
 .fc-cell.today{background:var(--acc-l)}
+.fc-cell:hover{background:var(--surf2)}
+.fc-cell.today:hover{background:#d4e8f6}
+.fc-cell.selected{background:#bed8f0;outline:2px solid var(--acc);outline-offset:-2px}
 .fc-day{font-size:11px;font-weight:800;color:var(--txt2)}
 .fc-cell.today .fc-day{color:var(--acc)}
 .fc-icon{font-size:24px;margin:5px 0 3px}
@@ -118,6 +117,14 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .fc-bar-wrap{margin-top:4px;height:5px;border-radius:2px;background:var(--bdr2)}
 .fc-bar{height:100%;border-radius:2px;background:#5AA0D0}
 .fc-wind{font-size:10px;color:var(--muted);margin-top:4px}
+
+/* ── Forecast detail panel ── */
+.fc-detail{display:none;background:var(--surf);border:1px solid var(--bdr);border-top:none;border-radius:0 0 8px 8px;padding:14px 16px;margin-top:-1px}
+.fc-detail.show{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.fcd-item{background:var(--surf2);border-radius:6px;padding:10px 12px}
+.fcd-lbl{font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+.fcd-val{font-size:16px;font-weight:700;color:var(--txt)}
+.fcd-sub{font-size:11px;color:var(--txt2);margin-top:1px}
 
 /* ── Charts ── */
 .chart-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 20px 0}
@@ -130,36 +137,36 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .ch-area{height:64px;position:relative;overflow:hidden}
 svg.sp{width:100%;height:100%;display:block}
 
-/* ── Expandable details ── */
-.expand-btn{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;cursor:pointer;font-size:12px;font-weight:700;color:var(--acc);border-top:1px solid var(--bdr2);background:var(--surf2);user-select:none}
-.expand-btn .chevron{transition:transform .2s;font-style:normal}
-.expand-btn.open .chevron{transform:rotate(180deg)}
-.expand-body{display:none;background:var(--surf2)}
+/* ── Expandable weather details ── */
+.expand-btn{display:flex;align-items:center;justify-content:space-between;padding:11px 20px;cursor:pointer;font-size:12px;font-weight:700;color:var(--acc);background:var(--surf2);border-top:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);user-select:none}
+.expand-btn .chev{transition:transform .2s;font-style:normal;font-size:11px}
+.expand-btn.open .chev{transform:rotate(180deg)}
+.expand-body{display:none}
 .expand-body.open{display:block}
 
 /* ── Image cards ── */
-.img-card{background:var(--surf);border-radius:8px;overflow:hidden;border:1px solid var(--bdr2);line-height:0;cursor:zoom-in}
-.img-card img{width:100%;display:block}
+.img-card{background:var(--surf);border-radius:8px;overflow:hidden;border:1px solid var(--bdr2);line-height:0;cursor:zoom-in;
+          max-height:420px;/* prevent huge images on wide screens */}
+.img-card img{width:100%;height:100%;object-fit:contain;display:block;max-height:420px}
 .img-cap{font-size:10px;color:var(--muted);padding:6px 10px;line-height:1.4;background:var(--surf)}
 
-/* ── Marine text ── */
+/* ── Marine ── */
 .marine-text{font-size:13px;color:var(--txt2);line-height:1.7}
-.marine-text b{color:var(--txt)}
-.marine-issued{font-size:10px;color:var(--muted);margin-top:8px}
+.marine-text .m-period{font-weight:700;color:var(--txt);margin-top:8px;margin-bottom:2px}
 
 /* ── Links ── */
 .links-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 20px 0}
-.lk{display:flex;align-items:center;gap:10px;background:var(--surf);border:1px solid var(--bdr2);border-radius:8px;padding:10px 12px;cursor:pointer;text-decoration:none;color:inherit;transition:background .1s}
+.lk{display:flex;align-items:center;gap:10px;background:var(--surf);border:1px solid var(--bdr2);border-radius:8px;padding:10px 12px;text-decoration:none;color:inherit;transition:background .1s}
 .lk:hover{background:var(--surf2)}
 .lk-ico{font-size:18px;flex-shrink:0}
 .lk-label{font-size:12px;font-weight:700;line-height:1.3}
 .lk-src{font-size:10px;color:var(--muted)}
 
 /* ── Lightbox ── */
-.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:999;align-items:center;justify-content:center;cursor:zoom-out}
+.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out}
 .lightbox.show{display:flex}
-.lightbox img{max-width:96vw;max-height:92vh;border-radius:4px;object-fit:contain}
-.lb-close{position:absolute;top:14px;right:18px;color:#fff;font-size:28px;cursor:pointer;line-height:1}
+.lightbox img{max-width:95vw;max-height:90vh;object-fit:contain;border-radius:4px}
+.lb-close{position:absolute;top:14px;right:18px;color:#fff;font-size:30px;cursor:pointer;line-height:1;font-weight:300}
 
 /* ── Bottom nav (mobile) ── */
 .bnav{display:none;position:sticky;bottom:0;z-index:200;background:var(--surf);border-top:1px solid var(--bdr);flex-direction:row;height:56px}
@@ -168,10 +175,10 @@ svg.sp{width:100%;height:100%;display:block}
 .bn-icon{font-size:18px}
 
 /* ── Footer ── */
-.foot{padding:20px 20px;font-size:11px;color:var(--muted);border-top:1px solid var(--bdr2);margin-top:20px}
+.foot{padding:20px;font-size:11px;color:var(--muted);border-top:1px solid var(--bdr2);margin-top:20px}
 .foot a{color:var(--acc)}
 
-/* ── Mobile ── */
+/* ── Responsive ── */
 @media (max-width:768px){
   .sidebar{display:none}
   .main{padding-bottom:56px}
@@ -179,15 +186,12 @@ svg.sp{width:100%;height:100%;display:block}
   .bnav{display:flex}
   .cond-row{grid-template-columns:1fr 1fr;padding:10px 14px 0}
   .chart-row{grid-template-columns:1fr;padding:10px 14px 0}
-  .chart-1{padding:10px 14px 0}
-  .sec{padding:14px 14px 0}
-  .fc-wrap{padding:12px 14px 0}
-  .links-grid{grid-template-columns:1fr;padding:10px 14px 0}
-  .cc-val{font-size:24px}
-  .expand-btn{padding:12px 14px}
+  .chart-1,.sec,.fc-wrap,.links-grid{padding-left:14px;padding-right:14px}
+  .expand-btn{padding:11px 14px}
+  .cc-val{font-size:22px}
+  .fc-detail.show{grid-template-columns:1fr 1fr}
 }
-@media (min-width:1200px){
-  .chart-row{grid-template-columns:1fr 1fr}
+@media (min-width:1400px){
   .cond-row{grid-template-columns:repeat(3,1fr)}
 }
 </style>
@@ -196,31 +200,31 @@ svg.sp{width:100%;height:100%;display:block}
 
 <!-- Lightbox -->
 <div class="lightbox" id="lb" onclick="closeLb()">
-  <span class="lb-close" onclick="closeLb()">✕</span>
-  <img id="lb-img" src="" alt="">
+  <span class="lb-close">✕</span>
+  <img id="lb-img" src="" alt="" onclick="event.stopPropagation()">
 </div>
 
 <div class="shell">
-<!-- ══ Sidebar ══════════════════════════════════════════════════════════ -->
+
+<!-- ══ Sidebar ══ -->
 <aside class="sidebar">
   <div class="sb-head">
     <div class="sb-eyebrow">Yukon Coast</div>
     <div class="sb-name">Shingle Point<br><span class="sb-name-alt">Taqpaq</span></div>
-    <div class="sb-meta" id="sb-coords">68.994°N · 137.390°W</div>
+    <div class="sb-meta">68.994°N · 137.390°W</div>
   </div>
   <div class="sb-cond">
     <div class="sb-row">
-      <div class="sb-icon" id="sb-icon">⛅</div>
+      <div class="sb-icon" id="sb-icon">—</div>
       <div class="sb-temp" id="sb-temp">—°</div>
     </div>
-    <div class="sb-label" id="sb-cond-label">Loading…</div>
-    <div class="sb-stat" id="sb-wind-stat"></div>
-    <div class="sb-stat" id="sb-tide-stat"></div>
+    <div class="sb-label" id="sb-label">Loading…</div>
+    <div class="sb-stat" id="sb-wind"></div>
+    <div class="sb-stat" id="sb-tide"></div>
   </div>
   <nav class="sb-nav">
     <div class="nav-grp">Imagery</div>
-    <a class="nav-a on" href="#satellite"><span class="nav-i">🛰️</span>Satellite · SAR</a>
-    <a class="nav-a" href="#satellite"><span class="nav-i">🔭</span>MODIS colour</a>
+    <a class="nav-a on" href="#imagery"><span class="nav-i">🛰️</span>Satellite imagery</a>
     <div class="nav-grp">Forecast</div>
     <a class="nav-a" href="#forecast"><span class="nav-i">📅</span>10-day</a>
     <a class="nav-a" href="#marine"><span class="nav-i">🌊</span>Waves · Marine</a>
@@ -229,41 +233,42 @@ svg.sp{width:100%;height:100%;display:block}
     <a class="nav-a" href="#water"><span class="nav-i">💧</span>River level</a>
     <div class="nav-grp">Environment</div>
     <a class="nav-a" href="#ice"><span class="nav-i">🧊</span>Sea ice</a>
-    <a class="nav-a" href="#climate"><span class="nav-i">🌡️</span>30-yr climate</a>
+    <a class="nav-a" href="#climate"><span class="nav-i">🌡️</span>Climate</a>
     <div class="nav-grp">Links</div>
     <a class="nav-a" href="#links"><span class="nav-i">🔗</span>Data sources</a>
   </nav>
-  <div class="sb-updated" id="sb-updated">Loading…</div>
+  <div class="sb-updated" id="sb-updated">—</div>
 </aside>
 
-<!-- ══ Main ════════════════════════════════════════════════════════════ -->
+<!-- ══ Main ══ -->
 <div class="main">
 
-  <!-- Mobile topbar -->
   <div class="topbar">
     <div><div class="tb-title">Shingle Point · Taqpaq</div><div class="tb-sub">68.994°N · 137.390°W</div></div>
     <div class="tb-time" id="tb-time"></div>
   </div>
 
-  <!-- Alert banner (weather/wildfire/aurora — shown only when active) -->
+  <!-- Alert banner — shown only when active -->
   <div class="alert-banner" id="alert-banner"></div>
 
-  <!-- Satellite -->
-  <div id="satellite">
-    <div class="sat-wrap" id="satWrap" onclick="openLb(this.querySelector('img'))">
-      <div class="sat-no-img" id="satNoImg">Satellite image loading…</div>
-      <img id="satImg" src="img/sentinel1.png" alt="Sentinel-1 SAR" style="display:none"
-           onload="this.style.display='block';document.getElementById('satNoImg').style.display='none'"
-           onerror="this.style.display='none'">
+  <!-- Imagery -->
+  <div id="imagery">
+    <div class="sat-wrap">
+      <!-- Default: MODIS (shown first) -->
+      <div class="sat-no-img" id="satPlaceholder">Loading imagery…</div>
+      <img id="satImg" src="img/modis.png" alt="MODIS satellite"
+           onclick="openLb(this)"
+           onload="this.classList.remove('hidden');document.getElementById('satPlaceholder').style.display='none'"
+           onerror="this.classList.add('hidden')">
       <div class="sat-bar">
         <div class="sat-info">
-          <div class="sat-label">Sentinel-1 SAR · VV polarisation</div>
+          <div class="sat-label" id="sat-label">MODIS · True colour</div>
           <div class="sat-title">Shingle Point — Beaufort Sea</div>
-          <div class="sat-date" id="sat-date">Updated each full run</div>
+          <div class="sat-date">Updated each full workflow run · click to zoom</div>
         </div>
         <div class="sat-switch">
-          <div class="sat-btn on" onclick="event.stopPropagation();switchSat('sar',this)">SAR</div>
-          <div class="sat-btn" onclick="event.stopPropagation();switchSat('modis',this)">MODIS</div>
+          <div class="sat-btn" onclick="switchSat('sar',this)">SAR</div>
+          <div class="sat-btn on" onclick="switchSat('modis',this)">MODIS</div>
         </div>
       </div>
     </div>
@@ -292,45 +297,51 @@ svg.sp{width:100%;height:100%;display:block}
     </div>
   </div>
 
-  <!-- Forecast -->
-  <div id="forecast" class="sec"><div class="sec-hd">10-day GEM forecast</div></div>
-  <div class="fc-wrap"><div class="fc-scroll"><div class="fc-row" id="fcRow"></div></div></div>
+  <!-- 10-day forecast -->
+  <div id="forecast" class="sec"><div class="sec-hd">10-day GEM forecast · click a day for details</div></div>
+  <div class="fc-wrap">
+    <div class="fc-scroll">
+      <div class="fc-row" id="fcRow"></div>
+    </div>
+    <!-- Detail panel, expands below the strip -->
+    <div class="fc-detail" id="fcDetail"></div>
+  </div>
 
-  <!-- Temperature chart -->
+  <!-- Temperature 10-day chart -->
   <div class="chart-1" style="padding-top:14px">
     <div class="ch">
       <div class="ch-hd">
-        <div class="ch-title">Air temperature — next 48 h</div>
-        <div><span class="ch-val" id="cv-temp">—</span><span class="ch-unit"> °C · Open-Meteo GEM</span></div>
+        <div class="ch-title">Temperature — 10-day range</div>
+        <div><span class="ch-val" id="cv-temp">—</span><span class="ch-unit"> °C · GEM</span></div>
       </div>
       <div class="ch-area"><svg class="sp" id="tempSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
     </div>
   </div>
 
-  <!-- Expandable: pressure / cloud / wind detail -->
-  <div class="expand-btn" id="detailToggle" onclick="toggleDetail()">
-    <span>Wind speed · Pressure · Cloud cover</span>
-    <i class="chevron">▾</i>
+  <!-- Expandable: wind / pressure / cloud -->
+  <div class="expand-btn" id="detToggle" onclick="toggleDetail()">
+    <span>Wind speed · Pressure · Cloud cover — next 48 h</span>
+    <i class="chev">▾</i>
   </div>
-  <div class="expand-body" id="detailBody">
+  <div class="expand-body" id="detBody">
     <div class="chart-row" style="padding-top:14px;padding-bottom:14px">
       <div class="ch">
         <div class="ch-hd">
-          <div class="ch-title">Wind speed — next 48 h</div>
+          <div class="ch-title">Wind speed</div>
           <div><span class="ch-val" id="cv-wind">—</span><span class="ch-unit"> km/h</span></div>
         </div>
         <div class="ch-area"><svg class="sp" id="windSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
       </div>
       <div class="ch">
         <div class="ch-hd">
-          <div class="ch-title">Pressure — next 48 h</div>
+          <div class="ch-title">Pressure</div>
           <div><span class="ch-val" id="cv-pres">—</span><span class="ch-unit"> hPa</span></div>
         </div>
         <div class="ch-area"><svg class="sp" id="presSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
       </div>
       <div class="ch">
         <div class="ch-hd">
-          <div class="ch-title">Cloud cover — next 48 h</div>
+          <div class="ch-title">Cloud cover</div>
           <div><span class="ch-val" id="cv-cloud">—</span><span class="ch-unit"> %</span></div>
         </div>
         <div class="ch-area"><svg class="sp" id="cloudSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
@@ -341,20 +352,17 @@ svg.sp{width:100%;height:100%;display:block}
   <!-- Marine & waves -->
   <div id="marine" class="sec"><div class="sec-hd">Marine forecast · Yukon Coast</div></div>
   <div class="chart-row">
-    <div class="ch">
-      <div class="ch-hd">
-        <div class="ch-title">Wave height · GDWPS</div>
-        <div><span class="ch-val">—</span><span class="ch-unit"> m</span></div>
-      </div>
-      <div style="line-height:0"><img src="img/wave_forecast.png" alt="Wave forecast" style="width:100%;border-radius:4px" onerror="this.style.display='none'"></div>
+    <div class="img-card" onclick="openLb(this.querySelector('img'))">
+      <img src="img/wave_forecast.png" alt="Wave forecast" onerror="this.closest('.img-card').style.display='none'">
+      <div class="img-cap">Wave height — GDWPS. Click to zoom.</div>
     </div>
-    <div class="ch">
-      <div class="ch-title" style="margin-bottom:10px;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)">Text forecast</div>
-      <div class="marine-text" id="marineTxt">Loading marine forecast…</div>
+    <div class="ch" style="min-height:120px">
+      <div class="ch-title" style="margin-bottom:10px">Text forecast</div>
+      <div class="marine-text" id="marineTxt"><span style="color:var(--muted)">Loading…</span></div>
     </div>
   </div>
 
-  <!-- Water level + river -->
+  <!-- Water levels -->
   <div id="water" class="sec"><div class="sec-hd">Water levels</div></div>
   <div class="chart-row">
     <div class="ch">
@@ -363,6 +371,7 @@ svg.sp{width:100%;height:100%;display:block}
         <div><span class="ch-val" id="cv-tide">—</span><span class="ch-unit"> m</span></div>
       </div>
       <div class="ch-area"><svg class="sp" id="tideSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px">DFO IWLS tide prediction · 7-day</div>
     </div>
     <div class="ch" id="riverCard">
       <div class="ch-hd">
@@ -370,44 +379,82 @@ svg.sp{width:100%;height:100%;display:block}
         <div><span class="ch-val" id="cv-river">—</span><span class="ch-unit"> m</span></div>
       </div>
       <div class="ch-area"><svg class="sp" id="riverSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
-    </div>
-  </div>
-
-  <!-- Wind rose + temperature 30yr -->
-  <div id="climate" class="sec"><div class="sec-hd">Wind & climate</div></div>
-  <div class="chart-row">
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/wind_chart.png" alt="Wind rose" onerror="this.parentElement.style.display='none'">
-      <div class="img-cap">Wind rose — last 30 days. Source: Open-Meteo ERA5.</div>
-    </div>
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/temperature.png" alt="30-year temperature" onerror="this.parentElement.style.display='none'">
-      <div class="img-cap">Daily temperature vs. 30-year baseline. Source: Open-Meteo ERA5.</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px">MSC Datamart · hourly</div>
     </div>
   </div>
 
   <!-- Sea ice -->
   <div id="ice" class="sec"><div class="sec-hd">Sea ice · Sentinel-1 SAR</div></div>
-  <div class="chart-1" style="padding-top:0">
+  <div class="chart-row">
     <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/sea_ice.png" alt="Sea ice" onerror="this.parentElement.style.display='none'">
-      <div class="img-cap">Sentinel-1 SAR — 150 km frame. Updated each full workflow run.</div>
+      <img src="img/sea_ice.png" alt="Sea ice" onerror="this.closest('.img-card').style.display='none'">
+      <div class="img-cap">150 km frame · click to zoom</div>
+    </div>
+    <div class="img-card" onclick="openLb(this.querySelector('img'))">
+      <img src="img/sea_ice_zoom.png" alt="Sea ice zoom" onerror="this.closest('.img-card').style.display='none'">
+      <div class="img-cap">50 km frame · click to zoom</div>
     </div>
   </div>
 
-  <!-- Links -->
+  <!-- Climate -->
+  <div id="climate" class="sec"><div class="sec-hd">Climate</div></div>
+  <div class="chart-row">
+    <div class="img-card" onclick="openLb(this.querySelector('img'))">
+      <img src="img/temperature.png" alt="Temperature vs. baseline" onerror="this.closest('.img-card').style.display='none'">
+      <div class="img-cap">Daily temperature vs. 30-year baseline · ERA5</div>
+    </div>
+    <div class="img-card" onclick="openLb(this.querySelector('img'))">
+      <img src="img/tdd_histogram.png" alt="Thawing degree days" onerror="this.closest('.img-card').style.display='none'">
+      <div class="img-cap">Thawing degree days · current year vs. historic</div>
+    </div>
+    <div class="img-card" onclick="openLb(this.querySelector('img'))">
+      <img src="img/wind_chart.png" alt="Wind rose" onerror="this.closest('.img-card').style.display='none'">
+      <div class="img-cap">Wind rose — last 30 days · ERA5</div>
+    </div>
+    <div class="img-card" onclick="openLb(this.querySelector('img'))">
+      <img src="img/sun_chart.png" alt="Sunrise/sunset" onerror="this.closest('.img-card').style.display='none'">
+      <div class="img-cap">Sunrise / sunset times · current season</div>
+    </div>
+  </div>
+
+  <!-- Data sources -->
   <div id="links" class="sec"><div class="sec-hd">Data sources</div></div>
-  <div class="links-grid" id="linksGrid"></div>
+  <div class="links-grid" id="linksGrid">
+    <!-- Populated from data.json; fallback static links shown if JSON missing -->
+    <a class="lk" href="https://www.tides.gc.ca/en/stations/06505" target="_blank" rel="noopener">
+      <span class="lk-ico">🌊</span>
+      <div><div class="lk-label">Tide gauge — Shingle Point</div><div class="lk-src">Fisheries & Oceans Canada · Stn 06505</div></div>
+    </a>
+    <a class="lk" href="https://wateroffice.ec.gc.ca/report/real_time_e.html?stn=10MC023" target="_blank" rel="noopener">
+      <span class="lk-ico">💧</span>
+      <div><div class="lk-label">Napoiak Channel water level</div><div class="lk-src">Water Survey of Canada · WSC 10MC023</div></div>
+    </a>
+    <a class="lk" href="https://weather.gc.ca/marine/region_e.html?id=MID" target="_blank" rel="noopener">
+      <span class="lk-ico">⛅</span>
+      <div><div class="lk-label">Yukon Coast marine forecast</div><div class="lk-src">Environment Canada · Zone 16000</div></div>
+    </a>
+    <a class="lk" href="https://weather.gc.ca/warnings/index_e.html?prov=yt" target="_blank" rel="noopener">
+      <span class="lk-ico">⚠️</span>
+      <div><div class="lk-label">Weather alerts — Yukon</div><div class="lk-src">Environment Canada</div></div>
+    </a>
+    <a class="lk" href="https://open-meteo.com" target="_blank" rel="noopener">
+      <span class="lk-ico">🌡️</span>
+      <div><div class="lk-label">Weather forecast — GEM/ERA5</div><div class="lk-src">Open-Meteo · ECCC GEM seamless</div></div>
+    </a>
+    <a class="lk" href="https://github.com/hlantuit/alfred-portal" target="_blank" rel="noopener">
+      <span class="lk-ico">💻</span>
+      <div><div class="lk-label">Dashboard source code</div><div class="lk-src">Alfred Wegener Institute · GitHub</div></div>
+    </a>
+  </div>
 
-  <div class="foot">Alfred Wegener Institute · ALFRED Portal · Data refreshed automatically on each page load · <a href="https://github.com/hlantuit/alfred-portal">GitHub</a></div>
+  <div class="foot">Alfred Wegener Institute · ALFRED Portal · Weather data fetched live on each page load · Images updated by automated workflow · <span id="foot-updated"></span></div>
 
-  <!-- Mobile bottom nav -->
   <div class="bnav">
-    <div class="bn-btn on" onclick="scrollTo('#satellite',this)"><span class="bn-icon">🛰️</span>Satellite</div>
-    <div class="bn-btn" onclick="scrollTo('#forecast',this)"><span class="bn-icon">📅</span>Forecast</div>
-    <div class="bn-btn" onclick="scrollTo('#water',this)"><span class="bn-icon">🌊</span>Water</div>
-    <div class="bn-btn" onclick="scrollTo('#ice',this)"><span class="bn-icon">🧊</span>Ice</div>
-    <div class="bn-btn" onclick="scrollTo('#links',this)"><span class="bn-icon">🔗</span>Links</div>
+    <div class="bn-btn on" onclick="navTo('#imagery',this)"><span class="bn-icon">🛰️</span>Imagery</div>
+    <div class="bn-btn" onclick="navTo('#forecast',this)"><span class="bn-icon">📅</span>Forecast</div>
+    <div class="bn-btn" onclick="navTo('#water',this)"><span class="bn-icon">🌊</span>Water</div>
+    <div class="bn-btn" onclick="navTo('#ice',this)"><span class="bn-icon">🧊</span>Ice</div>
+    <div class="bn-btn" onclick="navTo('#links',this)"><span class="bn-icon">🔗</span>Links</div>
   </div>
 
 </div><!-- /main -->
@@ -415,176 +462,266 @@ svg.sp{width:100%;height:100%;display:block}
 
 <script>
 const WMO = {0:'Clear sky',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',45:'Fog',48:'Rime fog',51:'Light drizzle',53:'Drizzle',55:'Heavy drizzle',61:'Light rain',63:'Rain',65:'Heavy rain',71:'Light snow',73:'Snow',75:'Heavy snow',77:'Snow grains',80:'Rain showers',81:'Showers',82:'Heavy showers',85:'Snow showers',86:'Heavy snow showers',95:'Thunderstorm',96:'Thunderstorm+hail',99:'Thunderstorm+heavy hail'};
-const WMO_ICON = {0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',61:'🌧️',63:'🌧️',65:'🌧️',71:'🌨️',73:'🌨️',75:'🌨️',77:'🌨️',80:'🌦️',81:'🌧️',82:'🌧️',95:'⛈️',96:'⛈️',99:'⛈️'};
+const WMO_ICON = {0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',61:'🌧️',63:'🌧️',65:'🌧️',71:'🌨️',73:'🌨️',75:'🌨️',77:'🌨️',80:'🌦️',81:'🌧️',82:'🌧️',85:'❄️',86:'❄️',95:'⛈️',96:'⛈️',99:'⛈️'};
 const WIND_DIRS = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
-function windDir(d){return WIND_DIRS[Math.round(d/22.5)%16]}
-function beaufort(kmh){if(kmh<2)return'Calm';if(kmh<12)return'Light';if(kmh<20)return'Light breeze';if(kmh<29)return'Gentle breeze';if(kmh<39)return'Moderate';if(kmh<50)return'Fresh breeze';if(kmh<62)return'Strong';if(kmh<75)return'Near gale';return'Gale+'}
-function bfPill(kmh){const bf=beaufort(kmh);const cls=kmh<39?'pill-good':kmh<62?'pill-warn':'pill-dan';return`<span class="pill ${cls}">${bf}</span>`}
+function windDir(d){return WIND_DIRS[Math.round((d||0)/22.5)%16]}
+function beaufort(kmh){
+  if(kmh<2) return'Calm';if(kmh<6) return'Light air';if(kmh<12) return'Light breeze';
+  if(kmh<20) return'Gentle breeze';if(kmh<29) return'Moderate breeze';
+  if(kmh<39) return'Fresh breeze';if(kmh<50) return'Strong breeze';
+  if(kmh<62) return'Near gale';if(kmh<75) return'Gale';return'Strong gale';
+}
+function bfClass(kmh){return kmh<39?'pill-good':kmh<62?'pill-warn':'pill-dan'}
+function sign(v){return v>0?'+':''}
 
-// ── Sparkline ──────────────────────────────────────────────────────────
+// ── Lightbox ──
+function openLb(img){
+  if(!img||img.naturalWidth===0) return;
+  document.getElementById('lb-img').src=img.src;
+  document.getElementById('lb').classList.add('show');
+}
+function closeLb(){document.getElementById('lb').classList.remove('show')}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLb()})
+
+// ── Satellite switch ──
+function switchSat(mode,btn){
+  document.querySelectorAll('.sat-btn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  const img=document.getElementById('satImg');
+  const lbl=document.getElementById('sat-label');
+  if(mode==='sar'){
+    img.src='img/sentinel1.png';
+    lbl.textContent='Sentinel-1 SAR · VV polarisation';
+  } else {
+    img.src='img/modis.png';
+    lbl.textContent='MODIS · True colour';
+  }
+}
+
+// ── Expand/collapse ──
+function toggleDetail(){
+  document.getElementById('detToggle').classList.toggle('open');
+  document.getElementById('detBody').classList.toggle('open');
+}
+
+// ── Mobile nav ──
+function navTo(id,btn){
+  document.querySelectorAll('.bn-btn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.querySelector(id)?.scrollIntoView({behavior:'smooth'});
+}
+
+// ── Sparkline (range band for hi/lo) ──
 function sparkline(svgId, data, stroke){
-  const svg=document.getElementById(svgId); if(!svg||!data||!data.length) return;
+  const svg=document.getElementById(svgId); if(!svg) return;
   const vals=data.filter(v=>v!=null);
-  if(!vals.length) return;
+  if(vals.length<2) return;
   const min=Math.min(...vals), max=Math.max(...vals), rng=max-min||1;
   const W=800,H=64,P=4;
   const pts=vals.map((v,i)=>[P+(W-2*P)*i/(vals.length-1),H-P-(H-2*P)*(v-min)/rng]);
   const dL=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
   const dF=dL+`L${pts[pts.length-1][0]},${H} L${pts[0][0]},${H} Z`;
   const last=pts[pts.length-1];
-  svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.22"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.02"/></linearGradient></defs><path d="${dF}" fill="url(#g${svgId})"/><path d="${dL}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0]}" cy="${last[1]}" r="3.5" fill="${stroke}"/>`;
+  svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.22"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.02"/></linearGradient></defs><path d="${dF}" fill="url(#g${svgId})"/><path d="${dL}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="${stroke}"/>`;
 }
 
-// ── Lightbox ──────────────────────────────────────────────────────────
-function openLb(img){if(!img||!img.src||!img.complete||img.naturalWidth===0) return;document.getElementById('lb-img').src=img.src;document.getElementById('lb').classList.add('show')}
-function closeLb(){document.getElementById('lb').classList.remove('show')}
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLb()});
-
-// ── Satellite switcher ─────────────────────────────────────────────────
-function switchSat(mode, btn){
-  document.querySelectorAll('.sat-btn').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
-  const img=document.getElementById('satImg');
-  img.classList.add('loading');
-  img.src = mode==='sar' ? 'img/sentinel1.png' : 'img/modis.png';
-  img.onload=()=>img.classList.remove('loading');
+// 10-day temperature: render hi band + lo band as two lines + fill between
+function sparklineRange(svgId, hiData, loData, stroke){
+  const svg=document.getElementById(svgId); if(!svg) return;
+  const all=[...hiData,...loData].filter(v=>v!=null);
+  if(all.length<2) return;
+  const min=Math.min(...all), max=Math.max(...all), rng=max-min||1;
+  const W=800,H=64,P=4;
+  const n=hiData.length;
+  const hiPts=hiData.map((v,i)=>[P+(W-2*P)*i/(n-1),H-P-(H-2*P)*(v-min)/rng]);
+  const loPts=loData.map((v,i)=>[P+(W-2*P)*i/(n-1),H-P-(H-2*P)*(v-min)/rng]);
+  const dHi=hiPts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const dLo=loPts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const dFill=dHi+' '+loPts.slice().reverse().map((p,i)=>(i?'L':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')+' Z';
+  svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.18"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.04"/></linearGradient></defs><path d="${dFill}" fill="url(#g${svgId})"/><path d="${dHi}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><path d="${dLo}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-dasharray="4,3" stroke-linejoin="round" stroke-linecap="round" opacity="0.6"/>`;
 }
 
-// ── Detail expand ──────────────────────────────────────────────────────
-function toggleDetail(){
-  document.getElementById('detailToggle').classList.toggle('open');
-  document.getElementById('detailBody').classList.toggle('open');
+// ── Forecast day click → detail panel ──
+let _selectedDay = null;
+function showDayDetail(idx, fc, tz){
+  const panel=document.getElementById('fcDetail');
+  // Deselect if same day clicked again
+  if(_selectedDay===idx){
+    panel.classList.remove('show');
+    document.querySelectorAll('.fc-cell').forEach(c=>c.classList.remove('selected'));
+    _selectedDay=null; return;
+  }
+  _selectedDay=idx;
+  document.querySelectorAll('.fc-cell').forEach((c,i)=>{
+    c.classList.toggle('selected', i===idx);
+  });
+
+  const uv=fc.uv_max!=null?fc.uv_max:'—';
+  const uvLabel=fc.uv_max==null?'':(fc.uv_max<3?'Low':fc.uv_max<6?'Moderate':fc.uv_max<8?'High':fc.uv_max<11?'Very high':'Extreme');
+
+  function fmtLocalTime(iso, tz){
+    if(!iso) return '—';
+    try{ return new Date(iso).toLocaleTimeString('en-CA',{timeZone:tz,hour:'2-digit',minute:'2-digit',hour12:false}); }
+    catch(e){ return iso.slice(11,16)||'—'; }
+  }
+
+  panel.innerHTML=`
+    <div class="fcd-item">
+      <div class="fcd-lbl">Condition</div>
+      <div class="fcd-val" style="font-size:20px">${WMO_ICON[fc.weathercode]||'?'}</div>
+      <div class="fcd-sub">${fc.condition||''}</div>
+    </div>
+    <div class="fcd-item">
+      <div class="fcd-lbl">Temperature</div>
+      <div class="fcd-val">${fc.hi}° / ${fc.lo}°</div>
+      <div class="fcd-sub">High / Low · °C</div>
+    </div>
+    <div class="fcd-item">
+      <div class="fcd-lbl">Wind</div>
+      <div class="fcd-val">${fc.wind_max} km/h</div>
+      <div class="fcd-sub">${fc.wind_dir_label||''} · Gusts ${fc.gusts_max||'—'} km/h</div>
+    </div>
+    <div class="fcd-item">
+      <div class="fcd-lbl">Precipitation</div>
+      <div class="fcd-val">${fc.precip_mm!=null?fc.precip_mm+' mm':'—'}</div>
+      <div class="fcd-sub">Prob. ${fc.precip_prob||0}%</div>
+    </div>
+    <div class="fcd-item">
+      <div class="fcd-lbl">UV index</div>
+      <div class="fcd-val">${uv}</div>
+      <div class="fcd-sub">${uvLabel}</div>
+    </div>
+    <div class="fcd-item">
+      <div class="fcd-lbl">Sunrise</div>
+      <div class="fcd-val" style="font-size:16px">${fmtLocalTime(fc.sunrise,tz)}</div>
+      <div class="fcd-sub">Local time</div>
+    </div>
+    <div class="fcd-item">
+      <div class="fcd-lbl">Sunset</div>
+      <div class="fcd-val" style="font-size:16px">${fmtLocalTime(fc.sunset,tz)}</div>
+      <div class="fcd-sub">Local time</div>
+    </div>
+  `;
+  panel.classList.add('show');
+  panel.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
-// ── Mobile nav scroll ─────────────────────────────────────────────────
-function scrollTo(id, btn){
-  document.querySelectorAll('.bn-btn').forEach(b=>b.classList.remove('on'));
-  btn.classList.add('on');
-  document.querySelector(id)?.scrollIntoView({behavior:'smooth'});
-}
-
-// ── Fetch & render data.json ────────────────────────────────────────
+// ── Load data.json ──
 async function loadData(){
   let d;
   try {
-    const r = await fetch('data.json?v=' + Date.now());
-    d = await r.json();
+    const r=await fetch('data.json?t='+Date.now());
+    if(!r.ok) throw new Error(r.status);
+    d=await r.json();
   } catch(e) {
-    console.error('Failed to load data.json:', e);
-    document.getElementById('sb-cond-label').textContent = 'Data unavailable';
+    document.getElementById('sb-label').textContent='Data unavailable — '+e.message;
     return;
   }
 
-  const w = d.weather || {};
-  const tide = d.tide || null;
-  const rivers = d.rivers || [];
+  const w=d.weather||{};
+  const tide=d.tide||null;
+  const rivers=d.rivers||[];
+  const tz=d.community?.tz||'UTC';
 
-  // Updated timestamp
+  // Updated
   if(d.updated_utc){
-    const dt=new Date(d.updated_utc);
-    const loc=dt.toLocaleString('en-CA',{timeZone:d.community?.tz||'UTC',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
-    document.getElementById('sb-updated').textContent='Updated ' + loc;
-    document.getElementById('tb-time').textContent = loc;
+    const loc=new Date(d.updated_utc).toLocaleString('en-CA',{timeZone:tz,hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
+    document.getElementById('sb-updated').textContent='Updated '+loc;
+    document.getElementById('tb-time').textContent=loc;
+    document.getElementById('foot-updated').textContent='Last update: '+loc;
   }
 
-  // Sidebar conditions
-  const wcode = w.weathercode ?? 2;
-  document.getElementById('sb-icon').textContent = WMO_ICON[wcode] || '🌡️';
-  document.getElementById('sb-temp').textContent = (w.temperature ?? '—') + '°';
-  document.getElementById('sb-cond-label').textContent = (WMO[wcode]||'') + (w.feels_like != null ? ` · Feels ${w.feels_like}°` : '');
-  if(w.wind_speed != null)
-    document.getElementById('sb-wind-stat').innerHTML = `💨 <b>${w.wind_speed} km/h</b> ${w.wind_dir_label||''} · ${beaufort(w.wind_speed)}`;
-  if(tide?.current_m != null)
-    document.getElementById('sb-tide-stat').innerHTML = `🌊 <b>${tide.current_m > 0 ? '+' : ''}${tide.current_m} m</b> · ${tide.trend||''}`;
+  // Sidebar
+  const wcode=w.weathercode??2;
+  document.getElementById('sb-icon').textContent=WMO_ICON[wcode]||'🌡️';
+  document.getElementById('sb-temp').textContent=(w.temperature??'—')+'°';
+  document.getElementById('sb-label').textContent=(WMO[wcode]||'')+(w.feels_like!=null?' · Feels '+w.feels_like+'°':'');
+  if(w.wind_speed!=null) document.getElementById('sb-wind').innerHTML=`💨 <b>${w.wind_speed} km/h ${w.wind_dir_label||''}</b> · ${beaufort(w.wind_speed)}`;
+  if(tide?.current_m!=null) document.getElementById('sb-tide').innerHTML=`🌊 <b>${sign(tide.current_m)}${tide.current_m} m</b> · ${tide.trend||''}`;
 
-  // Alert banner
-  const alerts = (d.alerts?.weather || []).filter(a => a && !/No watches/i.test(a));
+  // Alerts
+  const alerts=(d.alerts?.weather||[]).filter(a=>/No watches/i.test(a)===false);
   if(alerts.length){
-    const b = document.getElementById('alert-banner');
-    b.textContent = '⚠ ' + alerts.slice(0,2).join(' · ');
+    const b=document.getElementById('alert-banner');
+    b.textContent='⚠ '+alerts.slice(0,2).join(' · ');
     b.classList.add('show');
   }
 
   // Conditions cards
-  if(w.temperature != null){
-    document.getElementById('c-temp').innerHTML = `${w.temperature}<span class="cc-unit">°C</span>`;
-    document.getElementById('c-temp-sub').textContent = `Feels ${w.feels_like}° · Humidity ${w.humidity}%`;
-    document.getElementById('c-temp-pill').innerHTML = `<span class="pill pill-blue">${WMO[wcode]||''}</span>`;
+  if(w.temperature!=null){
+    document.getElementById('c-temp').innerHTML=`${w.temperature}<span class="cc-unit">°C</span>`;
+    document.getElementById('c-temp-sub').textContent=`Feels ${w.feels_like??'—'}° · Humidity ${w.humidity??'—'}%`;
+    document.getElementById('c-temp-pill').innerHTML=`<span class="pill pill-blue">${WMO[wcode]||''}</span>`;
   }
-  if(w.wind_speed != null){
-    document.getElementById('c-wind').innerHTML = `${w.wind_speed}<span class="cc-unit"> km/h</span>`;
-    document.getElementById('c-wind-sub').textContent = `${w.wind_dir_label||''} · Gusts — · Pressure ${w.pressure} hPa`;
-    document.getElementById('c-wind-pill').innerHTML = bfPill(w.wind_speed);
+  if(w.wind_speed!=null){
+    document.getElementById('c-wind').innerHTML=`${w.wind_speed}<span class="cc-unit"> km/h</span>`;
+    document.getElementById('c-wind-sub').textContent=`${w.wind_dir_label||''} · Pressure ${w.pressure??'—'} hPa · Cloud ${w.cloudcover??'—'}%`;
+    document.getElementById('c-wind-pill').innerHTML=`<span class="pill ${bfClass(w.wind_speed)}">${beaufort(w.wind_speed)}</span>`;
   }
-  if(tide?.current_m != null){
-    const sign = tide.current_m > 0 ? '+' : '';
-    document.getElementById('c-tide').innerHTML = `${sign}${tide.current_m}<span class="cc-unit"> m</span>`;
-    let sub = tide.trend ? tide.trend.charAt(0).toUpperCase()+tide.trend.slice(1) : '';
-    if(tide.next_high) sub += ` · High ${fmtTime(tide.next_high.time_utc, d.community?.tz)} (${tide.next_high.m > 0?'+':''}${tide.next_high.m} m)`;
-    document.getElementById('c-tide-sub').textContent = sub;
-    document.getElementById('c-tide-pill').innerHTML = `<span class="pill ${tide.trend==='rising'?'pill-good':'pill-blue'}">${tide.trend||''}</span>`;
+  if(tide?.current_m!=null){
+    document.getElementById('c-tide').innerHTML=`${sign(tide.current_m)}${tide.current_m}<span class="cc-unit"> m</span>`;
+    let sub=tide.trend?tide.trend[0].toUpperCase()+tide.trend.slice(1):'';
+    if(tide.next_high) sub+=` · High at ${fmtTime(tide.next_high.time_utc,tz)} (${sign(tide.next_high.m)}${tide.next_high.m} m)`;
+    document.getElementById('c-tide-sub').textContent=sub;
+    const trendCls=tide.trend==='rising'?'pill-good':tide.trend==='falling'?'pill-blue':'pill-blue';
+    document.getElementById('c-tide-pill').innerHTML=`<span class="pill ${trendCls}">${tide.trend||''}</span>`;
   }
 
   // Forecast strip
-  const fc = w.forecast || [];
-  const fcRow = document.getElementById('fcRow');
+  const fc=w.forecast||[];
+  const fcRow=document.getElementById('fcRow');
   fc.forEach((day,i)=>{
     const el=document.createElement('div');
     el.className='fc-cell'+(i===0?' today':'');
     el.innerHTML=`<div class="fc-day">${day.day}</div><div class="fc-icon">${WMO_ICON[day.weathercode]||'❓'}</div><div class="fc-temps">${day.hi}° <span class="fc-lo">${day.lo}°</span></div><div class="fc-bar-wrap"><div class="fc-bar" style="width:${day.precip_prob||0}%"></div></div><div class="fc-wind">${day.wind_max} km/h</div>`;
+    el.addEventListener('click',()=>showDayDetail(i,day,tz));
     fcRow.appendChild(el);
   });
 
-  // Sparklines
-  const GOLD='#B86F00', BLUE='#005FA3', TEAL='#1A7A52', STEEL='#6B8499', GREY='#8AA0B8';
-  sparkline('tempSVG', w.hourly_temp, GOLD);
-  sparkline('windSVG', w.hourly_wind, BLUE);
-  sparkline('presSVG', w.hourly_pressure, STEEL);
-  sparkline('cloudSVG', w.hourly_cloud, GREY);
-  if(w.temperature!=null) document.getElementById('cv-temp').textContent=w.temperature;
+  // Temperature 10-day range chart
+  if(w.daily_hi?.length){
+    sparklineRange('tempSVG', w.daily_hi, w.daily_lo, '#B86F00');
+    document.getElementById('cv-temp').textContent=w.temperature??'—';
+  }
+
+  // Hourly detail charts
+  const BLUE='#005FA3', STEEL='#6B8499', GREY='#7A94A8';
+  sparkline('windSVG',  w.hourly_wind||[], BLUE);
+  sparkline('presSVG',  w.hourly_pressure||[], STEEL);
+  sparkline('cloudSVG', w.hourly_cloud||[], GREY);
   if(w.wind_speed!=null)  document.getElementById('cv-wind').textContent=w.wind_speed;
   if(w.pressure!=null)    document.getElementById('cv-pres').textContent=w.pressure;
   if(w.cloudcover!=null)  document.getElementById('cv-cloud').textContent=w.cloudcover;
 
-  // Tide sparkline
-  if(tide?.series_48h?.length){
-    sparkline('tideSVG', tide.series_48h.map(p=>p.m), TEAL);
-    document.getElementById('cv-tide').textContent = (tide.current_m>0?'+':'')+tide.current_m;
+  // Tide sparkline (7-day series, blue)
+  if(tide?.series?.length){
+    sparkline('tideSVG', tide.series.map(p=>p.m), BLUE);
+    document.getElementById('cv-tide').textContent=(sign(tide.current_m)||'')+tide.current_m;
   }
 
   // River sparkline
   if(rivers.length){
     const rv=rivers[0];
-    if(rv.series_48h?.length) sparkline('riverSVG', rv.series_48h.map(p=>p.m), STEEL);
+    if(rv.series?.length) sparkline('riverSVG', rv.series.map(p=>p.m), STEEL);
     if(rv.current_m!=null) document.getElementById('cv-river').textContent=rv.current_m;
-    const shortName = (rv.river_name||'River').split(',')[0];
-    document.getElementById('river-title').textContent = shortName;
+    const short=(rv.river_name||'River').split(',')[0];
+    document.getElementById('river-title').textContent=short;
   }
 
   // Marine forecast
   const marine=d.marine||[];
-  const marineTxt=document.getElementById('marineTxt');
+  const mt=document.getElementById('marineTxt');
   if(marine.length){
-    marineTxt.innerHTML=marine.map(e=>`<b>${e.title}</b><br>${e.text}`).join('<br><br>');
+    mt.innerHTML=marine.map(e=>`<div class="m-period">${e.title}</div>${e.text}`).join('<br>');
   } else {
-    marineTxt.textContent='Marine forecast unavailable.';
+    mt.innerHTML='<span style="color:var(--muted)">Marine forecast unavailable — check Environment Canada directly.</span>';
   }
-
-  // Links
-  const grid=document.getElementById('linksGrid');
-  (d.external_links||[]).forEach(lk=>{
-    const a=document.createElement('a');
-    a.className='lk'; a.href=lk.url; a.target='_blank'; a.rel='noopener';
-    a.innerHTML=`<span class="lk-ico">🔗</span><div><div class="lk-label">${lk.label}</div><div class="lk-src">External data source</div></div>`;
-    grid.appendChild(a);
-  });
 }
 
-function fmtTime(utcStr, tz){
-  if(!utcStr) return '';
-  try{
-    return new Date(utcStr).toLocaleTimeString('en-CA',{timeZone:tz||'UTC',hour:'2-digit',minute:'2-digit',hour12:false});
-  } catch(e){ return ''; }
+function fmtTime(utcStr,tz){
+  if(!utcStr) return'—';
+  try{return new Date(utcStr).toLocaleTimeString('en-CA',{timeZone:tz,hour:'2-digit',minute:'2-digit',hour12:false})}
+  catch(e){return'—'}
 }
 
 loadData();

@@ -594,21 +594,46 @@ def main():
                 )
                 ct = r.headers.get("content-type","")
                 if r.status_code==200 and "image" in ct:
-                    # Crop to exact 4:1 aspect ratio so every browser sees the same geographic crop
                     try:
-                        from PIL import Image as _Img
+                        from PIL import Image as _Img, ImageDraw as _Draw, ImageFont as _Font
                         import io as _io
-                        img = _Img.open(_io.BytesIO(r.content))
+                        img = _Img.open(_io.BytesIO(r.content)).convert("RGB")
                         iw, ih = img.size
+                        # Crop to 4:1
                         target_h = iw // 4
                         if ih > target_h:
                             top = (ih - target_h) // 2
                             img = img.crop((0, top, iw, top + target_h))
+                        iw, ih = img.size
+
+                        # Draw place labels from config map_points
+                        draw = _Draw.Draw(img)
+                        try:
+                            font = _Font.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
+                            font_sm = _Font.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22)
+                        except Exception:
+                            font = font_sm = _Font.load_default()
+
+                        for pt in cfg.get("map_points", []):
+                            pt_lat, pt_lon, pt_label = pt[0], pt[1], pt[2]
+                            if not (lon_w < pt_lon < lon_e and lat_s < pt_lat < lat_n):
+                                continue
+                            px_x = int((pt_lon - lon_w) / (lon_e - lon_w) * iw)
+                            px_y = int((lat_n - pt_lat) / (lat_n - lat_s) * ih)
+                            # Dot
+                            r_dot = 7
+                            draw.ellipse([px_x-r_dot, px_y-r_dot, px_x+r_dot, px_y+r_dot],
+                                         fill=(220, 60, 60), outline="white", width=2)
+                            # Label with shadow
+                            lx, ly = px_x + 12, px_y - 14
+                            draw.text((lx+1, ly+1), pt_label, font=font_sm, fill=(0,0,0,180))
+                            draw.text((lx, ly), pt_label, font=font_sm, fill=(255,255,255))
+
                         buf = _io.BytesIO()
                         img.save(buf, "JPEG", quality=88)
                         out_path.write_bytes(buf.getvalue())
                     except Exception as crop_err:
-                        print(f"  MODIS crop failed ({crop_err}), saving raw")
+                        print(f"  MODIS crop/label failed ({crop_err}), saving raw")
                         out_path.write_bytes(r.content)
                     print(f"  MODIS banner: {d} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
                     return True

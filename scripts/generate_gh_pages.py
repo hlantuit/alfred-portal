@@ -601,9 +601,12 @@ def fetch_marine_forecast(zone_id):
             # Decode entities first so entity-encoded tags become real tags
             for ent, rep in [('&amp;','&'),('&lt;','<'),('&gt;','>'),('&nbsp;',' '),('&#13;','\n'),('&#10;','\n')]:
                 s = s.replace(ent, rep)
-            s = re.sub(r'<(?:br|BR)\s*/?>', '\n', s)
+            # Also strip any remaining entity-encoded <br/> that survived CDATA unwrap
+            s = re.sub(r'&lt;br\s*/?&gt;', ' ', s, flags=re.IGNORECASE)
+            s = re.sub(r'<br\s*/?>', '\n', s, flags=re.IGNORECASE)
             s = re.sub(r'<[^>]+>', ' ', s)
             s = re.sub(r'\n{3,}', '\n\n', s)
+            s = re.sub(r' {2,}', ' ', s)
             # Strip "Issued …" trailing line
             s = re.sub(r'\n?Issued\s+\d.*$', '', s, flags=re.DOTALL)
             return s.strip()[:800]

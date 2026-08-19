@@ -534,8 +534,30 @@ function sparkline(svgId, data, stroke){
     <text x="${ML-5}" y="${(MT+cH).toFixed(1)}" text-anchor="end" font-size="18" fill="currentColor" opacity="0.5" font-family="system-ui,sans-serif">${fmtV(min)}</text>`;
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   svg.setAttribute('preserveAspectRatio','none');
-  svg.style.width='100%';svg.style.display='block';
-  svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.18"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.01"/></linearGradient></defs>${yLabels}<path d="${dF}" fill="url(#g${svgId})"/><path d="${dL}" fill="none" stroke="${stroke}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4" fill="${stroke}" stroke="white" stroke-width="1.5"/>`;
+  svg.style.cssText='width:100%;display:block;cursor:crosshair;overflow:visible';
+  const spXhId=`spxh_${svgId}`;
+  const spDotId=`spdot_${svgId}`;
+  svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.18"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.01"/></linearGradient></defs>${yLabels}<path d="${dF}" fill="url(#g${svgId})"/><path d="${dL}" fill="none" stroke="${stroke}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4" fill="${stroke}" stroke="white" stroke-width="1.5"/><line id="${spXhId}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="${stroke}" stroke-width="1" stroke-dasharray="3,2" opacity="0.45"/><circle id="${spDotId}" cx="-100" cy="-100" r="4" fill="${stroke}" stroke="white" stroke-width="1.5"/>`;
+  svg.parentElement.style.position='relative';
+  const spTip=Object.assign(document.createElement('div'),{});
+  spTip.style.cssText='position:absolute;background:var(--surf);border:1px solid var(--bdr2);border-radius:5px;padding:4px 10px;font-size:11px;pointer-events:none;display:none;z-index:10;white-space:nowrap;color:var(--txt);box-shadow:0 2px 6px rgba(0,0,0,.1)';
+  svg.parentElement.appendChild(spTip);
+  const spXh=svg.querySelector(`#${spXhId}`),spDot=svg.querySelector(`#${spDotId}`);
+  const n2=vals.length;
+  svg.addEventListener('mousemove',e=>{
+    const rect=svg.getBoundingClientRect();
+    const svgX=(e.clientX-rect.left)/rect.width*W;
+    const idx=Math.max(0,Math.min(n2-1,Math.round((svgX-ML)/cW*(n2-1))));
+    const v=vals[idx]; if(v==null) return;
+    const cx2=px(idx),cy2=py(v);
+    spXh.setAttribute('x1',cx2.toFixed(1));spXh.setAttribute('x2',cx2.toFixed(1));
+    spDot.setAttribute('cx',cx2.toFixed(1));spDot.setAttribute('cy',cy2.toFixed(1));
+    spTip.innerHTML=`<b>${v>=0?'+':''}${v.toFixed(2)} m</b>`;
+    spTip.style.display='block';
+    spTip.style.left=Math.min(e.clientX-rect.left+10,rect.width-120)+'px';
+    spTip.style.top=Math.max(0,e.clientY-rect.top-34)+'px';
+  });
+  svg.addEventListener('mouseleave',()=>{spTip.style.display='none';spXh.setAttribute('x1','-2');spXh.setAttribute('x2','-2');spDot.setAttribute('cx','-100');spDot.setAttribute('cy','-100');});
 }
 
 // ── Dual-curve water level sparkline (TOPAZ + GDSPS) ──
@@ -567,8 +589,39 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback){
   if(t.dL) curves+=`<defs><linearGradient id="gT_${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${TOPAZ_COLOR}" stop-opacity="0.18"/><stop offset="100%" stop-color="${TOPAZ_COLOR}" stop-opacity="0.01"/></linearGradient></defs><path d="${t.dF}" fill="url(#gT_${svgId})"/><path d="${t.dL}" fill="none" stroke="${TOPAZ_COLOR}" stroke-width="2.5" stroke-linejoin="round"/>`;
   if(fb.dL) curves+=`<path d="${fb.dL}" fill="none" stroke="#1B6CA8" stroke-width="2" stroke-linejoin="round"/>`;
   const legend=(t.dL&&g.dL)?`<text x="${ML+cW-4}" y="${(MT+12).toFixed(1)}" text-anchor="end" font-size="13" fill="${TOPAZ_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ TOPAZ6</text><text x="${ML+cW-4}" y="${(MT+24).toFixed(1)}" text-anchor="end" font-size="13" fill="${GDSPS_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ GDSPS</text>`:'';
-  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.style.width='100%';svg.style.display='block';
-  svg.innerHTML=`${yLabels}${refLine}${curves}${legend}`;
+  const xhId=`wlxh_${svgId}`;
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.style.cssText='width:100%;display:block;cursor:crosshair;overflow:visible';
+  svg.innerHTML=`${yLabels}${refLine}${curves}${legend}<line id="${xhId}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#3B2A8C" stroke-width="1" stroke-dasharray="3,2" opacity="0.4"/>`;
+  svg.parentElement.style.position='relative';
+  const tip2=Object.assign(document.createElement('div'),{});
+  tip2.style.cssText='position:absolute;background:var(--surf);border:1px solid var(--bdr2);border-radius:5px;padding:4px 10px;font-size:11px;pointer-events:none;display:none;z-index:10;white-space:nowrap;color:var(--txt);box-shadow:0 2px 6px rgba(0,0,0,.1)';
+  svg.parentElement.appendChild(tip2);
+  const xhEl=svg.querySelector(`#${xhId}`);
+  const primSeries=(topaz||gdsps||tide_fallback).series;
+  const pn=primSeries.length;
+  svg.addEventListener('mousemove',e=>{
+    const rect=svg.getBoundingClientRect();
+    const svgX=(e.clientX-rect.left)/rect.width*W;
+    const idx=Math.max(0,Math.min(pn-1,Math.round((svgX-ML)/cW*(pn-1))));
+    const xx=(ML+cW*idx/(pn-1)).toFixed(1);
+    xhEl.setAttribute('x1',xx);xhEl.setAttribute('x2',xx);
+    const ti=topaz?Math.round(idx/pn*(topaz.series.length-1)):null;
+    const gi=gdsps?Math.round(idx/pn*(gdsps.series.length-1)):null;
+    const tv=ti!=null?topaz.series[ti]?.m:null;
+    const gv=gi!=null?gdsps.series[gi]?.m:null;
+    const fv=(!topaz&&!gdsps)?primSeries[idx]?.m:null;
+    let txt='';
+    if(tv!=null) txt+=`<b style="color:#3B2A8C">TOPAZ6: ${tv>=0?'+':''}${tv.toFixed(2)} m</b>`;
+    if(gv!=null) txt+=(txt?' &nbsp;':'')+`<span style="color:#9B8FD8">GDSPS: ${gv>=0?'+':''}${gv.toFixed(2)} m</span>`;
+    if(fv!=null) txt=`<b>Tide: ${fv>=0?'+':''}${fv.toFixed(2)} m</b>`;
+    const ts=primSeries[idx]?.t;
+    if(ts){const dt=new Date(ts);txt+=` <span style="color:var(--muted);font-size:10px">${dt.toLocaleString('en-CA',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})}</span>`;}
+    tip2.innerHTML=txt;tip2.style.display='block';
+    tip2.style.left=Math.min(e.clientX-rect.left+10,rect.width-270)+'px';
+    tip2.style.top=Math.max(0,e.clientY-rect.top-34)+'px';
+  });
+  svg.addEventListener('mouseleave',()=>{tip2.style.display='none';xhEl.setAttribute('x1','-2');xhEl.setAttribute('x2','-2');});
 }
 
 // ── Full interactive chart (hover crosshair + tooltip, day labels, Y ticks) ──
@@ -1015,9 +1068,9 @@ async function loadData(){
   const wlCur = (twl||tide)?.current_m;
   if(wlCur!=null) document.getElementById('cv-tide').textContent=(wlCur>0?'+':'')+wlCur;
   {
-    const src = twl ? 'TOPAZ6 · GDSPS (MSC/ECCC) · tide + surge' : (tide ? 'DFO IWLS tide prediction · 7-day' : null);
-    const footer = document.querySelector('#twl-title')?.closest('.ch')?.querySelector('div:last-child');
-    if(footer && src) footer.textContent = src;
+    const src = twl ? 'TOPAZ6 · GDSPS (MSC/ECCC) · tide + surge · anomaly vs. yearly mean' : (tide ? 'DFO IWLS tide prediction · 7-day' : null);
+    const ch = document.querySelector('#twl-title')?.closest('.ch');
+    if(ch && src) ch.lastElementChild.textContent = src;
   }
 
   // River sparkline
@@ -1033,7 +1086,7 @@ async function loadData(){
   const marine=d.marine||[];
   const mt=document.getElementById('marineTxt');
   if(marine.length){
-    mt.innerHTML=marine.map(e=>`<div class="m-period">${e.title}</div><div style="margin-bottom:8px">${e.text.replace(/<br\s*\/?>/gi,'').replace(/\n/g,' ').trim()}</div>`).join('');
+    mt.innerHTML=marine.map(e=>`<div class="m-period">${e.title}</div><div style="margin-bottom:8px">${e.text.replace(/&lt;br\s*\/?&gt;/gi,'').replace(/<br\s*\/?>/gi,'').replace(/\n/g,' ').replace(/\s{2,}/g,' ').trim()}</div>`).join('');
   } else {
     mt.innerHTML='<span style="color:var(--muted)">Marine forecast unavailable — check Environment Canada directly.</span>';
   }

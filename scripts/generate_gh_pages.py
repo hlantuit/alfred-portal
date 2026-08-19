@@ -63,7 +63,7 @@ def fetch_weather(lat, lon, tz):
                 "windspeed_10m", "winddirection_10m", "weathercode",
                 "surface_pressure", "cloudcover",
             ]),
-            "hourly": "cloudcover,windspeed_10m,winddirection_10m,pressure_msl,temperature_2m",
+            "hourly": "cloudcover,windspeed_10m,winddirection_10m,pressure_msl,temperature_2m,precipitation",
             "daily": ",".join([
                 "temperature_2m_max", "temperature_2m_min",
                 "precipitation_probability_max", "precipitation_sum",
@@ -124,13 +124,22 @@ def fetch_weather(lat, lon, tz):
     daily_precip_mm   = [fc["precip_mm"]   for fc in forecast]
     daily_dates = [fc["date"]       for fc in forecast]
 
-    # Hourly (next 48h) for pressure & cloud detail
+    # Hourly arrays — 48h compact and 10-day downsampled (every 2h = 120 pts)
     times_h = hourly.get("time", [])
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H")
     start_i = next((i for i, t in enumerate(times_h) if t[:13] >= now_str), 0)
+
     def h_slice(key, n=48):
         vals = hourly.get(key, [])
         return [round(v, 1) if v is not None else None for v in vals[start_i:start_i+n]]
+
+    def h_10d(key, decimals=1):
+        """10-day hourly, every 2h starting from now (≈120 pts)."""
+        vals = hourly.get(key, [])
+        return [round(v, decimals) if v is not None else None
+                for v in vals[start_i::2][:120]]
+
+    hourly_times_10d = times_h[start_i::2][:120]  # ISO strings, every 2h
 
     # Daily means from full 10-day hourly (240h)
     def daily_from_hourly(key, n_days=10):
@@ -163,6 +172,13 @@ def fetch_weather(lat, lon, tz):
         "hourly_cloud": h_slice("cloudcover"),
         "daily_pressure": daily_from_hourly("pressure_msl"),
         "daily_cloud": daily_from_hourly("cloudcover"),
+        # 10-day hourly series for interactive charts
+        "hourly_times_10d": hourly_times_10d,
+        "hourly_temperature_10d": h_10d("temperature_2m"),
+        "hourly_wind_10d": h_10d("windspeed_10m"),
+        "hourly_pressure_10d": h_10d("pressure_msl"),
+        "hourly_cloud_10d": h_10d("cloudcover"),
+        "hourly_precip_10d": h_10d("precipitation", decimals=2),
     }
 
 
@@ -493,6 +509,41 @@ def main():
 
     print("Fetching wave height…")
     wave = fetch_wave(lat, lon, tz)
+
+    # Fetch wide MODIS banner image from NASA GIBS (landscape, centred on site)
+    def fetch_modis_banner(lat, lon, out_path):
+        from datetime import timedelta, date as _date
+        # Wide bounding box: extend 10° west past Alaska, 4° east, 3° N/S
+        lon_w, lon_e = lon - 15, lon + 5
+        lat_s, lat_n = lat - 2.5, lat + 2.5
+        bbox = f"{lon_w},{lat_s},{lon_e},{lat_n}"
+        # Shingle Point fraction from left: (lon - lon_w) / (lon_e - lon_w)
+        for delta in [1, 2, 3, 4]:
+            d = _date.today() - timedelta(days=delta)
+            try:
+                r = get_with_retry(
+                    "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi",
+                    params={
+                        "SERVICE":"WMS","REQUEST":"GetMap","VERSION":"1.3.0",
+                        "LAYERS":"MODIS_Terra_CorrectedReflectance_TrueColor",
+                        "CRS":"CRS:84","BBOX":bbox,
+                        "WIDTH":"2200","HEIGHT":"640","FORMAT":"image/jpeg",
+                        "TIME":d.strftime("%Y-%m-%d"),
+                    },
+                    timeout=60,
+                )
+                ct = r.headers.get("content-type","")
+                if r.status_code==200 and "image" in ct:
+                    out_path.write_bytes(r.content)
+                    print(f"  MODIS banner: {d} → {out_path.name} ({len(r.content)//1024} kB)")
+                    return True
+            except Exception as e:
+                print(f"  MODIS banner day -{delta} failed: {e}")
+        return False
+
+    banner_path = img_dir / "modis_banner.jpg"
+    if not fetch_modis_banner(lat, lon, banner_path):
+        print("  MODIS banner unavailable")
 
     marine = None
     if cfg.get("marine_zone_id"):

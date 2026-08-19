@@ -382,7 +382,7 @@ svg.sp{width:100%;height:100%;display:block}
         <div class="ch-title">Total water level · Stn 06505</div>
         <div><span class="ch-val" id="cv-tide">—</span><span class="ch-unit"> m</span></div>
       </div>
-      <div class="ch-area" id="tideSVG" style="height:80px;overflow:hidden"></div>
+      <div class="ch-area"><svg class="sp" id="tideSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
       <div style="font-size:10px;color:var(--muted);margin-top:6px">DFO IWLS tide prediction · 7-day</div>
     </div>
     <div class="ch" id="riverCard">
@@ -537,15 +537,24 @@ function sparkline(svgId, data, stroke){
   const vals=data.filter(v=>v!=null);
   if(vals.length<2) return;
   const min=Math.min(...vals),max=Math.max(...vals),rng=max-min||1;
-  const W=800,H=56,P=4;
-  const px=i=>P+(W-2*P)*i/(vals.length-1);
-  const py=v=>H-P-(H-2*P)*(v-min)/rng;
+  const W=800,H=64,ML=52,MR=6,MT=6,MB=6;
+  const cW=W-ML-MR,cH=H-MT-MB;
+  const px=i=>ML+(cW)*i/(vals.length-1);
+  const py=v=>MT+cH*(1-(v-min)/rng);
   const pts=vals.map((v,i)=>[px(i),py(v)]);
   const dL=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
-  const dF=dL+`L${pts[pts.length-1][0]},${H} L${pts[0][0]},${H} Z`;
+  const dF=dL+`L${pts[pts.length-1][0].toFixed(1)},${MT+cH} L${pts[0][0].toFixed(1)},${MT+cH} Z`;
   const last=pts[pts.length-1];
+  // Y axis labels: nice min and max
+  const niceV=v=>Number.isInteger(v)?v:Math.abs(v)<10?parseFloat(v.toFixed(1)):Math.round(v);
+  const fmtV=v=>{const n=niceV(v);return (n>0&&min<0?'+':'')+n;};
+  const yLabels=`
+    <text x="${ML-5}" y="${(MT+6).toFixed(1)}" text-anchor="end" font-size="18" fill="currentColor" opacity="0.5" font-family="system-ui,sans-serif">${fmtV(max)}</text>
+    <text x="${ML-5}" y="${(MT+cH).toFixed(1)}" text-anchor="end" font-size="18" fill="currentColor" opacity="0.5" font-family="system-ui,sans-serif">${fmtV(min)}</text>`;
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-  svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.18"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.01"/></linearGradient></defs><path d="${dF}" fill="url(#g${svgId})"/><path d="${dL}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="${stroke}"/>`;
+  svg.setAttribute('preserveAspectRatio','none');
+  svg.style.width='100%';svg.style.display='block';
+  svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.18"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.01"/></linearGradient></defs>${yLabels}<path d="${dF}" fill="url(#g${svgId})"/><path d="${dL}" fill="none" stroke="${stroke}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4" fill="${stroke}" stroke="white" stroke-width="1.5"/>`;
 }
 
 // ── Full interactive chart (hover crosshair + tooltip, day labels, Y ticks) ──

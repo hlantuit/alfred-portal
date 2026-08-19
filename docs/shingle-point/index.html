@@ -99,11 +99,9 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 
 /* ── Forecast strip ── */
 .fc-wrap{padding:14px 20px 0}
-.fc-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
-.fc-scroll::-webkit-scrollbar{height:3px}
-.fc-scroll::-webkit-scrollbar-thumb{background:var(--bdr);border-radius:2px}
-.fc-row{display:flex;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;min-width:max-content;background:var(--surf)}
-.fc-cell{padding:10px 14px;text-align:center;border-right:1px solid var(--bdr2);min-width:86px;cursor:pointer;transition:background .1s;user-select:none}
+.fc-scroll{}
+.fc-row{display:flex;flex-wrap:wrap;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;background:var(--surf)}
+.fc-cell{padding:10px 14px;text-align:center;border-right:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);min-width:86px;flex:1 1 86px;cursor:pointer;transition:background .1s;user-select:none}
 .fc-cell:last-child{border-right:none}
 .fc-cell.today{background:var(--acc-l)}
 .fc-cell:hover{background:var(--surf2)}

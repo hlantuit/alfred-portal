@@ -712,29 +712,39 @@ def main():
     if cfg.get("tide_station_code") or cfg.get("type") == "coastal":
         # Try TOPAZ6 (Copernicus) first, then GDSPS (MSC), then IWLS tide prediction
         print("Fetching total water level (TOPAZ6)…")
-        twl_times, twl_vals, _ = fetch_topaz_water_level(lat, lon, now_utc, cfg.get("site_display_name", cid), yearly_mean)
-        source_label = None
-        if twl_times:
-            source_label = "TOPAZ6 (Copernicus) · tide + surge"
-        else:
-            print("Fetching total water level (GDSPS)…")
-            twl_times, twl_vals, _ = fetch_gdsps_water_level(lat, lon, now_utc, cfg.get("site_display_name", cid), yearly_mean)
-            if twl_times:
-                source_label = "GDSPS (MSC/ECCC) · tide + surge"
-        if twl_times:
+        topaz_times, topaz_vals, _ = fetch_topaz_water_level(lat, lon, now_utc, cfg.get("site_display_name", cid), yearly_mean)
+        print("Fetching total water level (GDSPS)…")
+        gdsps_times, gdsps_vals, _ = fetch_gdsps_water_level(lat, lon, now_utc, cfg.get("site_display_name", cid), yearly_mean)
+
+        def _parse_iso(s):
+            s = s.replace("Z", "+00:00") if s.endswith("Z") else s
+            try:
+                return datetime.fromisoformat(s).timestamp()
+            except Exception:
+                return 0.0
+
+        def _make_wl(times, vals, source_label):
+            if not times:
+                return None
             now_ts = now_utc.timestamp()
-            def _parse_iso(s):
-                s = s.replace("Z", "+00:00") if s.endswith("Z") else s
-                try:
-                    return datetime.fromisoformat(s).timestamp()
-                except Exception:
-                    return 0.0
-            idx_now = min(range(len(twl_times)), key=lambda i: abs(_parse_iso(twl_times[i]) - now_ts))
-            current_m = round(twl_vals[idx_now], 3)
-            total_water_level = {
-                "current_m": current_m,
-                "series": [{"t": t, "m": v} for t, v in zip(twl_times, twl_vals)],
+            idx_now = min(range(len(times)), key=lambda i: abs(_parse_iso(times[i]) - now_ts))
+            return {
+                "current_m": round(vals[idx_now], 3),
+                "series": [{"t": t, "m": v} for t, v in zip(times, vals)],
                 "source": source_label,
+            }
+
+        twl_topaz = _make_wl(topaz_times, topaz_vals, "TOPAZ6 (Copernicus) · tide + surge")
+        twl_gdsps = _make_wl(gdsps_times, gdsps_vals, "GDSPS (MSC/ECCC) · tide + surge")
+
+        # Primary source for current_m: TOPAZ if available, else GDSPS
+        twl_primary = twl_topaz or twl_gdsps
+        total_water_level = None
+        if twl_primary:
+            total_water_level = {
+                **twl_primary,
+                "topaz": twl_topaz,
+                "gdsps": twl_gdsps,
             }
         if cfg.get("tide_station_code"):
             print(f"Fetching tides (IWLS {cfg['tide_station_code']})…")

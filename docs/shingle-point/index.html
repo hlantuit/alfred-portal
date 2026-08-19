@@ -69,9 +69,8 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .alert-banner.show{display:block}
 
 /* ── Satellite ── */
-.sat-wrap{position:relative;background:#0A1520;line-height:0;overflow:hidden;
-          max-height:55vh;/* prevent dominating large screens */}
-.sat-wrap img{width:100%;display:block;cursor:zoom-in;transition:opacity .3s;object-fit:contain;background:#0A1520}
+.sat-wrap{position:relative;background:#0A1520;line-height:0;overflow:hidden}
+.sat-wrap img{width:100%;height:50vh;max-height:480px;min-height:220px;display:block;cursor:zoom-in;transition:opacity .3s;object-fit:contain;background:#0A1520}
 .sat-wrap img.hidden{display:none}
 .sat-no-img{height:180px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.35);font-size:13px}
 .sat-bar{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(7,16,26,.88));padding:10px 16px 12px;display:flex;align-items:flex-end;justify-content:space-between}
@@ -79,7 +78,7 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .sat-info .sat-title{font-size:13px;font-weight:700;color:#fff;margin-top:1px}
 .sat-info .sat-date{font-size:10px;color:rgba(255,255,255,.45);margin-top:1px}
 .sat-switch{display:flex;gap:5px}
-.sat-btn{padding:3px 9px;border-radius:3px;font-size:10px;font-weight:800;letter-spacing:.3px;cursor:pointer;background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.15);text-transform:uppercase}
+.sat-btn{padding:6px 14px;border-radius:4px;font-size:11px;font-weight:800;letter-spacing:.3px;cursor:pointer;background:rgba(255,255,255,.1);color:rgba(255,255,255,.6);border:1px solid rgba(255,255,255,.15);text-transform:uppercase}
 .sat-btn.on{background:var(--acc);border-color:var(--acc);color:#fff}
 
 /* ── Section ── */
@@ -685,7 +684,10 @@ async function loadData(){
   fc.forEach((day,i)=>{
     const el=document.createElement('div');
     el.className='fc-cell'+(i===0?' today':'');
-    el.innerHTML=`<div class="fc-day">${day.day}</div><div class="fc-icon">${WMO_ICON[day.weathercode]||'❓'}</div><div class="fc-temps">${day.hi}° <span class="fc-lo">${day.lo}°</span></div><div class="fc-bar-wrap"><div class="fc-bar" style="width:${day.precip_prob||0}%"></div></div><div class="fc-wind">${day.wind_max} km/h</div>`;
+    const hiTxt = day.hi!=null ? day.hi+'°' : '—';
+    const loTxt = day.lo!=null ? day.lo+'°' : '—';
+    const wndTxt = day.wind_max!=null ? day.wind_max+' km/h' : '';
+    el.innerHTML=`<div class="fc-day">${day.day}</div><div class="fc-icon">${WMO_ICON[day.weathercode]||'❓'}</div><div class="fc-temps">${hiTxt} <span class="fc-lo">${loTxt}</span></div><div class="fc-bar-wrap"><div class="fc-bar" style="width:${day.precip_prob||0}%"></div></div><div class="fc-wind">${wndTxt}</div>`;
     el.addEventListener('click',()=>showDayDetail(i,day,tz));
     fcRow.appendChild(el);
   });

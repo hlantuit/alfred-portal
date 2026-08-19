@@ -82,6 +82,24 @@ def fetch_weather(lat, lon, tz):
     daily = d.get("daily", {})
     hourly = d.get("hourly", {})
 
+    # UV index: gem_seamless doesn't provide it — fetch from best_match model
+    uv_daily = []
+    try:
+        r_uv = get_with_retry(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": lat, "longitude": lon,
+                "daily": "uv_index_max",
+                "timezone": tz,
+                "forecast_days": 10,
+            },
+            timeout=20,
+        )
+        uv_daily = r_uv.json().get("daily", {}).get("uv_index_max", [])
+        print(f"  UV index (best_match): {uv_daily[:3]}")
+    except Exception as e:
+        print(f"  UV index fetch failed: {e}")
+
     # Daily forecast
     def dget(key, i, default=None):
         arr = daily.get(key, [])
@@ -111,7 +129,7 @@ def fetch_weather(lat, lon, tz):
             "gusts_max": _ri(dget("windgusts_10m_max", i)),
             "wind_dir_deg": _ri(wind_deg),
             "wind_dir_label": wind_dir_label(wind_deg) if wind_deg is not None else None,
-            "uv_max": _r1(dget("uv_index_max", i)),
+            "uv_max": _r1(uv_daily[i] if i < len(uv_daily) else dget("uv_index_max", i)),
             "sunrise": dget("sunrise", i),
             "sunset": dget("sunset", i),
         })
@@ -541,7 +559,7 @@ def main():
                     "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi",
                     params={
                         "SERVICE":"WMS","REQUEST":"GetMap","VERSION":"1.3.0",
-                        "LAYERS":"MODIS_Terra_CorrectedReflectance_TrueColor",
+                        "LAYERS":"MODIS_Terra_CorrectedReflectance_TrueColor,Coastlines_15m,Reference_Labels_15m",
                         "CRS":"CRS:84","BBOX":bbox,
                         "WIDTH":"2200","HEIGHT":"640","FORMAT":"image/jpeg",
                         "TIME":d.strftime("%Y-%m-%d"),

@@ -25,6 +25,9 @@ jobs:
 
       - name: Generate data.json and copy images
         run: python scripts/generate_gh_pages.py --community herschel
+        env:
+          SENTINEL_HUB_CLIENT_ID: ${{ secrets.SENTINEL_HUB_CLIENT_ID }}
+          SENTINEL_HUB_CLIENT_SECRET: ${{ secrets.SENTINEL_HUB_CLIENT_SECRET }}
 
       - name: Commit and push docs/
         run: |

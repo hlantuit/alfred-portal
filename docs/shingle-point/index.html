@@ -137,8 +137,8 @@ svg.sp{width:100%;height:100%;display:block}
 
 /* ── Expandable weather details ── */
 .expand-btn{display:flex;align-items:center;justify-content:space-between;padding:11px 20px;cursor:pointer;font-size:12px;font-weight:700;color:var(--acc);background:var(--surf2);border-top:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);user-select:none}
-.expand-btn .chev{transition:transform .2s;font-style:normal;font-size:11px}
-.expand-btn.open .chev{transform:rotate(180deg)}
+.expand-btn .chev{font-style:normal;font-size:16px;font-weight:700;line-height:1;width:20px;text-align:center;flex-shrink:0}
+.expand-btn.open .chev{}
 .expand-body{display:none}
 .expand-body.open{display:block}
 
@@ -324,7 +324,7 @@ svg.sp{width:100%;height:100%;display:block}
   <!-- Expandable: wind / precip / pressure / cloud — 10-day hourly -->
   <div class="expand-btn" id="detToggle" onclick="toggleDetail()">
     <span>Wind · Precipitation · Pressure · Cloud cover — 10-day hourly</span>
-    <i class="chev">▾</i>
+    <i class="chev" id="detToggleIcon">+</i>
   </div>
   <div class="expand-body" id="detBody">
     <div class="chart-row" style="padding-top:14px;padding-bottom:14px">
@@ -520,8 +520,10 @@ function triggerInstall(){
 
 // ── Expand/collapse ──
 function toggleDetail(){
-  document.getElementById('detToggle').classList.toggle('open');
+  const tog=document.getElementById('detToggle');
+  tog.classList.toggle('open');
   document.getElementById('detBody').classList.toggle('open');
+  document.getElementById('detToggleIcon').textContent=tog.classList.contains('open')?'−':'+';
 }
 
 // ── Mobile nav ──
@@ -537,7 +539,7 @@ function sparkline(svgId, data, stroke){
   const vals=data.filter(v=>v!=null);
   if(vals.length<2) return;
   const min=Math.min(...vals),max=Math.max(...vals),rng=max-min||1;
-  const W=800,H=64,ML=52,MR=6,MT=6,MB=6;
+  const W=800,H=100,ML=52,MR=6,MT=8,MB=8;
   const cW=W-ML-MR,cH=H-MT-MB;
   const px=i=>ML+(cW)*i/(vals.length-1);
   const py=v=>MT+cH*(1-(v-min)/rng);
@@ -586,7 +588,7 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback){
   const primary = topaz || gdsps || tide_fallback;
   if(!primary?.series?.length) return;
 
-  const W=800,H=90,ML=52,MR=8,MT=8,MB=8;
+  const W=800,H=160,ML=52,MR=8,MT=10,MB=30;
   const cW=W-ML-MR,cH=H-MT-MB;
 
   // Collect all values to find common scale
@@ -637,16 +639,19 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback){
   // Legend (only if both sources)
   const legend=(t.dL&&g.dL)?`<text x="${ML+cW-4}" y="${(MT+12).toFixed(1)}" text-anchor="end" font-size="13" fill="${TOPAZ_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ TOPAZ6</text><text x="${ML+cW-4}" y="${(MT+24).toFixed(1)}" text-anchor="end" font-size="13" fill="${GDSPS_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ GDSPS</text>`:'';
 
-  const xhId=`wlxh_${svgId}`;
+  // X date labels
+  const primSeries=(topaz||gdsps||tide_fallback).series;
+  let xlabels='';
+  {let lastDay='';primSeries.forEach((p,i)=>{if(!p.t)return;const dt=new Date(p.t);const dk=dt.toLocaleDateString('en',{timeZone:'UTC',month:'short',day:'numeric'});if(dk!==lastDay){lastDay=dk;const xx=ML+cW*i/(primSeries.length-1);if(xx>ML+12&&xx<ML+cW-12){xlabels+=`<line x1="${xx.toFixed(1)}" y1="${(MT+cH).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(MT+cH+4).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.2"/><text x="${xx.toFixed(1)}" y="${(H-4).toFixed(1)}" text-anchor="middle" font-size="13" fill="currentColor" opacity="0.55" font-family="system-ui,sans-serif">${dk}</text>`;}}});}
+  const xhId=`wlxh_${svgId}`,wlDotId=`wldot_${svgId}`;
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   svg.style.cssText='width:100%;display:block;cursor:crosshair;overflow:visible';
-  svg.innerHTML=`${yLabels}${refLine}${curves}${legend}<line id="${xhId}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#3B2A8C" stroke-width="1" stroke-dasharray="3,2" opacity="0.4"/>`;
+  svg.innerHTML=`${yLabels}${refLine}${curves}${legend}${xlabels}<line id="${xhId}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#3B2A8C" stroke-width="1" stroke-dasharray="3,2" opacity="0.4"/><circle id="${wlDotId}" cx="-100" cy="-100" r="4" fill="${TOPAZ_COLOR}" stroke="white" stroke-width="1.5"/>`;
   svg.parentElement.style.position='relative';
   const tip2=Object.assign(document.createElement('div'),{});
   tip2.style.cssText='position:absolute;background:var(--surf);border:1px solid var(--bdr2);border-radius:5px;padding:4px 10px;font-size:11px;pointer-events:none;display:none;z-index:10;white-space:nowrap;color:var(--txt);box-shadow:0 2px 6px rgba(0,0,0,.1)';
   svg.parentElement.appendChild(tip2);
-  const xhEl=svg.querySelector(`#${xhId}`);
-  const primSeries=(topaz||gdsps||tide_fallback).series;
+  const xhEl=svg.querySelector(`#${xhId}`),wlDot=svg.querySelector(`#${wlDotId}`);
   const pn=primSeries.length;
   svg.addEventListener('mousemove',e=>{
     const rect=svg.getBoundingClientRect();
@@ -658,6 +663,10 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback){
     const gi=gdsps?Math.round(idx/pn*(gdsps.series.length-1)):null;
     const tv=ti!=null?topaz.series[ti]?.m:null;
     const gv=gi!=null?gdsps.series[gi]?.m:null;
+    const dotM=tv!=null?tv:gv;
+    const dotColor=tv!=null?TOPAZ_COLOR:GDSPS_COLOR;
+    if(dotM!=null){const dotY=(MT+cH*(1-(dotM-lo)/span)).toFixed(1);wlDot.setAttribute('cx',xx);wlDot.setAttribute('cy',dotY);wlDot.setAttribute('fill',dotColor);}
+    else{wlDot.setAttribute('cx','-100');wlDot.setAttribute('cy','-100');}
     const fv=(!topaz&&!gdsps)?primSeries[idx]?.m:null;
     let txt='';
     if(tv!=null) txt+=`<b style="color:#3B2A8C">TOPAZ6: ${tv>=0?'+':''}${tv.toFixed(2)} m</b>`;
@@ -669,7 +678,7 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback){
     tip2.style.left=Math.min(e.clientX-rect.left+10,rect.width-270)+'px';
     tip2.style.top=Math.max(0,e.clientY-rect.top-34)+'px';
   });
-  svg.addEventListener('mouseleave',()=>{tip2.style.display='none';xhEl.setAttribute('x1','-2');xhEl.setAttribute('x2','-2');});
+  svg.addEventListener('mouseleave',()=>{tip2.style.display='none';xhEl.setAttribute('x1','-2');xhEl.setAttribute('x2','-2');wlDot.setAttribute('cx','-100');wlDot.setAttribute('cy','-100');});
 }
 
 // ── Full interactive chart (hover crosshair + tooltip, day labels, Y ticks) ──
@@ -684,7 +693,7 @@ function renderChart(containerId, vals, opts){
   const unit=opts.unit||'';
   const stroke=opts.stroke||'var(--acc)';
   const W=1000, ML=55, MR=12, MT=18, MB=times.length?42:10;
-  const H=180, cW=W-ML-MR, cH=H-MT-MB;
+  const H=260, cW=W-ML-MR, cH=H-MT-MB;
   const n=vals.length;
   const minV=Math.min(...clean), maxV=Math.max(...clean), rng=maxV-minV||1;
   const px=i=>ML+cW*i/(n-1);
@@ -791,7 +800,7 @@ function renderPrecipChart(containerId, rain, snow, times, tz){
   if(!el) return;
   const n=(rain||[]).length;
   if(!n){el.innerHTML='<span style="color:var(--muted);font-size:12px;padding:8px;display:block">No data</span>';return;}
-  const W=1000,H=180,ML=55,MR=12,MT=18,MB=42;
+  const W=1000,H=260,ML=55,MR=12,MT=18,MB=42;
   const cW=W-ML-MR,cH=H-MT-MB;
   const allVals=[...rain,...snow].filter(v=>v!=null);
   const maxV=Math.max(...allVals,0.5);
@@ -878,7 +887,7 @@ function renderPrecipChart(containerId, rain, snow, times, tz){
 function renderWaveChart(containerId, series, tz){
   const el=document.getElementById(containerId);
   if(!el||!series||!series.length){if(el)el.innerHTML='<span style="color:var(--muted);font-size:12px;padding:8px;display:block">Wave data unavailable</span>';return;}
-  const W=1000,H=200,ML=60,MR=24,MT=20,MB=50;
+  const W=1000,H=300,ML=60,MR=24,MT=20,MB=50;
   const cW=W-ML-MR, cH=H-MT-MB;
   const now=Date.now();
   const pts=series.map(p=>({t:new Date(p.t).getTime(),h:p.h}));
@@ -1135,7 +1144,9 @@ async function loadData(){
   const marine=d.marine||[];
   const mt=document.getElementById('marineTxt');
   if(marine.length){
-    mt.innerHTML=marine.map(e=>`<div class="m-period">${e.title}</div><div style="margin-bottom:8px">${e.text.replace(/&lt;br\s*\/?&gt;/gi,'').replace(/<br\s*\/?>/gi,'').replace(/\n/g,' ').replace(/\s{2,}/g,' ').trim()}</div>`).join('');
+    const _dec=s=>{const t=document.createElement('textarea');t.innerHTML=s;return t.value;};
+    const _cleanMarine=s=>_dec(s).replace(/<br\s*\/?>/gi,' ').replace(/\n/g,' ').replace(/\s{2,}/g,' ').trim();
+    mt.innerHTML=marine.map(e=>`<div class="m-period">${_cleanMarine(e.title)}</div><div style="margin-bottom:8px">${_cleanMarine(e.text)}</div>`).join('');
   } else {
     mt.innerHTML='<span style="color:var(--muted)">Marine forecast unavailable — check Environment Canada directly.</span>';
   }

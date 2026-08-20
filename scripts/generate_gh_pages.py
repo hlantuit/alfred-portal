@@ -717,7 +717,7 @@ def main():
         print("Fetching total water level (TOPAZ6)…")
         topaz_times, topaz_vals, _ = fetch_topaz_water_level(lat, lon, now_utc, cfg.get("site_display_name", cid), yearly_mean)
         print("Fetching total water level (GDSPS)…")
-        gdsps_times, gdsps_vals, _ = fetch_gdsps_water_level(lat, lon, now_utc, cfg.get("site_display_name", cid), yearly_mean)
+        gdsps_times, gdsps_vals, _ = fetch_gdsps_water_level(lat, lon, now_utc, cfg.get("site_display_name", cid))
 
         def _parse_iso(s):
             s = s.replace("Z", "+00:00") if s.endswith("Z") else s

@@ -911,7 +911,7 @@ def main():
             tw, th = tb2[2] - tb2[0], tb2[3] - tb2[1]
             overlay2 = _Img2.new("RGBA", img.size, (0, 0, 0, 0))
             _Draw2.Draw(overlay2).rounded_rectangle(
-                [bar_x1 - 6, bar_y - th - 10, bar_x2 + 6, ih - margin + 6],
+                [bar_x1 - 6, bar_y - th - 18, bar_x2 + 6, ih - margin + 6],
                 radius=5, fill=(0, 0, 0, 160))
             img = _Img2.alpha_composite(img.convert("RGBA"), overlay2).convert("RGB")
             draw = _Draw2.Draw(img)
@@ -919,7 +919,7 @@ def main():
             draw.line([(bar_x2, bar_y - 5), (bar_x2, bar_y + 5)], fill="white", width=2)
             draw.line([(bar_x1, bar_y), (bar_x2, bar_y)], fill="white", width=3)
             lx = (bar_x1 + bar_x2 - tw) // 2
-            draw.text((lx, bar_y - th - 6), bar_label, font=font_sm, fill=(255, 255, 255))
+            draw.text((lx, bar_y - th - 14), bar_label, font=font_sm, fill=(255, 255, 255))
         except Exception as _e:
             print(f"  scale bar failed: {_e}")
         return img
@@ -1000,6 +1000,33 @@ def main():
                         except Exception:
                             _bparts = None
                             _mpp = 400.0
+                        # Coastline overlay from local OSM GeoJSON
+                        _coast_path = COMMUNITIES_DIR / cid / cfg.get("coastline_geojson_path", "coastline_data.geojson")
+                        if _bparts and _coast_path.exists():
+                            try:
+                                import json as _json2
+                                with open(_coast_path) as _cf:
+                                    _coast = _json2.load(_cf)
+                                _draw_coast = _Draw.Draw(cropped)
+                                for _feat in _coast.get("features", []):
+                                    _geom = _feat.get("geometry", {})
+                                    if _geom.get("type") != "LineString":
+                                        continue
+                                    _prev = None
+                                    for _clon, _clat in _geom.get("coordinates", []):
+                                        _cx3, _cy3 = _ll_to_ps3413(_clat, _clon)
+                                        _cpx = (_cx3 - _bparts[0]) / (_bparts[2] - _bparts[0]) * 1500
+                                        _cpy = (_bparts[3] - _cy3) / (_bparts[3] - _bparts[1]) * 1500
+                                        _th2 = _m.radians(-rot)
+                                        _crx = 750 + (_cpx - 750) * _m.cos(_th2) - (_cpy - 750) * _m.sin(_th2)
+                                        _cry = 750 + (_cpx - 750) * _m.sin(_th2) + (_cpy - 750) * _m.cos(_th2)
+                                        _cpxc, _cpyc = _crx - 250, _cry - 250
+                                        if _prev is not None:
+                                            _draw_coast.line([_prev, (_cpxc, _cpyc)], fill=(255, 255, 255), width=2)
+                                        _prev = (_cpxc, _cpyc)
+                            except Exception as _ce:
+                                print(f"  VIIRS coastline overlay failed: {_ce}")
+
                         # Place-name labels via polar-stereographic projection
                         if _bparts and cfg.get("map_points"):
                             import math as _m
@@ -1090,41 +1117,16 @@ def main():
         evalscript = (
             "//VERSION=3\n"
             "function setup(){return{input:[{bands:[\"B04\",\"B03\",\"B02\",\"dataMask\"]}],"
-            "output:{bands:3,sampleType:\"AUTO\"}};}\n"
+            "output:{bands:4,sampleType:\"AUTO\"}};}\n"
             "function evaluatePixel(s){"
-            "if(!s.dataMask)return[0.04,0.06,0.10];"
-            "return[Math.min(1,4.5*s.B04),Math.min(1,4.5*s.B03),Math.min(1,4.5*s.B02)];}"
+            "if(!s.dataMask)return[0,0,0,0];"  # transparent for no-data
+            "return[Math.min(1,3.5*s.B04),Math.min(1,3.5*s.B03),Math.min(1,3.5*s.B02),1];}"
         )
-        # Find latest low-cloud scene via Catalog API
+        # Fetch via Process API using leastCC mosaicking over the window
         try:
             from datetime import timedelta as _td
             end_dt = now_utc
             start_dt = end_dt - _td(days=max_days_back)
-            cat_r = requests.post(
-                "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search",
-                json={
-                    "bbox": [lon - 1.5, lat - 0.8, lon + 1.5, lat + 0.8],
-                    "datetime": (f"{start_dt.strftime('%Y-%m-%dT00:00:00Z')}/"
-                                 f"{end_dt.strftime('%Y-%m-%dT23:59:59Z')}"),
-                    "collections": ["sentinel-2-l2a"],
-                    "limit": 5,
-                    "filter": "eo:cloud_cover < 100",
-                    "filter-lang": "cql2-text",
-                },
-                headers={"Authorization": f"Bearer {token}",
-                         "Content-Type": "application/json"},
-                timeout=25,
-            )
-            features = cat_r.json().get("features", [])
-            if not features:
-                print("  S2: no scenes in catalog")
-                return None
-            date_str = features[0]["properties"]["datetime"][:10]
-        except Exception as e:
-            print(f"  S2 catalog failed: {e}")
-            return None
-        # Fetch via Process API
-        try:
             proc_r = requests.post(
                 "https://sh.dataspace.copernicus.eu/api/v1/process",
                 json={
@@ -1139,7 +1141,7 @@ def main():
                                     "from": f"{start_dt.strftime('%Y-%m-%dT00:00:00Z')}",
                                     "to": f"{end_dt.strftime('%Y-%m-%dT23:59:59Z')}",
                                 },
-                                "mosaickingOrder": "mostRecent",
+                                "mosaickingOrder": "leastCC",
                                 "maxCloudCoverage": 100,
                             },
                             "type": "sentinel-2-l2a",
@@ -1157,27 +1159,119 @@ def main():
                 timeout=60,
             )
             ct = proc_r.headers.get("content-type", "")
-            if proc_r.status_code == 200 and "image" in ct:
-                import io as _io4
-                from PIL import Image as _Img4
-                s2_img = _Img4.open(_io4.BytesIO(proc_r.content)).convert("RGB")
-                # Coastline + place-name overlay from GIBS
-                import math as _math
-                _lat_r = lat * _math.pi / 180
-                _lon_deg = half_width_m / (111000 * max(0.05, _math.cos(_lat_r)))
-                _lat_deg = half_width_m / 111000
-                s2_img = _overlay_gibs_coastlines(s2_img, lon - _lon_deg, lon + _lon_deg,
-                                                  lat - _lat_deg, lat + _lat_deg)
-                # Scale: 2*half_width_m across 1200px
-                _mpp = (2 * half_width_m) / 1200.0
-                s2_img = _annotate_img(s2_img, date_str, _mpp)
-                buf = _io4.BytesIO()
-                s2_img.save(buf, "PNG", optimize=True)
-                out_path.write_bytes(buf.getvalue())
-                print(f"  S2 {half_width_m//1000}km: {date_str} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
-                return date_str
-            else:
+            if proc_r.status_code != 200 or "image" not in ct:
                 print(f"  S2 process failed: {proc_r.status_code} {proc_r.text[:200]}")
+                return None
+            import io as _io4
+            from PIL import Image as _Img4, ImageStat as _IStat4
+            s2_rgba = _Img4.open(_io4.BytesIO(proc_r.content)).convert("RGBA")
+            # Coverage check: site center must have valid (non-transparent) pixels
+            _cw, _ch = s2_rgba.size
+            _cpx = int(_cw * 0.4), int(_ch * 0.6)  # centre sample region
+            _alpha_band = s2_rgba.split()[3]
+            _center_crop = _alpha_band.crop((_cw//4, _ch//4, 3*_cw//4, 3*_ch//4))
+            _valid_frac = sum(1 for p in _center_crop.getdata() if p > 10) / (_center_crop.width * _center_crop.height)
+            if _valid_frac < 0.3:
+                print(f"  S2 {half_width_m//1000}km: <30% centre coverage ({_valid_frac:.1%}), skipping")
+                return None
+            # Composite over dark ocean background
+            bg_col = (10, 15, 26)
+            s2_bg = _Img4.new("RGB", s2_rgba.size, bg_col)
+            s2_bg.paste(s2_rgba, mask=s2_rgba.split()[3])
+            s2_img = s2_bg
+            # Brightness check
+            _br = sum(_IStat4.Stat(s2_img).mean) / 3.0
+            if _br < 5.0:
+                print(f"  S2 {half_width_m//1000}km: too dark ({_br:.1f}), skipping")
+                return None
+            # Get approximate date from end of window (best available)
+            date_str = end_dt.strftime("%Y-%m-%d")
+            # Coastline overlay from local OSM GeoJSON
+            import json as _json_s2, math as _math_s2
+            from PIL import ImageDraw as _Draw_s2, ImageFont as _Font_s2
+            _coast_path_s2 = COMMUNITIES_DIR / cid / cfg.get("coastline_geojson_path", "coastline_data.geojson")
+            if _coast_path_s2.exists():
+                try:
+                    with open(_coast_path_s2) as _cf2:
+                        _coast2 = _json_s2.load(_cf2)
+                    try:
+                        from pyproj import Transformer as _Tr
+                        _proj_s2 = _Tr.from_crs("EPSG:4326", f"EPSG:{utm_epsg}", always_xy=True)
+                        def _ll_to_utm(plat, plon):
+                            return _proj_s2.transform(plon, plat)
+                    except Exception:
+                        import math as _pm
+                        _K0, _E, _a = 0.9996, 0.0818191908426215, 6378137.0
+                        _zone = int(utm_epsg) - 32600
+                        _lon0 = _pm.radians((_zone - 1) * 6 - 180 + 3)
+                        def _ll_to_utm(plat, plon):
+                            lat_r, lon_r = _pm.radians(plat), _pm.radians(plon)
+                            N = _a / _pm.sqrt(1 - (_E*_pm.sin(lat_r))**2)
+                            T = _pm.tan(lat_r)**2; C = (_E**2/(1-_E**2))*_pm.cos(lat_r)**2
+                            A = _pm.cos(lat_r)*(lon_r - _lon0)
+                            M = _a*(lat_r*(1-_E**2/4-3*_E**4/64)-_pm.sin(2*lat_r)*(3*_E**2/8+3*_E**4/32)+_pm.sin(4*lat_r)*(15*_E**4/256))
+                            x = _K0*N*(A+(1-T+C)*A**3/6) + 500000
+                            y = _K0*(M+N*_pm.tan(lat_r)*(A**2/2+(5-T+9*C)*A**4/24))
+                            if plat < 0: y += 10000000
+                            return x, y
+                    _draw_cs = _Draw_s2.Draw(s2_img)
+                    _mpp_s2 = (2 * half_width_m) / 1200.0
+                    _cx_s2 = cfg.get("utm_center_x", cx)
+                    _cy_s2 = cfg.get("utm_center_y", cy)
+                    def _utm_to_px(ux, uy):
+                        px = 600 + (ux - _cx_s2) / _mpp_s2
+                        py = 600 - (uy - _cy_s2) / _mpp_s2
+                        return px, py
+                    for _feat2 in _coast2.get("features", []):
+                        _geom2 = _feat2.get("geometry", {})
+                        if _geom2.get("type") != "LineString":
+                            continue
+                        _prev2 = None
+                        for _clon2, _clat2 in _geom2.get("coordinates", []):
+                            _ux, _uy = _ll_to_utm(_clat2, _clon2)
+                            _ppx, _ppy = _utm_to_px(_ux, _uy)
+                            if _prev2 is not None:
+                                _draw_cs.line([_prev2, (_ppx, _ppy)], fill=(255, 255, 255), width=2)
+                            _prev2 = (_ppx, _ppy)
+                    print(f"  S2: coastline overlay drawn")
+                except Exception as _ce2:
+                    print(f"  S2 coastline overlay failed: {_ce2}")
+            # Place-name labels
+            _pts_s2 = cfg.get("map_points", [])
+            if _pts_s2:
+                try:
+                    _draw_lbl2 = _Draw_s2.Draw(s2_img)
+                    _font_s2 = _Font_s2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26) if hasattr(_Font_s2, 'truetype') else _Font_s2.load_default()
+                    _MARGIN = 20
+                    for _pt2 in _pts_s2:
+                        _ux2, _uy2 = _ll_to_utm(_pt2[0], _pt2[1])
+                        _ppx2, _ppy2 = _utm_to_px(_ux2, _uy2)
+                        if not (-_MARGIN <= _ppx2 <= 1200 + _MARGIN and -_MARGIN <= _ppy2 <= 1200 + _MARGIN):
+                            continue
+                        _rdot = 7
+                        _draw_lbl2.ellipse([_ppx2 - _rdot, _ppy2 - _rdot, _ppx2 + _rdot, _ppy2 + _rdot], fill=(220, 60, 60), outline="white", width=2)
+                        _lbl2 = _pt2[2] if len(_pt2) > 2 else ""
+                        _dy2 = _pt2[3] if len(_pt2) > 3 else -14
+                        if _lbl2:
+                            try:
+                                _tb2 = _draw_lbl2.textbbox((_ppx2 + 12, _ppy2 + _dy2), _lbl2, font=_font_s2)
+                                _ov2 = _Img4.new("RGBA", s2_img.size, (0, 0, 0, 0))
+                                _Draw_s2.Draw(_ov2).rounded_rectangle([_tb2[0]-3, _tb2[1]-3, _tb2[2]+3, _tb2[3]+3], radius=3, fill=(0, 0, 0, 160))
+                                s2_img = _Img4.alpha_composite(s2_img.convert("RGBA"), _ov2).convert("RGB")
+                                _draw_lbl2 = _Draw_s2.Draw(s2_img)
+                            except Exception:
+                                pass
+                            _draw_lbl2.text((_ppx2 + 12, _ppy2 + _dy2), _lbl2, font=_font_s2, fill=(255, 255, 255))
+                except Exception as _le2:
+                    print(f"  S2 place labels failed: {_le2}")
+            # Scale: 2*half_width_m across 1200px
+            _mpp = (2 * half_width_m) / 1200.0
+            s2_img = _annotate_img(s2_img, date_str, _mpp)
+            buf = _io4.BytesIO()
+            s2_img.save(buf, "PNG", optimize=True)
+            out_path.write_bytes(buf.getvalue())
+            print(f"  S2 {half_width_m//1000}km: {date_str} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
+            return date_str
         except Exception as e:
             print(f"  S2 process error: {e}")
         return None

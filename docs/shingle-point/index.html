@@ -1188,15 +1188,21 @@ async function renderTddChart(lat, lon) {
       `&start_date=2001-01-01&end_date=${today}&daily=temperature_2m_mean&timezone=UTC`
     );
     const raw = await res.json();
-    const tddY = {};
+    const todayDoy = Math.round((Date.now() - Date.UTC(curYear, 0, 0)) / 86400000);
+    const tddY = {}, tddToDoy = {};
     (raw.daily?.time || []).forEach((t, i) => {
       const y = parseInt(t.slice(0, 4));
       const v = raw.daily.temperature_2m_mean[i];
-      if (v != null) tddY[y] = (tddY[y] || 0) + Math.max(0, v);
+      if (v == null) return;
+      const pos = Math.max(0, v);
+      tddY[y] = (tddY[y] || 0) + pos;
+      const doy = Math.round((new Date(t) - new Date(Date.UTC(y, 0, 0))) / 86400000);
+      if (doy <= todayDoy) tddToDoy[y] = (tddToDoy[y] || 0) + pos;
     });
     const years = Object.keys(tddY).map(Number).sort();
     const complete = years.filter(y => y < curYear);
     const avg25 = complete.slice(-25).reduce((s, y) => s + tddY[y], 0) / Math.min(25, complete.length);
+    const avg25toDoy = Math.round(complete.slice(-25).reduce((s, y) => s + (tddToDoy[y] || 0), 0) / Math.min(25, complete.length));
     const curTdd = Math.round(tddY[curYear] || 0);
     const cvEl = document.getElementById('cv-tdd');
     if (cvEl) cvEl.textContent = curTdd;
@@ -1229,7 +1235,7 @@ async function renderTddChart(lat, lon) {
       `<line x1="${ML}" y1="${avgY.toFixed(1)}" x2="${ML+cW}" y2="${avgY.toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="5,3"/>` +
       `<text x="${(ML+cW-4).toFixed(1)}" y="${(avgY-5).toFixed(1)}" text-anchor="end" font-size="14" fill="#C0392B">25yr avg ${Math.round(avg25)}</text>`;
     const uid = 'tddTip_sp';
-    const tip = `<g id="${uid}" style="pointer-events:none;display:none"><rect id="${uid}bg" rx="4" fill="var(--card)" stroke="var(--border)" stroke-width="1"/><text id="${uid}tx" font-size="14" fill="var(--fg)" font-family="system-ui,sans-serif"/></g>`;
+    const tip = `<g id="${uid}" style="pointer-events:none;display:none"><rect id="${uid}bg" rx="4" fill="rgba(0,0,0,0.82)" stroke="rgba(255,255,255,0.25)" stroke-width="1"/><text id="${uid}tx" font-size="14" fill="white" font-family="system-ui,sans-serif"></text></g>`;
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.style.cssText = 'width:100%;display:block';
@@ -1237,17 +1243,20 @@ async function renderTddChart(lat, lon) {
     el.innerHTML = ''; el.appendChild(svg);
     svg.querySelectorAll('.tdd-bar').forEach(bar => {
       bar.addEventListener('mouseenter', () => {
-        const yr = bar.getAttribute('data-y'), val = bar.getAttribute('data-v');
-        const lbl = `${yr}: ${val} °C·days`;
-        const tip = svg.getElementById(uid), bg = svg.getElementById(uid+'bg'), tx = svg.getElementById(uid+'tx');
-        tx.textContent = lbl; tip.style.display = '';
+        const yr = +bar.getAttribute('data-y'), val = bar.getAttribute('data-v');
+        const lbl = yr === curYear
+          ? `${yr}: ${val} °C·days · 25yr avg to date: ${avg25toDoy}`
+          : `${yr}: ${val} °C·days`;
+        const tipEl = svg.querySelector('#'+uid), bg = svg.querySelector('#'+uid+'bg'), tx = svg.querySelector('#'+uid+'tx');
+        if (!tipEl || !bg || !tx) return;
+        tx.textContent = lbl; tipEl.style.display = '';
         const bx = parseFloat(bar.getAttribute('x')), by = parseFloat(bar.getAttribute('y'));
-        const tw = lbl.length * 7 + 16;
+        const tw = lbl.length * 7.5 + 16;
         const tx2 = Math.min(bx, W-tw-6), ty2 = Math.max(MT, by-28);
-        bg.setAttribute('x',tx2); bg.setAttribute('y',ty2); bg.setAttribute('width',tw); bg.setAttribute('height',20);
-        tx.setAttribute('x',tx2+8); tx.setAttribute('y',ty2+14);
+        bg.setAttribute('x',tx2); bg.setAttribute('y',ty2); bg.setAttribute('width',tw); bg.setAttribute('height',22);
+        tx.setAttribute('x',tx2+8); tx.setAttribute('y',ty2+15);
       });
-      bar.addEventListener('mouseleave', () => { svg.getElementById(uid).style.display='none'; });
+      bar.addEventListener('mouseleave', () => { const tipEl = svg.querySelector('#'+uid); if (tipEl) tipEl.style.display='none'; });
     });
   } catch (err) {
     el.innerHTML = `<div style="padding:14px;color:var(--muted);font-size:13px">TDD unavailable — ${err.message}</div>`;
@@ -1287,7 +1296,7 @@ async function renderWindRose(lat, lon, tz) {
     });
     const maxCnt=Math.max(...bins.map(b=>b.cnt));
     const W=el.offsetWidth||700, roseW=Math.min(200,W*0.28), H=220;
-    const cx=roseW/2, cy=H/2, rMax=roseW/2-18;
+    const cx=roseW/2, cy=H/2, rMax=roseW/2-22;
     let petals='';
     ['N','NE','E','SE','S','SW','W','NW'].forEach((lbl,i)=>{
       const a=i*45*Math.PI/180, r=rMax+14;
@@ -1303,7 +1312,7 @@ async function renderWindRose(lat, lon, tz) {
       petals+=`<path d="M ${cx} ${cy} L ${x1} ${y1} A ${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 ${x2} ${y2} Z" fill="${spColor(b.cnt?b.spSum/b.cnt:0)}" opacity="0.85"/>`;
     });
     petals+=`<circle cx="${cx}" cy="${cy}" r="3" fill="var(--muted)"/>`;
-    const tML=4,tMR=8,tMT=24,tMB=30,tW=W-roseW-16-tML-tMR,tH=H-tMT-tMB,vecCy=tMT+tH/2;
+    const tML=4,tMR=40,tMT=24,tMB=30,tW=W-roseW-16-tML-tMR,tH=H-tMT-tMB,vecCy=tMT+tH/2;
     const maxSpd=Math.max(...daily.map(d=>d.spd),1), arrowScale=(tH/2-4)/maxSpd;
     let arrows='',xLbls='';
     daily.forEach((d,i)=>{
@@ -1315,14 +1324,14 @@ async function renderWindRose(lat, lon, tz) {
       if(len>1){const hl=5,hw=3,px=-dy/(len||1),py=dx/(len||1),bx2=x2-(dx/len)*hl,by2=y2-(dy/len)*hl;
         arrows+=`<polygon points="${x2.toFixed(1)},${y2.toFixed(1)} ${(bx2+px*hw).toFixed(1)},${(by2+py*hw).toFixed(1)} ${(bx2-px*hw).toFixed(1)},${(by2-py*hw).toFixed(1)}" fill="${col}"/>`;}
       if(i%5===0||i===daily.length-1){const dt=new Date(d.date+'T12:00:00Z');
-        xLbls+=`<text x="${x.toFixed(1)}" y="${(tMT+tH+16).toFixed(1)}" text-anchor="middle" font-size="12" fill="var(--muted)">${dt.toLocaleDateString('en-CA',{month:'short',day:'numeric'})}</text>`;}
+        xLbls+=`<text x="${x.toFixed(1)}" y="${(tMT+tH+16).toFixed(1)}" text-anchor="middle" font-size="13" fill="var(--muted)">${dt.toLocaleDateString('en-CA',{month:'short',day:'numeric'})}</text>`;}
     });
     const cbX=tML+tW+2,cbY=tMT,cbH=tH,cbW=6,maxLbl=Math.ceil(maxSpd/10)*10;
     let cbar=`<defs><linearGradient id="cbgSP" x1="0" y1="0" x2="0" y2="1">`;
     [['#2DD4BF'],['#A3C44C'],['#F0A830'],['#E04020'],['#8B1DBF']].forEach(([c],i,a)=>{cbar+=`<stop offset="${(i/(a.length-1)*100).toFixed(0)}%" stop-color="${c}"/>`;});
     cbar+=`</linearGradient></defs><rect x="${cbX}" y="${cbY}" width="${cbW}" height="${cbH}" fill="url(#cbgSP)" rx="2"/>`;
-    [0,maxLbl/2,maxLbl].forEach(v=>{const ly=cbY+cbH-(v/maxLbl)*cbH;cbar+=`<text x="${cbX+cbW+2}" y="${(ly+4).toFixed(1)}" font-size="11" fill="var(--muted)">${Math.round(v)}</text>`;});
-    cbar+=`<text x="${cbX+cbW/2}" y="${cbY-4}" text-anchor="middle" font-size="11" fill="var(--muted)">km/h</text>`;
+    [0,maxLbl/2,maxLbl].forEach(v=>{const ly=cbY+cbH-(v/maxLbl)*cbH;cbar+=`<text x="${cbX+cbW+4}" y="${(ly+4).toFixed(1)}" font-size="13" fill="var(--muted)">${Math.round(v)}</text>`;});
+    cbar+=`<text x="${cbX+cbW/2}" y="${cbY-4}" text-anchor="middle" font-size="13" fill="var(--muted)">km/h</text>`;
     const cline=`<line x1="${tML}" y1="${vecCy.toFixed(1)}" x2="${(tML+tW).toFixed(1)}" y2="${vecCy.toFixed(1)}" stroke="var(--border)" stroke-width="0.8"/>`;
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
     svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.style.cssText='width:100%;display:block';
@@ -1339,12 +1348,15 @@ async function renderRiverTrajectory(stationId, riverLabel) {
   const curYear = new Date().getFullYear();
   const histStart = curYear - 15, histEnd = curYear - 1;
   const base = 'https://api.weather.gc.ca/collections/hydrometric-daily-mean/items';
+  const today = new Date().toISOString().slice(0, 10);
   try {
-    const [histRes, curRes] = await Promise.all([
+    // Fetch historical data (OGC API) + current-year via WaterOffice (OGC lags ~6 months)
+    const [histRes, woRes] = await Promise.all([
       fetch(`${base}?STATION_NUMBER=${stationId}&datetime=${histStart}-01-01/${histEnd}-12-31&f=json&limit=10000`),
-      fetch(`${base}?STATION_NUMBER=${stationId}&datetime=${curYear}-01-01/${curYear}-12-31&f=json&limit=1000`)
+      fetch(`https://wateroffice.ec.gc.ca/services/real_time_graph/json/inline?station=${stationId}&start_date=${curYear}-01-01&end_date=${today}&param1=46&param2=3`)
+        .catch(() => null)
     ]);
-    const [histJson, curJson] = await Promise.all([histRes.json(), curRes.json()]);
+    const histJson = await histRes.json();
 
     // Index by day-of-year (1-366) → array of values
     function doy(dateStr) {
@@ -1373,11 +1385,43 @@ async function renderRiverTrajectory(stationId, riverLabel) {
       p10[d] = pct(vals, 10); p50[d] = pct(vals, 50); p90[d] = pct(vals, 90);
     });
 
-    // Current year data
-    const curPts = (curJson.features || []).sort((a,b)=>(a.properties?.DATE||'').localeCompare(b.properties?.DATE||'')).map(f => ({
-      doy: doy(f.properties.DATE.slice(0, 10)),
-      val: getLvl(f.properties)
-    })).filter(p => p.val != null);
+    // Current year data from WaterOffice graph API (real-time, no 6-month lag)
+    let curPts = [];
+    if (woRes && woRes.ok) {
+      try {
+        const woJson = await woRes.json();
+        // Try param 46 (stage) then 3 (archived level), then any numeric key
+        const paramKeys = ['46', '3', ...Object.keys(woJson).filter(k => !isNaN(k) && k !== '46' && k !== '3')];
+        for (const pk of paramKeys) {
+          const series = woJson[pk];
+          if (!series) continue;
+          const pts = [...(series.approved || []), ...(series.provisional || [])];
+          if (!pts.length) continue;
+          // Aggregate sub-daily readings to daily means (timestamp in ms)
+          const dailySums = {};
+          pts.forEach(([ts, val]) => {
+            if (val == null) return;
+            const d = new Date(ts).toISOString().slice(0, 10);
+            if (!dailySums[d]) dailySums[d] = { sum: 0, n: 0 };
+            dailySums[d].sum += val; dailySums[d].n++;
+          });
+          curPts = Object.entries(dailySums).sort(([a],[b]) => a.localeCompare(b))
+            .map(([dt, {sum, n}]) => ({ doy: doy(dt), val: sum / n }));
+          if (curPts.length) break;
+        }
+      } catch (_) {}
+    }
+    // Fallback: OGC API current-year (may lag)
+    if (!curPts.length) {
+      try {
+        const curRes = await fetch(`${base}?STATION_NUMBER=${stationId}&datetime=${curYear}-01-01/${curYear}-12-31&f=json&limit=1000`);
+        const curJson = await curRes.json();
+        curPts = (curJson.features || []).sort((a,b)=>(a.properties?.DATE||'').localeCompare(b.properties?.DATE||'')).map(f => ({
+          doy: doy(f.properties.DATE.slice(0, 10)),
+          val: getLvl(f.properties)
+        })).filter(p => p.val != null);
+      } catch (_) {}
+    }
 
     const allVals = [...Object.values(p90), ...curPts.map(p => p.val)].filter(v => v != null);
     const allMin = Math.min(...Object.values(p10), ...curPts.map(p => p.val));
@@ -1422,7 +1466,7 @@ async function renderRiverTrajectory(stationId, riverLabel) {
 
     // Current year line
     const curLine = curPts.length > 1
-      ? `<polyline points="${curPts.map(p=>`${xS(p.doy)},${yS(p.val)}`).join(' ')}" fill="none" stroke="#1A73E8" stroke-width="2.5" stroke-linejoin="round"/>`
+      ? `<polyline points="${curPts.map(p=>`${xS(p.doy)},${yS(p.val)}`).join(' ')}" fill="none" stroke="#2E8B57" stroke-width="2.5" stroke-linejoin="round"/>`
       : '';
 
     // "now" marker
@@ -1436,8 +1480,8 @@ async function renderRiverTrajectory(stationId, riverLabel) {
       `<text x="${ML+14}" y="${MT-12}" font-size="13" fill="var(--muted)">p10–p90 (${histStart}–${histEnd})</text>` +
       `<line x1="${ML+140}" y1="${MT-14}" x2="${ML+154}" y2="${MT-14}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4,2" opacity="0.6"/>` +
       `<text x="${ML+158}" y="${MT-10}" font-size="13" fill="var(--muted)">median</text>` +
-      `<line x1="${ML+218}" y1="${MT-14}" x2="${ML+232}" y2="${MT-14}" stroke="#1A73E8" stroke-width="2.5"/>` +
-      `<text x="${ML+236}" y="${MT-10}" font-size="13" fill="#1A73E8">${curYear}</text>`;
+      `<line x1="${ML+218}" y1="${MT-14}" x2="${ML+232}" y2="${MT-14}" stroke="#2E8B57" stroke-width="2.5"/>` +
+      `<text x="${ML+236}" y="${MT-10}" font-size="13" fill="#2E8B57">${curYear}</text>`;
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);

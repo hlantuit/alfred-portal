@@ -1145,16 +1145,22 @@ async function renderTddChart(lat, lon) {
       `&start_date=2001-01-01&end_date=${today}&daily=temperature_2m_mean&timezone=UTC`
     );
     const raw = await res.json();
-    // Compute annual TDD
-    const tddY = {};
+    // Compute annual TDD and cumulative to today's day-of-year (for 2026 tooltip)
+    const todayDoy = Math.round((Date.now() - Date.UTC(curYear, 0, 0)) / 86400000);
+    const tddY = {}, tddToDoy = {};
     (raw.daily?.time || []).forEach((t, i) => {
       const y = parseInt(t.slice(0, 4));
       const v = raw.daily.temperature_2m_mean[i];
-      if (v != null) tddY[y] = (tddY[y] || 0) + Math.max(0, v);
+      if (v == null) return;
+      const pos = Math.max(0, v);
+      tddY[y] = (tddY[y] || 0) + pos;
+      const doy = Math.round((new Date(t) - new Date(Date.UTC(y, 0, 0))) / 86400000);
+      if (doy <= todayDoy) tddToDoy[y] = (tddToDoy[y] || 0) + pos;
     });
     const years = Object.keys(tddY).map(Number).sort();
     const complete = years.filter(y => y < curYear);
     const avg25 = complete.slice(-25).reduce((s, y) => s + tddY[y], 0) / Math.min(25, complete.length);
+    const avg25toDoy = Math.round(complete.slice(-25).reduce((s, y) => s + (tddToDoy[y] || 0), 0) / Math.min(25, complete.length));
     const curTdd = Math.round(tddY[curYear] || 0);
     const cvEl = document.getElementById('cv-tdd');
     if (cvEl) cvEl.textContent = curTdd;
@@ -1199,7 +1205,7 @@ async function renderTddChart(lat, lon) {
       `<text x="${(ML+cW-4).toFixed(1)}" y="${(avgY-5).toFixed(1)}" text-anchor="end" font-size="14" fill="#C0392B">25yr avg ${Math.round(avg25)}</text>`;
 
     const uid = 'tddTip_h';
-    const tip = `<g id="${uid}" style="pointer-events:none;display:none"><rect id="${uid}bg" rx="4" fill="var(--card)" stroke="var(--border)" stroke-width="1"/><text id="${uid}tx" font-size="14" fill="var(--fg)" font-family="system-ui,sans-serif"/></g>`;
+    const tip = `<g id="${uid}" style="pointer-events:none;display:none"><rect id="${uid}bg" rx="4" fill="rgba(0,0,0,0.82)" stroke="rgba(255,255,255,0.25)" stroke-width="1"/><text id="${uid}tx" font-size="14" fill="white" font-family="system-ui,sans-serif"></text></g>`;
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
@@ -1211,17 +1217,20 @@ async function renderTddChart(lat, lon) {
     svg.querySelectorAll('.tdd-bar').forEach(bar => {
       bar.style.cursor = 'default';
       bar.addEventListener('mouseenter', () => {
-        const yr = bar.getAttribute('data-y'), val = bar.getAttribute('data-v');
-        const lbl = `${yr}: ${val} °C·days`;
-        const tip = svg.getElementById(uid), bg = svg.getElementById(uid+'bg'), tx = svg.getElementById(uid+'tx');
-        tx.textContent = lbl; tip.style.display = '';
+        const yr = +bar.getAttribute('data-y'), val = bar.getAttribute('data-v');
+        const lbl = yr === curYear
+          ? `${yr}: ${val} °C·days · 25yr avg to date: ${avg25toDoy}`
+          : `${yr}: ${val} °C·days`;
+        const tipEl = svg.querySelector('#'+uid), bg = svg.querySelector('#'+uid+'bg'), tx = svg.querySelector('#'+uid+'tx');
+        if (!tipEl || !bg || !tx) return;
+        tx.textContent = lbl; tipEl.style.display = '';
         const bx = parseFloat(bar.getAttribute('x')), by = parseFloat(bar.getAttribute('y'));
-        const tw = lbl.length * 7 + 16;
+        const tw = lbl.length * 7.5 + 16;
         const tx2 = Math.min(bx, W - tw - 6), ty2 = Math.max(MT, by - 28);
-        bg.setAttribute('x', tx2); bg.setAttribute('y', ty2); bg.setAttribute('width', tw); bg.setAttribute('height', 20);
-        tx.setAttribute('x', tx2 + 8); tx.setAttribute('y', ty2 + 14);
+        bg.setAttribute('x', tx2); bg.setAttribute('y', ty2); bg.setAttribute('width', tw); bg.setAttribute('height', 22);
+        tx.setAttribute('x', tx2 + 8); tx.setAttribute('y', ty2 + 15);
       });
-      bar.addEventListener('mouseleave', () => { svg.getElementById(uid).style.display = 'none'; });
+      bar.addEventListener('mouseleave', () => { const tipEl = svg.querySelector('#'+uid); if (tipEl) tipEl.style.display = 'none'; });
     });
   } catch (err) {
     el.innerHTML = `<div style="padding:14px;color:var(--muted);font-size:13px">TDD unavailable — ${err.message}</div>`;
@@ -1290,7 +1299,7 @@ async function renderWindRose(lat, lon, tz) {
     const roseW = Math.min(200, W * 0.28);
     const timeW = W - roseW - 16;
     const H = 220;
-    const cx = roseW / 2, cy = H / 2, rMax = roseW / 2 - 18;
+    const cx = roseW / 2, cy = H / 2, rMax = roseW / 2 - 22;
 
     // Rose SVG petals
     let petals = '';
@@ -1319,7 +1328,7 @@ async function renderWindRose(lat, lon, tz) {
     petals += `<circle cx="${cx}" cy="${cy}" r="3" fill="var(--muted)"/>`;
 
     // Vector timeline SVG
-    const tML = 4, tMR = 8, tMT = 24, tMB = 30;
+    const tML = 4, tMR = 40, tMT = 24, tMB = 30;
     const tW = timeW - tML - tMR, tH = H - tMT - tMB;
     const vecCy = tMT + tH / 2;
     const maxSpd = Math.max(...daily.map(d => d.spd), 1);
@@ -1347,7 +1356,7 @@ async function renderWindRose(lat, lon, tz) {
       if (i % 5 === 0 || i === daily.length - 1) {
         const dt = new Date(d.date + 'T12:00:00Z');
         const lbl = dt.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
-        xLbls += `<text x="${x.toFixed(1)}" y="${(tMT + tH + 16).toFixed(1)}" text-anchor="middle" font-size="12" fill="var(--muted)">${lbl}</text>`;
+        xLbls += `<text x="${x.toFixed(1)}" y="${(tMT + tH + 16).toFixed(1)}" text-anchor="middle" font-size="13" fill="var(--muted)">${lbl}</text>`;
       }
     });
 
@@ -1363,9 +1372,9 @@ async function renderWindRose(lat, lon, tz) {
     const maxLbl = Math.ceil(maxSpd / 10) * 10;
     [0, maxLbl/2, maxLbl].forEach((v, i) => {
       const ly = cbY + cbH - (v / maxLbl) * cbH;
-      cbar += `<text x="${cbX + cbW + 2}" y="${(ly + 4).toFixed(1)}" font-size="11" fill="var(--muted)">${Math.round(v)}</text>`;
+      cbar += `<text x="${cbX + cbW + 4}" y="${(ly + 4).toFixed(1)}" font-size="13" fill="var(--muted)">${Math.round(v)}</text>`;
     });
-    cbar += `<text x="${cbX + cbW/2}" y="${cbY - 4}" text-anchor="middle" font-size="11" fill="var(--muted)">km/h</text>`;
+    cbar += `<text x="${cbX + cbW/2}" y="${cbY - 4}" text-anchor="middle" font-size="13" fill="var(--muted)">km/h</text>`;
 
     // Combine into outer SVG with two panels
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');

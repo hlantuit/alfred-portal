@@ -860,6 +860,173 @@ def main():
     if not modis_date:
         print("  MODIS banner unavailable")
 
+    # ── VIIRS NOAA-20 true color (EPSG:3413, north-up) ──
+    def fetch_viirs_image(out_path, max_days_back=6):
+        import io as _io
+        bbox_3413 = cfg.get("modis_bbox_3413")
+        rot = cfg.get("modis_rotation_deg", 0)
+        if not bbox_3413:
+            print("  VIIRS: no modis_bbox_3413 in config, skipping")
+            return None
+        from datetime import timedelta, date as _date
+        for layer in ["VIIRS_NOAA20_CorrectedReflectance_TrueColor",
+                      "VIIRS_SNPP_CorrectedReflectance_TrueColor"]:
+            for delta in range(0, max_days_back + 1):
+                d = _date.today() - timedelta(days=delta)
+                try:
+                    r = get_with_retry(
+                        "https://gibs.earthdata.nasa.gov/wms/epsg3413/best/wms.cgi",
+                        params={
+                            "SERVICE": "WMS", "REQUEST": "GetMap", "VERSION": "1.1.1",
+                            "LAYERS": f"{layer},Coastlines_15m",
+                            "STYLES": "",
+                            "FORMAT": "image/png",
+                            "TRANSPARENT": "false",
+                            "SRS": "EPSG:3413",
+                            "BBOX": bbox_3413,
+                            "WIDTH": "900", "HEIGHT": "900",
+                            "TIME": d.strftime("%Y-%m-%d"),
+                        },
+                        timeout=30,
+                    )
+                    if r.status_code == 200 and r.content[:8] == b"\x89PNG\r\n\x1a\n":
+                        from PIL import Image as _Img
+                        img = _Img.open(_io.BytesIO(r.content)).convert("RGB")
+                        rotated = img.rotate(rot, resample=_Img.BICUBIC, expand=False)
+                        w, h = rotated.size
+                        sz = 600
+                        left, top = (w - sz) // 2, (h - sz) // 2
+                        cropped = rotated.crop((left, top, left + sz, top + sz))
+                        buf = _io.BytesIO()
+                        cropped.save(buf, "PNG", optimize=True)
+                        out_path.write_bytes(buf.getvalue())
+                        src = "NOAA-20" if "NOAA20" in layer else "SNPP"
+                        print(f"  VIIRS ({src}): {d} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
+                        return d.strftime("%Y-%m-%d")
+                except Exception as e:
+                    print(f"  VIIRS {layer} day -{delta} failed: {e}")
+        print("  VIIRS unavailable")
+        return None
+
+    print("Fetching VIIRS true color…")
+    viirs_date = fetch_viirs_image(img_dir / "viirs.png")
+
+    # ── Sentinel-2 true color (Sentinel Hub Copernicus) ──
+    def get_sh_token():
+        import os
+        cid_val = os.environ.get("SENTINEL_HUB_CLIENT_ID", "")
+        sec_val = os.environ.get("SENTINEL_HUB_CLIENT_SECRET", "")
+        if not cid_val or not sec_val:
+            return None
+        try:
+            r = requests.post(
+                "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token",
+                data={"grant_type": "client_credentials",
+                      "client_id": cid_val, "client_secret": sec_val},
+                timeout=20,
+            )
+            return r.json().get("access_token")
+        except Exception as e:
+            print(f"  SH token failed: {e}")
+            return None
+
+    def fetch_s2_image(token, half_width_m, out_path, max_days_back=30):
+        import io as _io
+        utm_epsg = cfg.get("utm_epsg", "32608")
+        cx = cfg.get("utm_center_x")
+        cy = cfg.get("utm_center_y")
+        if not cx or not cy:
+            print("  S2: no utm_center_x/y in config, skipping")
+            return None
+        bbox = [cx - half_width_m, cy - half_width_m, cx + half_width_m, cy + half_width_m]
+        evalscript = (
+            "//VERSION=3\n"
+            "function setup(){return{input:[{bands:[\"B04\",\"B03\",\"B02\"]}],"
+            "output:{bands:3,sampleType:\"AUTO\"}};}\n"
+            "function evaluatePixel(s){"
+            "return[Math.min(1,3.0*s.B04),Math.min(1,3.0*s.B03),Math.min(1,3.0*s.B02)];}"
+        )
+        # Find latest low-cloud scene via Catalog API
+        try:
+            from datetime import timedelta as _td
+            end_dt = now_utc
+            start_dt = end_dt - _td(days=max_days_back)
+            cat_r = requests.post(
+                "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search",
+                json={
+                    "bbox": [lon - 1.5, lat - 0.8, lon + 1.5, lat + 0.8],
+                    "datetime": (f"{start_dt.strftime('%Y-%m-%dT00:00:00Z')}/"
+                                 f"{end_dt.strftime('%Y-%m-%dT23:59:59Z')}"),
+                    "collections": ["sentinel-2-l2a"],
+                    "limit": 5,
+                    "filter": "eo:cloud_cover < 80",
+                    "filter-lang": "cql2-text",
+                },
+                headers={"Authorization": f"Bearer {token}",
+                         "Content-Type": "application/json"},
+                timeout=25,
+            )
+            features = cat_r.json().get("features", [])
+            if not features:
+                print("  S2: no scenes in catalog")
+                return None
+            date_str = features[0]["properties"]["datetime"][:10]
+        except Exception as e:
+            print(f"  S2 catalog failed: {e}")
+            return None
+        # Fetch via Process API
+        try:
+            proc_r = requests.post(
+                "https://sh.dataspace.copernicus.eu/api/v1/process",
+                json={
+                    "input": {
+                        "bounds": {
+                            "bbox": bbox,
+                            "properties": {"crs": f"http://www.opengis.net/def/crs/EPSG/0/{utm_epsg}"},
+                        },
+                        "data": [{
+                            "dataFilter": {
+                                "timeRange": {
+                                    "from": f"{date_str}T00:00:00Z",
+                                    "to": f"{date_str}T23:59:59Z",
+                                },
+                                "maxCloudCoverage": 100,
+                            },
+                            "type": "sentinel-2-l2a",
+                        }],
+                    },
+                    "output": {
+                        "width": 600, "height": 600,
+                        "responses": [{"identifier": "default",
+                                       "format": {"type": "image/png"}}],
+                    },
+                    "evalscript": evalscript,
+                },
+                headers={"Authorization": f"Bearer {token}",
+                         "Content-Type": "application/json"},
+                timeout=60,
+            )
+            ct = proc_r.headers.get("content-type", "")
+            if proc_r.status_code == 200 and "image" in ct:
+                out_path.write_bytes(proc_r.content)
+                print(f"  S2 {half_width_m//1000}km: {date_str} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
+                return date_str
+            else:
+                print(f"  S2 process failed: {proc_r.status_code} {proc_r.text[:200]}")
+        except Exception as e:
+            print(f"  S2 process error: {e}")
+        return None
+
+    print("Fetching Sentinel-2 true color…")
+    sh_token = get_sh_token()
+    s2_date = None
+    if sh_token:
+        s2_date = fetch_s2_image(sh_token, 75_000, img_dir / "s2_150.png")
+        if s2_date:
+            fetch_s2_image(sh_token, 25_000, img_dir / "s2_50.png")
+    else:
+        print("  Sentinel-2 skipped (no SH credentials in env)")
+
     marine = None
     if cfg.get("marine_zone_id"):
         print(f"Fetching marine forecast (zone {cfg['marine_zone_id']})…")
@@ -883,6 +1050,8 @@ def main():
         },
         "updated_utc": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "modis_date": modis_date,
+        "viirs_date": viirs_date,
+        "s2_date": s2_date,
         "weather": weather,
         "total_water_level": total_water_level,
         "tide": tide,

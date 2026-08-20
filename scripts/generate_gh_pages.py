@@ -959,10 +959,10 @@ def main():
             print("  VIIRS: no modis_bbox_3413 in config, skipping")
             return None
         from datetime import timedelta, date as _date
-        for layer in ["VIIRS_NOAA20_CorrectedReflectance_TrueColor",
-                      "VIIRS_SNPP_CorrectedReflectance_TrueColor"]:
-            for delta in range(0, max_days_back + 1):
-                d = _date.today() - timedelta(days=delta)
+        for delta in range(0, max_days_back + 1):
+            d = _date.today() - timedelta(days=delta)
+            for layer in ["VIIRS_NOAA20_CorrectedReflectance_TrueColor",
+                          "VIIRS_SNPP_CorrectedReflectance_TrueColor"]:
                 try:
                     r = get_with_retry(
                         "https://gibs.earthdata.nasa.gov/wms/epsg3413/best/wms.cgi",

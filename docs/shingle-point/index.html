@@ -401,11 +401,6 @@ svg.sp{width:100%;height:auto;display:block}
         <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-2)"></span>Likely (&le;65%)</span>
         <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-3)"></span>Dense risk (&gt;65%)</span>
       </div>
-      <div class="ffw-conf-legend">
-        <span><span class="ffw-conf-swatch" style="opacity:1"></span>High confidence — CAPS 0-48h</span>
-        <span><span class="ffw-conf-swatch" style="opacity:0.72"></span>Medium — GDPS day 3-5</span>
-        <span><span class="ffw-conf-swatch" style="opacity:0.46"></span>Low — GDPS day 6-10</span>
-      </div>
       <div class="ffw-scroll"><div class="ffw-days" id="fogDays"><span style="color:var(--muted);font-size:12px">Loading…</span></div></div>
       <div style="font-size:10px;color:var(--muted);margin-top:8px">CAPS/GDPS · XGBoost model · Model underestimates fog risk — treat P(fog) as a lower bound · Generated <span id="fogGenTime">—</span> MDT</div>
     </div>
@@ -1295,7 +1290,7 @@ function renderFogBlock(feed,siteKey){
     const slots=d.pts.map(p=>{
       const band=fogBand(p.p_fog);
       const tick=p._loc.getHours()%6===0;
-      return `<div class="ffw-slot"><div class="ffw-glyph" style="background:var(${band.tok});opacity:${CONF_OP[p.confidence]||1}" data-pi="${pts.indexOf(p)}" tabindex="0"></div><span class="ffw-hour${tick?' tick':''}">${String(p._loc.getHours()).padStart(2,'0')}</span></div>`;
+      return `<div class="ffw-slot"><div class="ffw-glyph" style="background:var(${band.tok})" data-pi="${pts.indexOf(p)}" tabindex="0"></div><span class="ffw-hour${tick?' tick':''}">${String(p._loc.getHours()).padStart(2,'0')}</span></div>`;
     }).join('');
     const lbl=d.date.toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'});
     return `<div class="ffw-day"><div class="ffw-day-label"><b>${lbl}</b></div><div class="ffw-slots">${slots}</div></div>`;

@@ -877,7 +877,14 @@ def main():
             try:
                 if 'T' in date_str:
                     _dt_obj = _dt2.datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-                    label = _dt_obj.strftime("%-d %b %Y · %H:%M UTC")
+                    try:
+                        from zoneinfo import ZoneInfo as _ZI
+                        _tz_name = cfg.get("tz_name", "America/Inuvik")
+                        _local = _dt_obj.astimezone(_ZI(_tz_name))
+                        _tz_abbr = _local.strftime('%Z')
+                        label = _local.strftime(f"%-d %b %Y · %H:%M {_tz_abbr}")
+                    except Exception:
+                        label = _dt_obj.strftime("%-d %b %Y · %H:%M UTC")
                 else:
                     d_obj = _dt2.date.fromisoformat(date_str)
                     label = d_obj.strftime("%-d %b %Y")
@@ -984,7 +991,7 @@ def main():
                         timeout=30,
                     )
                     if r.status_code == 200 and r.content[:8] == b"\x89PNG\r\n\x1a\n":
-                        from PIL import Image as _Img
+                        from PIL import Image as _Img, ImageDraw as _Draw, ImageFont as _Font
                         img = _Img.open(_io.BytesIO(r.content)).convert("RGB")
                         rotated = img.rotate(rot, resample=_Img.BICUBIC, expand=False)
                         w, h = rotated.size

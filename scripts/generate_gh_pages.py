@@ -16,6 +16,12 @@ from pathlib import Path
 
 import requests
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+try:
+    from dashboard_lib import fetch_hydrometric_climatology
+except Exception:
+    fetch_hydrometric_climatology = None
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 COMMUNITIES_DIR = REPO_ROOT / "communities"
 DOCS_DIR = REPO_ROOT / "docs"
@@ -757,12 +763,27 @@ def main():
         print(f"Fetching river level ({sid})…")
         rd = fetch_river(sid, prov)
         if rd:
-            rivers.append({
+            entry = {
                 **rd,
                 "station_id": sid,
                 "river_name": stn.get("river_name", ""),
                 "heading": stn.get("heading", ""),
-            })
+            }
+            # Fetch full-year climatology (WaterOffice server-side, no CORS)
+            print(f"Fetching river climatology ({sid})…")
+            try:
+                if fetch_hydrometric_climatology is None:
+                    raise RuntimeError("dashboard_lib not available")
+                doy_vals, cur_list, clim_unit = fetch_hydrometric_climatology(sid, clim_years=15, provterr=prov)
+                if doy_vals:
+                    entry["clim"] = {
+                        "doy_values": {k: v for k, v in doy_vals.items()},
+                        "current_year": cur_list,
+                        "unit": clim_unit,
+                    }
+            except Exception as _ce:
+                print(f"  River climatology failed for {sid}: {_ce}")
+            rivers.append(entry)
         else:
             print(f"  River fetch failed for {sid}")
 

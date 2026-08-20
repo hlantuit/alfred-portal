@@ -410,13 +410,13 @@ svg.sp{width:100%;height:auto;display:block}
   <div class="chart-1">
     <div class="ch">
       <div class="ffw-legend-row">
-        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-0)"></span>Clear (&le;15%)</span>
-        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-1)"></span>Possible (&le;40%)</span>
-        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-2)"></span>Likely (&le;65%)</span>
-        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-3)"></span>Dense risk (&gt;65%)</span>
+        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-0)"></span>Clear (&le;8%)</span>
+        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-1)"></span>Possible (&le;20%)</span>
+        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-2)"></span>Likely (&le;40%)</span>
+        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-3)"></span>Dense risk (&gt;40%)</span>
       </div>
       <div class="ffw-scroll"><div class="ffw-days" id="fogDays"><span style="color:var(--muted);font-size:12px">Loading…</span></div></div>
-      <div style="font-size:10px;color:var(--muted);margin-top:8px">CAPS/GDPS · XGBoost model · Model underestimates fog risk — treat P(fog) as a lower bound · Generated <span id="fogGenTime">—</span> MDT</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:8px">⚠️ <strong>This model historically underestimates fog risk</strong> — field comparisons show confirmed fog events scoring as low as P(fog)&nbsp;=&nbsp;0.05. Even "Possible" represents a real, non-trivial risk. Thresholds adjusted 2026-08-20 to compensate; underlying probabilities are unchanged. · CAPS/GDPS · XGBoost · Generated <span id="fogGenTime">—</span> MDT</div>
     </div>
   </div>
 
@@ -701,8 +701,9 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback){
   };
   const y0=MT+cH*(1-(0-lo)/span);
   const refLine=(y0>=MT&&y0<=MT+cH)?`<line x1="${ML}" y1="${y0.toFixed(1)}" x2="${ML+cW}" y2="${y0.toFixed(1)}" stroke="currentColor" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.25"/>`:'';
-  const fmtY=v=>(v>0?'+':'')+v.toFixed(1);
   const _wlR=span/5,_wlM=Math.pow(10,Math.floor(Math.log10(_wlR||0.01))),_wlF=_wlR/_wlM,_wlS=_wlM*(_wlF<1.5?1:_wlF<3?2:_wlF<7?5:10);
+  const _wlDec=_wlS<0.095?2:1;
+  const fmtY=v=>(v>0?'+':'')+v.toFixed(_wlDec);
   let wlGrids='';
   for(let _v=Math.ceil(minV/_wlS-0.0001)*_wlS;_v<=maxV+_wlS*0.001;_v=Math.round((_v+_wlS)*100000)/100000){
     const _gy=MT+cH*(1-(_v-minV)/span);
@@ -1309,9 +1310,10 @@ async function renderWindRose(lat, lon, tz) {
     const dirs8 = ['N','NE','E','SE','S','SW','W','NW'];
 
     let dayLines = '', arrows = '', xLbls = '', hits = '';
+    // Day boundary lines drawn between slots, not at arrow centres
+    for(let i=1;i<daily.length;i++){const bx=(tML+i*slotW).toFixed(1);dayLines+=`<line x1="${bx}" y1="${tMT}" x2="${bx}" y2="${(tMT+tH).toFixed(1)}" stroke="var(--muted)" stroke-width="0.6" opacity="0.35"/>`;}
     daily.forEach((d, i) => {
       const x = tML + (i + 0.5) * slotW;
-      dayLines += `<line x1="${x.toFixed(1)}" y1="${tMT}" x2="${x.toFixed(1)}" y2="${(tMT+tH).toFixed(1)}" stroke="var(--border)" stroke-width="0.5"/>`;
       const rad = (d.dir - 180) * Math.PI / 180;
       const len = d.spd * arrowScale;
       const dx = len * Math.sin(rad), dy = -len * Math.cos(rad);
@@ -1339,7 +1341,8 @@ async function renderWindRose(lat, lon, tz) {
     const cbX = tML + tW + 14, cbY = tMT, cbH = tH, cbW = 6;
     let cbar = '';
     const cbStops = [[0,'#2DD4BF'],[5,'#A3C44C'],[15,'#F0A830'],[25,'#E04020'],[35,'#8B1DBF']];
-    cbar += `<defs><linearGradient id="cbg" x1="0" y1="0" x2="0" y2="1">${cbStops.map(([v,c],i)=>`<stop offset="${(i/(cbStops.length-1)*100).toFixed(0)}%" stop-color="${c}"/>`).join('')}</linearGradient></defs>`;
+    const clipIdH = 'wvclipH' + Math.random().toString(36).slice(2,6);
+    cbar += `<defs><linearGradient id="cbg" x1="0" y1="0" x2="0" y2="1">${cbStops.map(([v,c],i)=>`<stop offset="${(i/(cbStops.length-1)*100).toFixed(0)}%" stop-color="${c}"/>`).join('')}</linearGradient><clipPath id="${clipIdH}"><rect x="${tML}" y="${tMT}" width="${tW}" height="${tH}"/></clipPath></defs>`;
     cbar += `<rect x="${cbX}" y="${cbY}" width="${cbW}" height="${cbH}" fill="url(#cbg)" rx="2"/>`;
     const maxLbl = Math.ceil(maxSpd / 10) * 10;
     [0, maxLbl/2, maxLbl].forEach(v => {
@@ -1353,7 +1356,7 @@ async function renderWindRose(lat, lon, tz) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.style.cssText = 'width:100%;display:block';
-    svg.innerHTML = `${cbar}${dayLines}${cline}${arrows}${xLbls}${hits}${wtip}`;
+    svg.innerHTML = `${cbar}${dayLines}${cline}<g clip-path="url(#${clipIdH})">${arrows}</g>${xLbls}${hits}${wtip}`;
     el.innerHTML = '';
     el.appendChild(svg);
     svg.querySelectorAll('.wv-hit').forEach(r => {
@@ -1379,6 +1382,9 @@ async function renderWindRose(lat, lon, tz) {
 // ── Load data.json ──
 async function loadData(){
   _lastFetch=Date.now();
+  // Cache-bust all local satellite images with today's date so browsers re-fetch after the nightly regeneration
+  const _today=new Date().toISOString().slice(0,10);
+  document.querySelectorAll('img[src^="img/"]').forEach(el=>{const s=el.src.split('?')[0];el.src=s+'?d='+_today;});
   let d;
   try {
     const r=await fetch('data.json?t='+Date.now());
@@ -1616,7 +1622,7 @@ if ('serviceWorker' in navigator) {
 }
 
 // ── Fog forecast ──
-const FOG_BANDS=[{max:0.15,label:'Clear',tok:'--fog-0'},{max:0.40,label:'Possible',tok:'--fog-1'},{max:0.65,label:'Likely',tok:'--fog-2'},{max:1.01,label:'Dense risk',tok:'--fog-3'}];
+const FOG_BANDS=[{max:0.08,label:'Clear',tok:'--fog-0'},{max:0.20,label:'Possible',tok:'--fog-1'},{max:0.40,label:'Likely',tok:'--fog-2'},{max:1.01,label:'Dense risk',tok:'--fog-3'}];
 const CONF_OP={high:1,medium:0.72,low:0.46};
 function fogBand(p){return FOG_BANDS.find(b=>p<=b.max)||FOG_BANDS[3];}
 function fogRunStart(feed,src){

@@ -411,13 +411,13 @@ svg.sp{width:100%;height:auto;display:block}
   <div class="chart-1">
     <div class="ch">
       <div class="ffw-legend-row">
-        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-0)"></span>Clear (&le;15%)</span>
-        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-1)"></span>Possible (&le;40%)</span>
-        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-2)"></span>Likely (&le;65%)</span>
-        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-3)"></span>Dense risk (&gt;65%)</span>
+        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-0)"></span>Clear (&le;8%)</span>
+        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-1)"></span>Possible (&le;20%)</span>
+        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-2)"></span>Likely (&le;40%)</span>
+        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-3)"></span>Dense risk (&gt;40%)</span>
       </div>
       <div class="ffw-scroll"><div class="ffw-days" id="fogDays"><span style="color:var(--muted);font-size:12px">Loading…</span></div></div>
-      <div style="font-size:10px;color:var(--muted);margin-top:8px">CAPS/GDPS · XGBoost model · Model underestimates fog risk — treat P(fog) as a lower bound · Generated <span id="fogGenTime">—</span> MDT</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:8px">⚠️ <strong>This model historically underestimates fog risk</strong> — field comparisons show confirmed fog events scoring as low as P(fog)&nbsp;=&nbsp;0.05. Even "Possible" represents a real, non-trivial risk. Thresholds adjusted 2026-08-20 to compensate; underlying probabilities are unchanged. · CAPS/GDPS · XGBoost · Generated <span id="fogGenTime">—</span> MDT</div>
     </div>
   </div>
 
@@ -731,8 +731,9 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback){
     : '';
 
   // Y labels + gridlines
-  const fmtY=v=>(v>0?'+':'')+v.toFixed(1);
   const _wlR=span/5,_wlM=Math.pow(10,Math.floor(Math.log10(_wlR||0.01))),_wlF=_wlR/_wlM,_wlS=_wlM*(_wlF<1.5?1:_wlF<3?2:_wlF<7?5:10);
+  const _wlDec=_wlS<0.095?2:1;
+  const fmtY=v=>(v>0?'+':'')+v.toFixed(_wlDec);
   let wlGrids='';
   for(let _v=Math.ceil(minV/_wlS-0.0001)*_wlS;_v<=maxV+_wlS*0.001;_v=Math.round((_v+_wlS)*100000)/100000){
     const _gy=MT+cH*(1-(_v-minV)/span);
@@ -1302,9 +1303,10 @@ async function renderWindRose(lat, lon, tz) {
     const maxSpd=Math.max(...daily.map(d=>d.spd),1), arrowScale=(tH/2-6)/maxSpd;
     const dirs8=['N','NE','E','SE','S','SW','W','NW'];
     let dayLines='',arrows='',xLbls='',hits='';
+    // Day boundary lines drawn between slots, not at arrow centres
+    for(let i=1;i<daily.length;i++){const bx=(tML+i*slotW).toFixed(1);dayLines+=`<line x1="${bx}" y1="${tMT}" x2="${bx}" y2="${(tMT+tH).toFixed(1)}" stroke="var(--muted)" stroke-width="0.6" opacity="0.35"/>`;}
     daily.forEach((d,i)=>{
       const x=tML+(i+0.5)*slotW;
-      dayLines+=`<line x1="${x.toFixed(1)}" y1="${tMT}" x2="${x.toFixed(1)}" y2="${(tMT+tH).toFixed(1)}" stroke="var(--border)" stroke-width="0.5"/>`;
       const rad=(d.dir-180)*Math.PI/180, len=d.spd*arrowScale;
       const dx=len*Math.sin(rad), dy=-len*Math.cos(rad);
       const x2=x+dx, y2=vecCy+dy, col=spColor(d.spd);
@@ -1317,9 +1319,11 @@ async function renderWindRose(lat, lon, tz) {
       hits+=`<rect class="wv-hit" x="${(x-slotW/2).toFixed(1)}" y="${tMT}" width="${slotW.toFixed(1)}" height="${tH}" fill="transparent" data-date="${d.date}" data-spd="${d.spd.toFixed(1)}" data-dir="${Math.round(d.dir)}" data-dirs="${d8}"/>`;
     });
     const cbX=tML+tW+14,cbY=tMT,cbH=tH,cbW=6,maxLbl=Math.ceil(maxSpd/10)*10;
+    const clipId='wvclipSP'+Math.random().toString(36).slice(2,6);
     let cbar=`<defs><linearGradient id="cbgSP" x1="0" y1="0" x2="0" y2="1">`;
     [['#2DD4BF'],['#A3C44C'],['#F0A830'],['#E04020'],['#8B1DBF']].forEach(([c],i,a)=>{cbar+=`<stop offset="${(i/(a.length-1)*100).toFixed(0)}%" stop-color="${c}"/>`;});
-    cbar+=`</linearGradient></defs><rect x="${cbX}" y="${cbY}" width="${cbW}" height="${cbH}" fill="url(#cbgSP)" rx="2"/>`;
+    cbar+=`</linearGradient><clipPath id="${clipId}"><rect x="${tML}" y="${tMT}" width="${tW}" height="${tH}"/></clipPath></defs>`;
+    cbar+=`<rect x="${cbX}" y="${cbY}" width="${cbW}" height="${cbH}" fill="url(#cbgSP)" rx="2"/>`;
     [0,maxLbl/2,maxLbl].forEach(v=>{const ly=cbY+cbH-(v/maxLbl)*cbH;cbar+=`<text x="${cbX+cbW+4}" y="${(ly+4).toFixed(1)}" font-size="13" fill="var(--muted)">${Math.round(v)}</text>`;});
     cbar+=`<text x="${cbX+cbW/2}" y="${cbY-4}" text-anchor="middle" font-size="13" fill="var(--muted)">km/h</text>`;
     const cline=`<line x1="${tML}" y1="${vecCy.toFixed(1)}" x2="${(tML+tW).toFixed(1)}" y2="${vecCy.toFixed(1)}" stroke="var(--muted)" stroke-width="0.8" opacity="0.4"/>`;
@@ -1327,7 +1331,7 @@ async function renderWindRose(lat, lon, tz) {
     const wtip=`<g id="${wuid}" style="display:none;pointer-events:none"><rect id="${wuid}bg" rx="3" fill="rgba(0,0,0,0.82)"/><text id="${wuid}tx" font-size="13" fill="white"/></g>`;
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
     svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.style.cssText='width:100%;display:block';
-    svg.innerHTML=`${cbar}${dayLines}${cline}${arrows}${xLbls}${hits}${wtip}`;
+    svg.innerHTML=`${cbar}${dayLines}${cline}<g clip-path="url(#${clipId})">${arrows}</g>${xLbls}${hits}${wtip}`;
     el.innerHTML=''; el.appendChild(svg);
     svg.querySelectorAll('.wv-hit').forEach(r=>{
       r.addEventListener('mouseenter',()=>{
@@ -1348,89 +1352,34 @@ async function renderWindRose(lat, lon, tz) {
 }
 
 // ── River level annual trajectory (WSC) ───────────────────────────────────────
-async function renderRiverTrajectory(stationId, riverLabel) {
+function renderRiverTrajectory(clim) {
   const el = document.getElementById('riverClimEl');
   if (!el) return;
-  el.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:13px">Loading river data…</div>';
+  if (!clim) { el.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:13px">River climatology unavailable</div>'; return; }
   const curYear = new Date().getFullYear();
-  const histStart = curYear - 15, histEnd = curYear - 1;
-  const base = 'https://api.weather.gc.ca/collections/hydrometric-daily-mean/items';
-  const today = new Date().toISOString().slice(0, 10);
+
+  // doy_values: {doy_str: [float, …]} — historical climatology
+  // current_year: [[doy, value], …] — current-year daily means
+  function pct(arr, p) {
+    const s = [...arr].sort((a, b) => a - b);
+    const i = (p / 100) * (s.length - 1);
+    const lo = Math.floor(i), hi = Math.ceil(i);
+    return s[lo] + (s[hi] - s[lo]) * (i - lo);
+  }
+  const p10 = {}, p50 = {}, p90 = {};
+  Object.entries(clim.doy_values || {}).forEach(([d, vals]) => {
+    if (vals.length < 3) return;
+    p10[d] = pct(vals, 10); p50[d] = pct(vals, 50); p90[d] = pct(vals, 90);
+  });
+  const curPts = (clim.current_year || []).map(([d, v]) => ({ doy: d, val: v }));
   try {
-    // Fetch historical data (OGC API) + current-year via Datamart CSV (CORS-enabled, no lag)
-    const provterr = 'NT';
-    const dmUrl = `https://dd.weather.gc.ca/hydrometric/csv/${provterr}/daily/${provterr}_${stationId}_daily_hydrometric.csv`;
-    const [histRes, dmRes] = await Promise.all([
-      fetch(`${base}?STATION_NUMBER=${stationId}&datetime=${histStart}-01-01/${histEnd}-12-31&f=json&limit=10000`),
-      fetch(dmUrl).catch(() => null)
-    ]);
-    const histJson = await histRes.json();
-
-    // Index by day-of-year (1-366) → array of values
-    function doy(dateStr) {
-      const d = new Date(dateStr + 'T12:00:00Z');
-      const start = new Date(Date.UTC(d.getUTCFullYear(), 0, 0));
-      return Math.round((d - start) / 86400000);
-    }
-    const getLvl = p => p?.LEVEL ?? p?.DISCHARGE ?? null;
-    const byDoy = {};
-    (histJson.features || []).sort((a,b)=>(a.properties?.DATE||'').localeCompare(b.properties?.DATE||'')).forEach(f => {
-      const lvl = getLvl(f.properties); const dt = f.properties?.DATE?.slice(0, 10);
-      if (lvl == null || !dt) return;
-      const d = doy(dt); if (!byDoy[d]) byDoy[d] = [];
-      byDoy[d].push(lvl);
-    });
-    // Percentiles
-    function pct(arr, p) {
-      const s = [...arr].sort((a, b) => a - b);
-      const i = (p / 100) * (s.length - 1);
-      const lo = Math.floor(i), hi = Math.ceil(i);
-      return s[lo] + (s[hi] - s[lo]) * (i - lo);
-    }
-    const p10 = {}, p50 = {}, p90 = {};
-    Object.entries(byDoy).forEach(([d, vals]) => {
-      if (vals.length < 3) return;
-      p10[d] = pct(vals, 10); p50[d] = pct(vals, 50); p90[d] = pct(vals, 90);
-    });
-
-    // Current year data from Datamart CSV (CORS-enabled, updated daily)
-    let curPts = [];
-    if (dmRes && dmRes.ok) {
-      try {
-        const csv = await dmRes.text();
-        csv.split('\n').forEach(line => {
-          const cols = line.split(',');
-          if (cols.length < 3) return;
-          const dt = cols[1]?.trim().slice(0, 10);
-          if (!dt || !dt.startsWith(String(curYear))) return;
-          // col index 2 = water level (m), col index 6 = discharge (cms)
-          const lvl = parseFloat(cols[2]);
-          const dis = parseFloat(cols[6]);
-          const val = isNaN(lvl) ? (isNaN(dis) ? null : dis) : lvl;
-          if (val == null) return;
-          curPts.push({ doy: doy(dt), val });
-        });
-        curPts.sort((a, b) => a.doy - b.doy);
-      } catch (_) {}
-    }
-    // Fallback: OGC API current-year (may lag)
-    if (!curPts.length) {
-      try {
-        const curRes = await fetch(`${base}?STATION_NUMBER=${stationId}&datetime=${curYear}-01-01/${curYear}-12-31&f=json&limit=1000`);
-        const curJson = await curRes.json();
-        curPts = (curJson.features || []).sort((a,b)=>(a.properties?.DATE||'').localeCompare(b.properties?.DATE||'')).map(f => ({
-          doy: doy(f.properties.DATE.slice(0, 10)),
-          val: getLvl(f.properties)
-        })).filter(p => p.val != null);
-      } catch (_) {}
-    }
 
     const allVals = [...Object.values(p90), ...curPts.map(p => p.val)].filter(v => v != null);
     const allMin = Math.min(...Object.values(p10), ...curPts.map(p => p.val));
     const allMax = Math.max(...allVals);
 
     const W = el.offsetWidth || 700;
-    const ML = 52, MR = 20, MT = 20, MB = 36;
+    const ML = 52, MR = 20, MT = 50, MB = 36;
     const cW = W - ML - MR, cH = 200, H = MT + cH + MB;
     const xS = d => (ML + ((d - 1) / 365) * cW).toFixed(1);
     const pad = (allMax - allMin) * 0.06;
@@ -1476,14 +1425,14 @@ async function renderRiverTrajectory(stationId, riverLabel) {
     const nowLine = `<line x1="${xS(nowDoy)}" y1="${MT}" x2="${xS(nowDoy)}" y2="${(MT+cH).toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/>
       <text x="${(parseFloat(xS(nowDoy))+4).toFixed(1)}" y="${(MT+cH-6).toFixed(1)}" font-size="14" fill="#C0392B" font-weight="700">now</text>`;
 
-    // Legend
+    // Legend — two rows, plain labels
     const leg =
-      `<rect x="${ML}" y="${MT-16}" width="10" height="4" fill="var(--muted)" opacity="0.4"/>` +
-      `<text x="${ML+14}" y="${MT-12}" font-size="13" fill="var(--muted)">p10–p90 (${histStart}–${histEnd})</text>` +
-      `<line x1="${ML+180}" y1="${MT-14}" x2="${ML+196}" y2="${MT-14}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4,2" opacity="0.6"/>` +
-      `<text x="${ML+200}" y="${MT-10}" font-size="13" fill="var(--muted)">median</text>` +
-      `<line x1="${ML+264}" y1="${MT-14}" x2="${ML+280}" y2="${MT-14}" stroke="#2E8B57" stroke-width="2.5"/>` +
-      `<text x="${ML+284}" y="${MT-10}" font-size="13" fill="#2E8B57">${curYear}</text>`;
+      `<rect x="${ML}" y="${MT-30}" width="16" height="8" rx="2" fill="var(--muted)" opacity="0.35"/>` +
+      `<text x="${ML+22}" y="${MT-23}" font-size="12" fill="var(--muted)">Historical range  ${histStart}–${histEnd}  (p10–p90)</text>` +
+      `<line x1="${ML}" y1="${MT-10}" x2="${ML+16}" y2="${MT-10}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.7"/>` +
+      `<text x="${ML+22}" y="${MT-7}" font-size="12" fill="var(--muted)">Historical median</text>` +
+      `<line x1="${ML+210}" y1="${MT-10}" x2="${ML+226}" y2="${MT-10}" stroke="#2E8B57" stroke-width="2.5"/>` +
+      `<text x="${ML+232}" y="${MT-7}" font-size="12" fill="#2E8B57">${curYear} (current year)</text>`;
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
@@ -1495,7 +1444,7 @@ async function renderRiverTrajectory(stationId, riverLabel) {
       <rect id="${ruid}bg" x="0" y="0" width="10" height="10" rx="3" fill="rgba(0,0,0,0.82)"/>
       <text id="${ruid}tx" x="0" y="0" font-size="13" fill="white"></text>
     </g>`;
-    svg.innerHTML = `<text x="${ML}" y="${MT-5}" font-size="14" fill="var(--muted)">m (level)</text>${grid}${band}${medLine}${curLine}${nowLine}${xlabels}${leg}${tip2}`;
+    svg.innerHTML = `<text x="${ML}" y="${MT+12}" font-size="11" fill="var(--muted)">m (level)</text>${grid}${band}${medLine}${curLine}${nowLine}${xlabels}${leg}${tip2}`;
     el.innerHTML = ''; el.appendChild(svg);
 
     // Crosshair tooltip
@@ -1530,6 +1479,9 @@ async function renderRiverTrajectory(stationId, riverLabel) {
 // ── Load data.json ──
 async function loadData(){
   _lastFetch=Date.now();
+  // Cache-bust all local satellite images with today's date so browsers re-fetch after the nightly regeneration
+  const _today=new Date().toISOString().slice(0,10);
+  document.querySelectorAll('img[src^="img/"]').forEach(el=>{const s=el.src.split('?')[0];el.src=s+'?d='+_today;});
   let d;
   try {
     const r=await fetch('data.json?t='+Date.now());
@@ -1686,8 +1638,8 @@ async function loadData(){
   if (_clat && _clon) {
     renderTddChart(_clat, _clon);
     renderWindRose(_clat, _clon, tz);
-    renderRiverTrajectory('10MC023', 'Napoiak Channel');
   }
+  renderRiverTrajectory(rivers[0]?.clim);
 }
 
 function fmtTime(utcStr,tz){
@@ -1765,7 +1717,7 @@ if ('serviceWorker' in navigator) {
 }
 
 // ── Fog forecast ──
-const FOG_BANDS=[{max:0.15,label:'Clear',tok:'--fog-0'},{max:0.40,label:'Possible',tok:'--fog-1'},{max:0.65,label:'Likely',tok:'--fog-2'},{max:1.01,label:'Dense risk',tok:'--fog-3'}];
+const FOG_BANDS=[{max:0.08,label:'Clear',tok:'--fog-0'},{max:0.20,label:'Possible',tok:'--fog-1'},{max:0.40,label:'Likely',tok:'--fog-2'},{max:1.01,label:'Dense risk',tok:'--fog-3'}];
 const CONF_OP={high:1,medium:0.72,low:0.46};
 function fogBand(p){return FOG_BANDS.find(b=>p<=b.max)||FOG_BANDS[3];}
 function fogRunStart(feed,src){

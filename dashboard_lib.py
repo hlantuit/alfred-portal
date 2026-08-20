@@ -6241,51 +6241,68 @@ def fetch_hydrometric_climatology(station_id, clim_years=30, provterr=None):
         # Datamart rolling CSV (~30 days).
         cur_daily = {}  # date -> float (daily mean)
 
-        # Source 1: Water Office graph JSON API (no disclaimer gate, full year)
+        # Source 1: WaterOffice graph JSON API — full current year, sub-hourly.
+        # The endpoint needs a disclaimer session cookie.  Strategy: try directly
+        # first (works if the server doesn't enforce the cookie for this IP);
+        # if the response is HTML (disclaimer page) rather than JSON, establish
+        # the session by GETting the report page and POSTing disclaimer acceptance,
+        # then retry.
         try:
-            # Look up this station's actual parameters so we use the correct
-            # param1 (some stations serve water level under param 3, not 46).
-            axes_resp = get_with_retry(
-                f"https://wateroffice.ec.gc.ca/services/real_time_graph_axes/json/inline"
-                f"?station_id={station_id}",
-                timeout=20, retries=1, backoff_seconds=3,
-            )
-            axes = axes_resp.json()
-            # Prefer param 46 (real-time stage) if present; fall back to param 3
-            # (archived water level). Use the station's first param as param1 so
-            # the server returns data for all available params.
-            param_ids = [a["parameterid"] for a in axes]
-            level_params = [p for p in param_ids if p in ("46", "3")]
-            param1 = param_ids[0] if param_ids else "46"
-            wo_url = (
-                f"https://wateroffice.ec.gc.ca/services/real_time_graph/json/inline"
-                f"?station={station_id}&start_date={current_year}-01-01"
-                f"&end_date={_dt.date.today()}&param1={param1}&param2={param_ids[1] if len(param_ids) > 1 else param1}"
-            )
-            wo_resp = get_with_retry(wo_url, timeout=60, retries=2, backoff_seconds=5)
-            wo_data = wo_resp.json()
-            # Collect readings from whichever water-level param has the most data
-            from collections import defaultdict as _defdict
-            daily_sums = _defdict(list)
-            for pick in (level_params if level_params else param_ids[:1]):
-                series = wo_data.get(pick, {})
-                raw_points = series.get("approved", []) + series.get("provisional", [])
-                for pt in raw_points:
-                    if len(pt) < 2 or pt[1] is None:
+            import requests as _req
+            from collections import defaultdict as _defdict2
+            _wo_session = _req.Session()
+            _wo_session.headers.update({"User-Agent": "Mozilla/5.0 (compatible; alfred-portal/1.0)"})
+            _graph_url = "https://wateroffice.ec.gc.ca/services/real_time_graph/json/inline"
+            _graph_params = {"station": station_id,
+                             "start_date": f"{current_year}-01-01",
+                             "end_date": str(_dt.date.today()),
+                             "param1": 46, "param2": 3}
+
+            def _try_graph_api(sess):
+                r = sess.get(_graph_url, params=_graph_params, timeout=60)
+                r.raise_for_status()
+                if "text/html" in r.headers.get("Content-Type", ""):
+                    raise ValueError("Got HTML (disclaimer page) instead of JSON")
+                return r.json()
+
+            try:
+                _wo_data = _try_graph_api(_wo_session)
+            except (ValueError, Exception):
+                # Establish disclaimer session: GET report page then POST agree
+                _rpt = _wo_session.get(
+                    "https://wateroffice.ec.gc.ca/report/real_time_e.html",
+                    params={"stn": station_id, "startDate": f"{current_year}-01-01",
+                            "endDate": str(_dt.date.today()), "prm1": 46, "prm2": 3, "mode": "Graph"},
+                    timeout=60,
+                )
+                _wo_session.post(
+                    "https://wateroffice.ec.gc.ca/disclaimer_e.html",
+                    data={"agree": "1"},
+                    headers={"Referer": _rpt.url},
+                    timeout=30, allow_redirects=True,
+                )
+                _wo_data = _try_graph_api(_wo_session)
+
+            _daily_sums = _defdict2(list)
+            for _pk in ("46", "3"):
+                _series = _wo_data.get(_pk, {})
+                for _pt in _series.get("approved", []) + _series.get("provisional", []):
+                    if len(_pt) < 2 or _pt[1] is None:
                         continue
                     try:
-                        d = _dt.date.fromtimestamp(pt[0] / 1000)
-                        if d.year == current_year:
-                            daily_sums[d].append(float(pt[1]))
+                        _d = _dt.date.fromtimestamp(_pt[0] / 1000)
+                        if _d.year == current_year:
+                            _daily_sums[_d].append(float(_pt[1]))
                     except Exception:
                         continue
-                if daily_sums:
-                    break  # found data — don't mix params
-            for d, vs in daily_sums.items():
-                cur_daily[d] = sum(vs) / len(vs)
+                if _daily_sums:
+                    break  # found data for this param — don't mix params
+            cur_daily.update({_d: sum(_vs) / len(_vs) for _d, _vs in _daily_sums.items()})
             if cur_daily:
                 print(f"HYDROMETRIC CLIM [{station_id}]: WO graph API gave {len(cur_daily)} current-year days "
                       f"(up to {max(cur_daily)})")
+            else:
+                print(f"HYDROMETRIC CLIM [{station_id}]: WO graph API returned no current-year data")
         except Exception as _e:
             print(f"HYDROMETRIC CLIM [{station_id}]: WO graph API fetch failed: {_e}")
 

@@ -998,18 +998,17 @@ def main():
                         sz = 1000
                         left, top = (w - sz) // 2, (h - sz) // 2
                         cropped = rotated.crop((left, top, left + sz, top + sz))
-                        # Skip dark / empty scenes and scenes that don't cover the site
-                        from PIL import ImageStat as _IStat
-                        _br = sum(_IStat.Stat(cropped).mean) / 3.0
-                        if _br < 10.0:
-                            print(f"  VIIRS {layer} day -{delta}: too dark ({_br:.1f}), skipping")
+                        # Skip scenes where the centre (site location) has no-data.
+                        # No-data in GIBS VIIRS is pure black (0,0,0). Dark ocean/water
+                        # has small but non-zero channel values and must NOT be rejected.
+                        import numpy as _np
+                        _carr = _np.array(cropped.crop((350, 350, 650, 650)))
+                        _pure_black = (_carr.max(axis=2) == 0)  # pixels where all channels = 0
+                        _nodata_frac = _pure_black.mean()
+                        if _nodata_frac > 0.6:
+                            print(f"  VIIRS {layer} day -{delta}: centre {_nodata_frac:.0%} no-data, site not covered, skipping")
                             continue
-                        # Check centre region covers the site (not filled with black/no-data)
-                        _center_crop = cropped.crop((350, 350, 650, 650))
-                        _center_br = sum(_IStat.Stat(_center_crop).mean) / 3.0
-                        if _center_br < 10.0:
-                            print(f"  VIIRS {layer} day -{delta}: centre too dark ({_center_br:.1f}), site not covered, skipping")
-                            continue
+                        print(f"  VIIRS {layer} day -{delta}: centre {_nodata_frac:.0%} no-data — using")
                         # Compute metres per pixel from bbox
                         try:
                             _bparts = [float(x) for x in bbox_3413.split(",")]

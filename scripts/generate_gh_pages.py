@@ -1134,7 +1134,7 @@ def main():
                         out_path.write_bytes(buf.getvalue())
                         src = "NOAA-20" if "NOAA20" in layer else "SNPP"
                         print(f"  VIIRS ({src}): {d} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
-                        return d.strftime("%Y-%m-%d")
+                        return _viirs_date_str  # full ISO datetime if CMR succeeded
                 except Exception as e:
                     print(f"  VIIRS {layer} day -{delta} failed: {e}")
         print("  VIIRS unavailable")

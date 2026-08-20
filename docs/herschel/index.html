@@ -1176,8 +1176,8 @@ async function loadData(){
 
   // Total water level — dual TOPAZ6+GDSPS curves (or IWLS tide fallback)
   renderWaterLevel('tideSVG', twl?.topaz||null, twl?.gdsps||null, tide);
-  const wlCur = (twl||tide)?.current_m;
-  if(wlCur!=null) document.getElementById('cv-tide').textContent=(wlCur>0?'+':'')+wlCur;
+  const wlCur = twl?.topaz?.current_m ?? twl?.gdsps?.current_m ?? tide?.current_m;
+  if(wlCur!=null) document.getElementById('cv-tide').textContent=(wlCur>0?'+':'')+parseFloat(wlCur).toFixed(3);
   {
     const src = twl ? 'TOPAZ6 · GDSPS (MSC/ECCC) · tide + surge · anomaly vs. yearly mean' : (tide ? 'DFO IWLS tide prediction · 7-day' : null);
     const ch = document.querySelector('#twl-title')?.closest('.ch');

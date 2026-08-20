@@ -1075,6 +1075,7 @@ async function loadData(){
   // Forecast strip
   const fc=w.forecast||[];
   const fcRow=document.getElementById('fcRow');
+  fcRow.innerHTML='';
   fc.forEach((day,i)=>{
     const el=document.createElement('div');
     el.className='fc-cell'+(i===0?' today':'');

@@ -359,7 +359,7 @@ svg.sp{width:100%;height:auto;display:block}
         <div class="ch-title">Temperature — GEM · 10-day hourly</div>
         <div><span class="ch-val" id="cv-temp">—</span><span class="ch-unit"> °C</span></div>
       </div>
-      <div id="tempChart" style="height:auto"></div>
+      <div class="ch-area" id="tempChart" style="height:auto"></div>
     </div>
   </div>
 
@@ -375,28 +375,28 @@ svg.sp{width:100%;height:auto;display:block}
           <div class="ch-title">Wind speed · km/h</div>
           <div><span class="ch-val" id="cv-wind">—</span><span class="ch-unit"> km/h now</span></div>
         </div>
-        <div id="windChart" style="height:auto"></div>
+        <div class="ch-area" id="windChart" style="height:auto"></div>
       </div>
       <div class="ch">
         <div class="ch-hd">
           <div class="ch-title">Precipitation · mm/h (GEM)</div>
           <div><span class="ch-val" id="cv-precip">—</span><span class="ch-unit"> mm/h now</span></div>
         </div>
-        <div id="precipChart" style="height:auto"></div>
+        <div class="ch-area" id="precipChart" style="height:auto"></div>
       </div>
       <div class="ch">
         <div class="ch-hd">
           <div class="ch-title">Pressure · hPa</div>
           <div><span class="ch-val" id="cv-pres">—</span><span class="ch-unit"> hPa now</span></div>
         </div>
-        <div id="presChart" style="height:auto"></div>
+        <div class="ch-area" id="presChart" style="height:auto"></div>
       </div>
       <div class="ch">
         <div class="ch-hd">
           <div class="ch-title">Cloud cover · %</div>
           <div><span class="ch-val" id="cv-cloud">—</span><span class="ch-unit"> % now</span></div>
         </div>
-        <div id="cloudChart" style="height:auto"></div>
+        <div class="ch-area" id="cloudChart" style="height:auto"></div>
       </div>
     </div>
   </div>
@@ -422,8 +422,9 @@ svg.sp{width:100%;height:auto;display:block}
     <div class="ch">
       <div class="ch-hd">
         <div class="ch-title">Wave height — Open-Meteo GWAM · 8-day</div>
+        <div><span class="ch-val" id="cv-wave">—</span><span class="ch-unit"> m now</span></div>
       </div>
-      <div id="waveChartEl" style="position:relative"></div>
+      <div class="ch-area"><div id="waveChartEl" style="position:relative"></div></div>
     </div>
     <div class="ch">
       <div class="ch-title" style="margin-bottom:10px">Text forecast</div>
@@ -684,9 +685,13 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback){
   let xlabels='';
   {let lastDay='';primSeries.forEach((p,i)=>{if(!p.t)return;const dt=new Date(p.t);const dk=dt.toLocaleDateString('en',{timeZone:'UTC',month:'short',day:'numeric'});if(dk!==lastDay){lastDay=dk;const xx=ML+cW*i/(primSeries.length-1);if(xx>ML+12&&xx<ML+cW-12){xlabels+=`<line x1="${xx.toFixed(1)}" y1="${(MT+cH).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(MT+cH+4).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.35"/><text x="${xx.toFixed(1)}" y="${(H-4).toFixed(1)}" text-anchor="middle" font-size="18" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${dk}</text>`;}}});}
   const xhId=`wlxh_${svgId}`,wlDotId=`wldot_${svgId}`;
+  const _tsArr=primSeries.map(p=>new Date(p.t).getTime());
+  const _nowFrac=(Date.now()-_tsArr[0])/(_tsArr[_tsArr.length-1]-_tsArr[0]);
+  const _nowX=(ML+cW*Math.max(0,Math.min(1,_nowFrac))).toFixed(1);
+  const wlNowMark=(_nowFrac>=-0.01&&_nowFrac<=1.01)?`<line x1="${_nowX}" y1="${MT}" x2="${_nowX}" y2="${MT+cH}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/><text x="${(parseFloat(_nowX)+5).toFixed(1)}" y="${(MT+18).toFixed(1)}" font-size="16" fill="#C0392B" font-weight="700" font-family="system-ui,sans-serif">now</text>`:'';
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   svg.style.cssText='width:100%;display:block;cursor:crosshair;overflow:visible';
-  svg.innerHTML=`<defs><clipPath id="wlclip_${svgId}"><rect x="${ML}" y="${MT}" width="${cW}" height="${cH}"/></clipPath></defs>${yLabels}${refLine}${curves}${legend}${xlabels}<line id="${xhId}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#3B2A8C" stroke-width="1" stroke-dasharray="3,2" opacity="0.4"/><circle id="${wlDotId}" cx="0" cy="0" r="4" fill="${TOPAZ_COLOR}" stroke="white" stroke-width="1.5" visibility="hidden" clip-path="url(#wlclip_${svgId})"/>`;
+  svg.innerHTML=`<defs><clipPath id="wlclip_${svgId}"><rect x="${ML}" y="${MT}" width="${cW}" height="${cH}"/></clipPath></defs>${yLabels}${refLine}${curves}${legend}${xlabels}${wlNowMark}<line id="${xhId}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#3B2A8C" stroke-width="1" stroke-dasharray="3,2" opacity="0.4"/><circle id="${wlDotId}" cx="0" cy="0" r="4" fill="${TOPAZ_COLOR}" stroke="white" stroke-width="1.5" visibility="hidden" clip-path="url(#wlclip_${svgId})"/>`;
   svg.parentElement.style.position='relative';
   const tip2=Object.assign(document.createElement('div'),{});
   tip2.style.cssText='position:absolute;background:var(--surf);border:1px solid var(--bdr2);border-radius:5px;padding:4px 10px;font-size:11px;pointer-events:none;display:none;z-index:10;white-space:nowrap;color:var(--txt);box-shadow:0 2px 6px rgba(0,0,0,.1)';
@@ -807,12 +812,12 @@ function renderChart(containerId, vals, opts){
     <defs><linearGradient id="gr_${uid}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="${stroke}" stop-opacity="0.18"/>
       <stop offset="100%" stop-color="${stroke}" stop-opacity="0.01"/>
-    </linearGradient></defs>
+    </linearGradient><clipPath id="clip_${uid}"><rect x="${ML}" y="${MT}" width="${cW}" height="${cH}"/></clipPath></defs>
     ${yticks}${xlabels}${darrows}
     <path d="${areaD}" fill="url(#gr_${uid})"/>
     <path d="${pathD}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
     <line id="xh_${uid}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH+GUTTER}" stroke="${stroke}" stroke-width="1" stroke-dasharray="3,2" opacity="0.45"/>
-    <circle id="dot_${uid}" cx="-100" cy="-100" r="4" fill="${stroke}" stroke="white" stroke-width="1.5"/>
+    <circle id="dot_${uid}" cx="0" cy="0" r="4" fill="${stroke}" stroke="white" stroke-width="1.5" visibility="hidden" clip-path="url(#clip_${uid})"/>
   </svg>`;
   el.style.position='relative';
 
@@ -832,7 +837,7 @@ function renderChart(containerId, vals, opts){
     if(v==null) return;
     const cx=px(idx),cy=py(v);
     xh.setAttribute('x1',cx.toFixed(1));xh.setAttribute('x2',cx.toFixed(1));
-    dot.setAttribute('cx',cx.toFixed(1));dot.setAttribute('cy',cy.toFixed(1));
+    dot.setAttribute('cx',cx.toFixed(1));dot.setAttribute('cy',cy.toFixed(1));dot.setAttribute('visibility','visible');
     const valLabel=typeof v==='number'&&!Number.isInteger(v)?v.toFixed(1):v;
     let txt=`<b>${valLabel}${unit}</b>`;
     if(dirs&&dirs[idx]!=null){
@@ -854,7 +859,7 @@ function renderChart(containerId, vals, opts){
   svg.addEventListener('mouseleave',()=>{
     tip.style.display='none';
     xh.setAttribute('x1','-2');xh.setAttribute('x2','-2');
-    dot.setAttribute('cx','-100');dot.setAttribute('cy','-100');
+    dot.setAttribute('visibility','hidden');
   });
 }
 
@@ -991,12 +996,12 @@ function renderWaveChart(containerId, series, tz){
   const roughMark=ROUGH<maxH?`<line x1="${ML}" y1="${py(ROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(ROUGH).toFixed(1)}" stroke="#B86F00" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW-6).toFixed(1)}" y="${(py(ROUGH)+15).toFixed(1)}" text-anchor="end" font-size="19" fill="#B86F00" opacity="0.85" font-family="system-ui,sans-serif">rough 1.25 m</text>`:'';
   const vroughMark=VROUGH<maxH?`<line x1="${ML}" y1="${py(VROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(VROUGH).toFixed(1)}" stroke="#C0392B" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW-6).toFixed(1)}" y="${(py(VROUGH)+15).toFixed(1)}" text-anchor="end" font-size="19" fill="#C0392B" opacity="0.85" font-family="system-ui,sans-serif">very rough 2.5 m</text>`:'';
   const svgStr=`<svg id="waveSVGinner" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;overflow:visible;cursor:crosshair">
-    <defs><linearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#005FA3" stop-opacity="0.3"/><stop offset="100%" stop-color="#005FA3" stop-opacity="0.02"/></linearGradient></defs>
+    <defs><linearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#005FA3" stop-opacity="0.3"/><stop offset="100%" stop-color="#005FA3" stop-opacity="0.02"/></linearGradient><clipPath id="waveClip"><rect x="${ML}" y="${MT}" width="${cW}" height="${cH}"/></clipPath></defs>
     ${yticks}${xlabels}${nowMark}${roughMark}${vroughMark}
     <polygon points="${areaPts}" fill="url(#waveGrad)"/>
     <polyline points="${linePts}" fill="none" stroke="#005FA3" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
     <line id="waveXH" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#005FA3" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/>
-    <circle id="waveDot" cx="-100" cy="-100" r="4" fill="#005FA3" stroke="white" stroke-width="1.5"/>
+    <circle id="waveDot" cx="0" cy="0" r="4" fill="#005FA3" stroke="white" stroke-width="1.5" visibility="hidden" clip-path="url(#waveClip)"/>
   </svg>`;
   el.innerHTML=svgStr;
   // Hover tooltip + crosshair
@@ -1013,7 +1018,7 @@ function renderWaveChart(containerId, series, tz){
     const near=pts.reduce((a,b)=>Math.abs(b.t-t)<Math.abs(a.t-t)?b:a);
     const nearX=px(near.t).toFixed(1), nearY=py(near.h).toFixed(1);
     waveXH.setAttribute('x1',nearX);waveXH.setAttribute('x2',nearX);
-    waveDot.setAttribute('cx',nearX);waveDot.setAttribute('cy',nearY);
+    waveDot.setAttribute('cx',nearX);waveDot.setAttribute('cy',nearY);waveDot.setAttribute('visibility','visible');
     const lbl=new Date(near.t).toLocaleString('en-CA',{timeZone:tz,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
     tip.innerHTML=`<b>${near.h} m</b> · ${lbl}`;
     tip.style.display='block';
@@ -1021,7 +1026,7 @@ function renderWaveChart(containerId, series, tz){
     tip.style.left=tx+'px';
     tip.style.top=Math.max(0,e.clientY-rect.top-32)+'px';
   });
-  svgEl.addEventListener('mouseleave',()=>{tip.style.display='none';waveXH.setAttribute('x1','-2');waveXH.setAttribute('x2','-2');waveDot.setAttribute('cx','-100');waveDot.setAttribute('cy','-100');});
+  svgEl.addEventListener('mouseleave',()=>{tip.style.display='none';waveXH.setAttribute('x1','-2');waveXH.setAttribute('x2','-2');waveDot.setAttribute('visibility','hidden');});
 }
 
 // ── Forecast day click → detail panel ──
@@ -1147,13 +1152,20 @@ async function loadData(){
     document.getElementById('c-wind-sub').textContent=`${w.wind_dir_label||''} · Pressure ${w.pressure??'—'} hPa · Cloud ${w.cloudcover??'—'}%`;
     document.getElementById('c-wind-pill').innerHTML=`<span class="pill ${bfClass(w.wind_speed)}">${beaufort(w.wind_speed)}</span>`;
   }
-  if(tide?.current_m!=null){
-    document.getElementById('c-tide').innerHTML=`${sign(tide.current_m)}${tide.current_m}<span class="cc-unit"> m</span>`;
-    let sub=tide.trend?tide.trend[0].toUpperCase()+tide.trend.slice(1):'';
-    if(tide.next_high) sub+=` · High at ${fmtTime(tide.next_high.time_utc,tz)} (${sign(tide.next_high.m)}${tide.next_high.m} m)`;
-    document.getElementById('c-tide-sub').textContent=sub;
-    const trendCls=tide.trend==='rising'?'pill-good':tide.trend==='falling'?'pill-blue':'pill-blue';
-    document.getElementById('c-tide-pill').innerHTML=`<span class="pill ${trendCls}">${tide.trend||''}</span>`;
+  {
+    const _wlCur=twl?.topaz?.current_m??twl?.gdsps?.current_m;
+    if(_wlCur!=null){
+      document.getElementById('c-tide').innerHTML=`${sign(_wlCur)}${parseFloat(_wlCur).toFixed(2)}<span class="cc-unit"> m</span>`;
+      document.getElementById('c-tide-sub').textContent=(twl?.topaz?'TOPAZ6':'GDSPS')+' · above yearly mean';
+      document.getElementById('c-tide-pill').innerHTML='';
+    } else if(tide?.current_m!=null){
+      document.getElementById('c-tide').innerHTML=`${sign(tide.current_m)}${tide.current_m}<span class="cc-unit"> m</span>`;
+      let sub=tide.trend?tide.trend[0].toUpperCase()+tide.trend.slice(1):'';
+      if(tide.next_high) sub+=` · High at ${fmtTime(tide.next_high.time_utc,tz)} (${sign(tide.next_high.m)}${tide.next_high.m} m)`;
+      document.getElementById('c-tide-sub').textContent=sub;
+      const trendCls=tide.trend==='rising'?'pill-good':tide.trend==='falling'?'pill-blue':'pill-blue';
+      document.getElementById('c-tide-pill').innerHTML=`<span class="pill ${trendCls}">${tide.trend||''}</span>`;
+    }
   }
 
   // Forecast strip
@@ -1195,6 +1207,7 @@ async function loadData(){
 
   // Wave chart
   renderWaveChart('waveChartEl', d.wave, tz);
+  if(d.wave?.length){const _wNow=Date.now();const _wPt=d.wave.reduce((a,b)=>Math.abs(new Date(b.t)-_wNow)<Math.abs(new Date(a.t)-_wNow)?b:a);if(_wPt?.h!=null)document.getElementById('cv-wave').textContent=parseFloat(_wPt.h).toFixed(1);}
 
   // Total water level — dual TOPAZ6+GDSPS curves (or IWLS tide fallback)
   renderWaterLevel('tideSVG', twl?.topaz||null, twl?.gdsps||null, tide);

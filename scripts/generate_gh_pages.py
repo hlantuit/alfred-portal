@@ -467,15 +467,11 @@ def fetch_gdsps_water_level(lat, lon, now_utc, site_label, yearly_mean=None):
             raise ValueError(f"No GDSPS data for {site_label}")
 
         times_out = [p[0] for p in pairs]
-        vals_out  = [p[1] for p in pairs]
-
-        if yearly_mean is None:
-            yearly_mean = sum(vals_out) / len(vals_out)
-
-        anomaly = [round(v - yearly_mean, 4) for v in vals_out]
+        # GDSPS SSH is already referenced to Mean Water Level — return as-is, no mean correction.
+        vals_out  = [round(p[1], 4) for p in pairs]
         print(f"  GDSPS: {len(times_out)} steps for {site_label}")
         step = max(1, len(times_out) // 300)
-        return times_out[::step], anomaly[::step], yearly_mean
+        return times_out[::step], vals_out[::step], None
 
     except Exception as e:
         print(f"  GDSPS fetch failed for {site_label}: {e}")

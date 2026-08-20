@@ -741,7 +741,8 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback){
   if(fb.dL) curves+=`<path d="${fb.dL}" fill="none" stroke="${STEEL}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
 
   // Legend (only if both sources)
-  const legend=(t.dL&&g.dL)?`<text x="${ML+4}" y="${(MT+18).toFixed(1)}" text-anchor="start" font-size="16" fill="${TOPAZ_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ TOPAZ6</text><text x="${ML+4}" y="${(MT+38).toFixed(1)}" text-anchor="start" font-size="16" fill="${GDSPS_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ GDSPS</text>`:'';
+  const _legX=(ML+cW*0.38).toFixed(1);
+  const legend=(t.dL&&g.dL)?`<text x="${_legX}" y="${(MT+18).toFixed(1)}" text-anchor="start" font-size="16" fill="${TOPAZ_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ TOPAZ6</text><text x="${_legX}" y="${(MT+38).toFixed(1)}" text-anchor="start" font-size="16" fill="${GDSPS_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ GDSPS</text>`:'';
 
   // X date labels
   const primSeries=(topaz||gdsps||tide_fallback).series;

@@ -100,8 +100,9 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .fc-wrap{padding:14px 20px 0}
 .fc-scroll{}
 .fc-row{display:flex;flex-wrap:wrap;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;background:var(--surf)}
-.fc-cell{padding:10px 14px;text-align:center;border-right:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);min-width:86px;flex:1 1 20%;cursor:pointer;transition:background .1s;user-select:none}
+.fc-cell{padding:10px 14px;text-align:center;border-right:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);min-width:86px;flex:1 1 86px;cursor:pointer;transition:background .1s;user-select:none}
 .fc-cell:last-child{border-right:none}
+@media (max-width:650px){.fc-cell{flex-basis:20%;min-width:0}.fc-cell:nth-child(5n){border-right:none}}
 .fc-cell.today{background:var(--acc-l)}
 .fc-cell:hover{background:var(--surf2)}
 .fc-cell.today:hover{background:#d4e8f6}

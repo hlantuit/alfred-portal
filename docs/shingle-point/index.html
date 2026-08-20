@@ -168,7 +168,7 @@ svg.sp{width:100%;height:auto;display:block}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--fog-0:#152c2e;--fog-1:#1f5566;--fog-2:#2f8aa0;--fog-3:#7fe0e6}}
 :root[data-theme="dark"]{--fog-0:#152c2e;--fog-1:#1f5566;--fog-2:#2f8aa0;--fog-3:#7fe0e6}
 .ffw-scroll{overflow-x:auto;padding-bottom:4px;margin:0 -14px;padding-left:14px;padding-right:14px}
-.ffw-days{display:flex;gap:0;min-width:max-content}
+.ffw-days{display:flex;gap:0;flex-wrap:wrap}
 .ffw-day{flex-shrink:0;padding-left:8px;border-left:1px solid var(--bdr2)}
 .ffw-day:first-child{border-left:none;padding-left:0}
 .ffw-day-label{font-size:11px;color:var(--txt2);margin-bottom:6px;white-space:nowrap}
@@ -423,8 +423,9 @@ svg.sp{width:100%;height:auto;display:block}
     <div class="ch">
       <div class="ch-hd">
         <div class="ch-title">Wave height — Open-Meteo GWAM · 8-day</div>
+        <div><span class="ch-val" id="cv-wave">—</span><span class="ch-unit"> m now</span></div>
       </div>
-      <div id="waveChartEl" style="position:relative"></div>
+      <div class="ch-area"><div id="waveChartEl" style="position:relative"></div></div>
     </div>
     <div class="ch">
       <div class="ch-title" style="margin-bottom:10px">Text forecast</div>
@@ -598,7 +599,7 @@ function sparkline(svgId, data, stroke, times){
   if(vals.length<2) return;
   const hasTimes=times&&times.length===data.length;
   const min=Math.min(...vals),max=Math.max(...vals),rng=max-min||1;
-  const W=800,H=100,ML=52,MR=6,MT=8,MB=hasTimes?28:8;
+  const W=800,H=160,ML=52,MR=6,MT=10,MB=hasTimes?32:10;
   const cW=W-ML-MR,cH=H-MT-MB;
   const px=i=>ML+(cW)*i/(vals.length-1);
   const py=v=>MT+cH*(1-(v-min)/rng);
@@ -608,9 +609,11 @@ function sparkline(svgId, data, stroke, times){
   const last=pts[pts.length-1];
   const niceV=v=>Number.isInteger(v)?v:Math.abs(v)<10?parseFloat(v.toFixed(1)):Math.round(v);
   const fmtV=v=>{const n=niceV(v);return (n>0&&min<0?'+':'')+n;};
-  const yLabels=`
-    <text x="${ML-5}" y="${(MT+6).toFixed(1)}" text-anchor="end" font-size="22" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${fmtV(max)}</text>
-    <text x="${ML-5}" y="${(MT+cH).toFixed(1)}" text-anchor="end" font-size="22" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${fmtV(min)}</text>`;
+  let spGrids='';
+  for(let gi=1;gi<=3;gi++){const gy=MT+cH*gi/4;const gv=max-(rng*gi/4);spGrids+=`<line x1="${ML}" y1="${gy.toFixed(1)}" x2="${ML+cW}" y2="${gy.toFixed(1)}" stroke="currentColor" stroke-width="1.5" opacity="0.25"/><text x="${(ML-5).toFixed(1)}" y="${(gy+5).toFixed(1)}" text-anchor="end" font-size="16" fill="currentColor" opacity="0.65" font-family="system-ui,sans-serif">${fmtV(gv)}</text>`;}
+  const yLabels=`${spGrids}
+    <text x="${ML-5}" y="${(MT+8).toFixed(1)}" text-anchor="end" font-size="22" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${fmtV(max)}</text>
+    <text x="${ML-5}" y="${(MT+cH+2).toFixed(1)}" text-anchor="end" font-size="22" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${fmtV(min)}</text>`;
   const spXhId=`spxh_${svgId}`,spDotId=`spdot_${svgId}`;
   function genSpXlabels(cPx){
     if(!hasTimes) return '';
@@ -625,7 +628,7 @@ function sparkline(svgId, data, stroke, times){
     return xl;
   }
   function renderSpInner(cPx){
-    svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.18"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.01"/></linearGradient></defs>${yLabels}${genSpXlabels(cPx)}<path d="${dF}" fill="url(#g${svgId})"/><path d="${dL}" fill="none" stroke="${stroke}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4" fill="${stroke}" stroke="white" stroke-width="1.5"/><line id="${spXhId}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="${stroke}" stroke-width="1" stroke-dasharray="3,2" opacity="0.45"/><circle id="${spDotId}" cx="-100" cy="-100" r="4" fill="${stroke}" stroke="white" stroke-width="1.5"/>`;
+    svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.18"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.01"/></linearGradient><clipPath id="spclip_${svgId}"><rect x="${ML}" y="${MT}" width="${cW}" height="${cH}"/></clipPath></defs>${yLabels}${genSpXlabels(cPx)}<path d="${dF}" fill="url(#g${svgId})"/><path d="${dL}" fill="none" stroke="${stroke}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4" fill="${stroke}" stroke="white" stroke-width="1.5"/><line id="${spXhId}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="${stroke}" stroke-width="1" stroke-dasharray="3,2" opacity="0.45"/><circle id="${spDotId}" cx="0" cy="0" r="4" fill="${stroke}" stroke="white" stroke-width="1.5" visibility="hidden" clip-path="url(#spclip_${svgId})"/>`;
   }
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   svg.setAttribute('preserveAspectRatio','none');
@@ -645,7 +648,7 @@ function sparkline(svgId, data, stroke, times){
     const v=vals[idx]; if(v==null) return;
     const cx2=px(idx),cy2=py(v);
     spXh.setAttribute('x1',cx2.toFixed(1));spXh.setAttribute('x2',cx2.toFixed(1));
-    spDot.setAttribute('cx',cx2.toFixed(1));spDot.setAttribute('cy',cy2.toFixed(1));
+    spDot.setAttribute('cx',cx2.toFixed(1));spDot.setAttribute('cy',cy2.toFixed(1));spDot.setAttribute('visibility','visible');
     let tipTxt=`<b>${v.toFixed(2)} m</b>`;
     if(hasTimes&&times[idx]){const dt=new Date(times[idx]);tipTxt+=` <span style="color:var(--muted);font-size:10px">${dt.toLocaleString('en-CA',{timeZone:'UTC',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})}</span>`;}
     spTip.innerHTML=tipTxt;
@@ -653,7 +656,7 @@ function sparkline(svgId, data, stroke, times){
     spTip.style.left=Math.min(e.clientX-rect.left+10,rect.width-180)+'px';
     spTip.style.top=Math.max(0,e.clientY-rect.top-34)+'px';
   });
-  svg.addEventListener('mouseleave',()=>{spTip.style.display='none';spXh.setAttribute('x1','-2');spXh.setAttribute('x2','-2');spDot.setAttribute('cx','-100');spDot.setAttribute('cy','-100');});
+  svg.addEventListener('mouseleave',()=>{spTip.style.display='none';spXh.setAttribute('x1','-2');spXh.setAttribute('x2','-2');spDot.setAttribute('visibility','hidden');});
 }
 
 // ── Dual-curve water level sparkline (TOPAZ + GDSPS) ──
@@ -693,9 +696,11 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback){
     ? `<line x1="${ML}" y1="${y0.toFixed(1)}" x2="${ML+cW}" y2="${y0.toFixed(1)}" stroke="currentColor" stroke-width="0.8" stroke-dasharray="4,3" opacity="0.25"/>`
     : '';
 
-  // Y labels
-  const fmtY=v=>(v>0?'+':'')+v.toFixed(2);
-  const yLabels=`
+  // Y labels + gridlines
+  const fmtY=v=>(v>0?'+':'')+v.toFixed(1);
+  let wlGrids='';
+  for(let gi=1;gi<=3;gi++){const gy=MT+cH*gi/4;const gv=maxV-(span*gi/4);wlGrids+=`<line x1="${ML}" y1="${gy.toFixed(1)}" x2="${ML+cW}" y2="${gy.toFixed(1)}" stroke="currentColor" stroke-width="1.5" opacity="0.25"/><text x="${(ML-5).toFixed(1)}" y="${(gy+5).toFixed(1)}" text-anchor="end" font-size="16" fill="currentColor" opacity="0.65" font-family="system-ui,sans-serif">${fmtY(gv)}</text>`;}
+  const yLabels=`${wlGrids}
     <text x="${ML-5}" y="${(MT+10).toFixed(1)}" text-anchor="end" font-size="19" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${fmtY(maxV)}</text>
     <text x="${ML-5}" y="${(MT+cH).toFixed(1)}" text-anchor="end" font-size="19" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${fmtY(minV)}</text>`;
 
@@ -712,7 +717,7 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback){
   if(fb.dL) curves+=`<path d="${fb.dL}" fill="none" stroke="${STEEL}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
 
   // Legend (only if both sources)
-  const legend=(t.dL&&g.dL)?`<text x="${ML+cW-4}" y="${(MT+12).toFixed(1)}" text-anchor="end" font-size="16" fill="${TOPAZ_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ TOPAZ6</text><text x="${ML+cW-4}" y="${(MT+24).toFixed(1)}" text-anchor="end" font-size="16" fill="${GDSPS_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ GDSPS</text>`:'';
+  const legend=(t.dL&&g.dL)?`<text x="${ML+4}" y="${(MT+18).toFixed(1)}" text-anchor="start" font-size="16" fill="${TOPAZ_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ TOPAZ6</text><text x="${ML+4}" y="${(MT+38).toFixed(1)}" text-anchor="start" font-size="16" fill="${GDSPS_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ GDSPS</text>`:'';
 
   // X date labels
   const primSeries=(topaz||gdsps||tide_fallback).series;
@@ -721,7 +726,7 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback){
   const xhId=`wlxh_${svgId}`,wlDotId=`wldot_${svgId}`;
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   svg.style.cssText='width:100%;display:block;cursor:crosshair;overflow:visible';
-  svg.innerHTML=`${yLabels}${refLine}${curves}${legend}${xlabels}<line id="${xhId}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#3B2A8C" stroke-width="1" stroke-dasharray="3,2" opacity="0.4"/><circle id="${wlDotId}" cx="0" cy="0" r="4" fill="${TOPAZ_COLOR}" stroke="white" stroke-width="1.5" visibility="hidden"/>`;
+  svg.innerHTML=`<defs><clipPath id="wlclip_${svgId}"><rect x="${ML}" y="${MT}" width="${cW}" height="${cH}"/></clipPath></defs>${yLabels}${refLine}${curves}${legend}${xlabels}<line id="${xhId}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#3B2A8C" stroke-width="1" stroke-dasharray="3,2" opacity="0.4"/><circle id="${wlDotId}" cx="0" cy="0" r="4" fill="${TOPAZ_COLOR}" stroke="white" stroke-width="1.5" visibility="hidden" clip-path="url(#wlclip_${svgId})"/>`;
   svg.parentElement.style.position='relative';
   const tip2=Object.assign(document.createElement('div'),{});
   tip2.style.cssText='position:absolute;background:var(--surf);border:1px solid var(--bdr2);border-radius:5px;padding:4px 10px;font-size:11px;pointer-events:none;display:none;z-index:10;white-space:nowrap;color:var(--txt);box-shadow:0 2px 6px rgba(0,0,0,.1)';
@@ -958,8 +963,8 @@ function renderPrecipChart(containerId, rain, snow, times, tz){
   }
   el.innerHTML=`<svg id="psvg_${uid}" viewBox="0 0 ${W} ${H}" style="width:100%;display:block;overflow:visible;cursor:crosshair">
     ${yticks}${xlabels}${bars}
-    <text x="${ML+cW-4}" y="${(MT+12).toFixed(1)}" text-anchor="end" font-size="16" fill="#005FA3" opacity="0.75" font-family="system-ui,sans-serif">■ rain</text>
-    <text x="${ML+cW-4}" y="${(MT+24).toFixed(1)}" text-anchor="end" font-size="16" fill="#A8D4F5" opacity="0.95" font-family="system-ui,sans-serif">■ snow</text>
+    <text x="${ML+4}" y="${(MT+18).toFixed(1)}" text-anchor="start" font-size="16" fill="#005FA3" opacity="0.75" font-family="system-ui,sans-serif">■ rain</text>
+    <text x="${ML+4}" y="${(MT+38).toFixed(1)}" text-anchor="start" font-size="16" fill="#A8D4F5" opacity="0.95" font-family="system-ui,sans-serif">■ snow</text>
     <line id="pxh_${uid}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#6B8499" stroke-width="1" stroke-dasharray="3,2" opacity="0.45"/>
   </svg>`;
   el.style.position='relative';
@@ -1025,10 +1030,10 @@ function renderWaveChart(containerId, series, tz){
   // "now" marker
   const nowX=Math.max(ML,Math.min(ML+cW,px(now)));
   // "now" label offset right of line to avoid overlap
-  const nowMark=(now>=tMin&&now<=tMax)?`<line x1="${nowX.toFixed(1)}" y1="${MT}" x2="${nowX.toFixed(1)}" y2="${(MT+cH).toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/><text x="${(nowX+6).toFixed(1)}" y="${(MT+20).toFixed(1)}" text-anchor="start" font-size="18" fill="#C0392B" font-weight="700" font-family="system-ui,sans-serif">now</text>`:'';
+  const nowMark=(now>=tMin&&now<=tMax)?`<line x1="${nowX.toFixed(1)}" y1="${MT}" x2="${nowX.toFixed(1)}" y2="${(MT+cH).toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/><text x="${(nowX+6).toFixed(1)}" y="${(MT+22).toFixed(1)}" text-anchor="start" font-size="20" fill="#C0392B" font-weight="700" font-family="system-ui,sans-serif">now</text>`:'';
   // Threshold labels: right-aligned inside chart, below each line
-  const roughMark=ROUGH<maxH?`<line x1="${ML}" y1="${py(ROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(ROUGH).toFixed(1)}" stroke="#B86F00" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW-6).toFixed(1)}" y="${(py(ROUGH)+15).toFixed(1)}" text-anchor="end" font-size="17" fill="#B86F00" opacity="0.85" font-family="system-ui,sans-serif">rough 1.25 m</text>`:'';
-  const vroughMark=VROUGH<maxH?`<line x1="${ML}" y1="${py(VROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(VROUGH).toFixed(1)}" stroke="#C0392B" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW-6).toFixed(1)}" y="${(py(VROUGH)+15).toFixed(1)}" text-anchor="end" font-size="17" fill="#C0392B" opacity="0.85" font-family="system-ui,sans-serif">very rough 2.5 m</text>`:'';
+  const roughMark=ROUGH<maxH?`<line x1="${ML}" y1="${py(ROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(ROUGH).toFixed(1)}" stroke="#B86F00" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW-6).toFixed(1)}" y="${(py(ROUGH)+15).toFixed(1)}" text-anchor="end" font-size="19" fill="#B86F00" opacity="0.85" font-family="system-ui,sans-serif">rough 1.25 m</text>`:'';
+  const vroughMark=VROUGH<maxH?`<line x1="${ML}" y1="${py(VROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(VROUGH).toFixed(1)}" stroke="#C0392B" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW-6).toFixed(1)}" y="${(py(VROUGH)+15).toFixed(1)}" text-anchor="end" font-size="19" fill="#C0392B" opacity="0.85" font-family="system-ui,sans-serif">very rough 2.5 m</text>`:'';
   const svgStr=`<svg id="waveSVGinner" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;overflow:visible;cursor:crosshair">
     <defs><linearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#005FA3" stop-opacity="0.3"/><stop offset="100%" stop-color="#005FA3" stop-opacity="0.02"/></linearGradient></defs>
     ${yticks}${xlabels}${nowMark}${roughMark}${vroughMark}
@@ -1234,11 +1239,12 @@ async function loadData(){
 
   // Wave chart
   renderWaveChart('waveChartEl', d.wave, tz);
+  if(d.wave?.length){const _wNow=Date.now();const _wPt=d.wave.reduce((a,b)=>Math.abs(new Date(b.t)-_wNow)<Math.abs(new Date(a.t)-_wNow)?b:a);if(_wPt?.h!=null)document.getElementById('cv-wave').textContent=parseFloat(_wPt.h).toFixed(1);}
 
   // Total water level — dual TOPAZ6+GDSPS curves (or IWLS tide fallback)
   renderWaterLevel('tideSVG', twl?.topaz||null, twl?.gdsps||null, tide);
-  const wlCur = twl?.topaz?.current_m ?? twl?.gdsps?.current_m ?? tide?.current_m;
-  if(wlCur!=null) document.getElementById('cv-tide').textContent=(wlCur>0?'+':'')+parseFloat(wlCur).toFixed(3);
+  const wlCur = twl?.topaz?.current_m ?? twl?.gdsps?.current_m;
+  if(wlCur!=null) document.getElementById('cv-tide').textContent=(wlCur>0?'+':'')+parseFloat(wlCur).toFixed(2);
   {
     const src = twl ? 'TOPAZ6 · GDSPS (MSC/ECCC) · tide + surge · anomaly vs. yearly mean' : (tide ? 'DFO IWLS tide prediction · 7-day' : null);
     const ch = document.querySelector('#twl-title')?.closest('.ch');
@@ -1285,19 +1291,30 @@ loadData();
 
 // ── Chart full-screen expand ──
 function expandChart(ch){
-  const svg=ch.querySelector('svg');
+  const area=ch.querySelector('.ch-area');
+  if(!area) return;
+  const svg=area.querySelector('svg');
   if(!svg) return;
-  const clone=svg.cloneNode(true);
-  clone.style.cssText='width:100%;height:auto;display:block;max-height:72vh';
-  clone.querySelectorAll('[id]').forEach(e=>e.removeAttribute('id'));
+  const origAreaStyle=area.getAttribute('style')||'';
+  const origSvgStyle=svg.getAttribute('style')||'';
+  const origParent=area.parentElement, origNext=area.nextSibling;
+  svg.style.maxHeight='72vh';
   const overlay=document.createElement('div');
   overlay.className='ch-exp-overlay';
   const title=ch.querySelector('.ch-title');
   if(title){const t=document.createElement('div');t.className='ch-exp-title';t.textContent=title.textContent;overlay.appendChild(t);}
-  overlay.appendChild(clone);
+  overlay.appendChild(area);
   const hint=document.createElement('div');hint.className='ch-exp-hint';hint.textContent='Tap anywhere to close';overlay.appendChild(hint);
-  overlay.onclick=()=>overlay.remove();
-  document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){overlay.remove();document.removeEventListener('keydown',esc);}});
+  function closeOverlay(){
+    area.setAttribute('style',origAreaStyle);
+    svg.setAttribute('style',origSvgStyle);
+    origParent.insertBefore(area,origNext);
+    overlay.remove();
+    document.removeEventListener('keydown',esc);
+  }
+  overlay.onclick=e=>{if(e.target===overlay||e.target===hint)closeOverlay();};
+  function esc(e){if(e.key==='Escape')closeOverlay();}
+  document.addEventListener('keydown',esc);
   document.body.appendChild(overlay);
 }
 function initExpandButtons(){

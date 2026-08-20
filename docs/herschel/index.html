@@ -384,6 +384,14 @@ svg.sp{width:100%;height:100%;display:block}
       <div class="ch-area"><svg class="sp" id="tideSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
       <div style="font-size:10px;color:var(--muted);margin-top:6px">DFO IWLS tide prediction · 7-day</div>
     </div>
+    <div class="ch">
+      <div class="ch-hd">
+        <div class="ch-title">Tide prediction</div>
+        <div><span class="ch-val" id="cv-tide-sp">—</span><span class="ch-unit"> m</span></div>
+      </div>
+      <div class="ch-area"><svg class="sp" id="tideSparklSVG" viewBox="0 0 800 100" preserveAspectRatio="none"></svg></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px">DFO IWLS · Herschel Island station 06525</div>
+    </div>
   </div>
 
   <!-- Sea ice + SAR imagery — 3-column on wide screens, stacked on mobile -->
@@ -1091,6 +1099,12 @@ async function loadData(){
     const src = twl ? 'TOPAZ6 · GDSPS (MSC/ECCC) · tide + surge · anomaly vs. yearly mean' : (tide ? 'DFO IWLS tide prediction · 7-day' : null);
     const ch = document.querySelector('#twl-title')?.closest('.ch');
     if(ch && src) ch.lastElementChild.textContent = src;
+  }
+
+  // Tide sparkline (standalone — shows predicted tide curve)
+  if(tide?.series?.length){
+    sparkline('tideSparklSVG', tide.series.map(p=>p.m), STEEL, tide.series.map(p=>p.t));
+    if(tide.current_m!=null) document.getElementById('cv-tide-sp').textContent=(tide.current_m>0?'+':'')+tide.current_m;
   }
 
   // River sparkline

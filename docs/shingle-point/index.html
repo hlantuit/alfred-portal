@@ -69,11 +69,10 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .alert-banner.show{display:block}
 
 /* ── Satellite ── */
-.sat-wrap{position:relative;background:#0A1520;line-height:0;overflow:hidden}
-/* MODIS banner: pre-cropped to 4:1 server-side — display at natural ratio, no browser cropping */
-.sat-wrap img{width:100%;height:auto;display:block;cursor:zoom-in;transition:opacity .3s;background:#0A1520}
+.sat-wrap{position:relative;background:#0A1520;line-height:0;overflow:hidden;height:clamp(160px,22vw,320px)}
+.sat-wrap img{width:100%;height:100%;object-fit:cover;object-position:58% 45%;display:block;cursor:zoom-in;transition:opacity .3s;background:#0A1520}
 .sat-wrap img.hidden{display:none}
-.sat-no-img{height:180px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.35);font-size:13px}
+.sat-no-img{height:100%;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.35);font-size:13px}
 .sat-bar{background:#0d1c2b;padding:6px 14px 8px;line-height:1.4}
 .sat-info .sat-label{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.5)}
 .sat-info .sat-title{font-size:13px;font-weight:700;color:#fff;margin-top:1px}
@@ -264,9 +263,10 @@ svg.sp{width:100%;height:100%;display:block}
       <!-- MODIS banner: pre-cropped to 4:1, displays at natural ratio on all screens -->
       <div class="sat-no-img" id="satPlaceholder">Loading imagery…</div>
       <img id="satImg" src="img/modis_banner.jpg" alt="MODIS satellite"
-           onclick="openLb(this)"
+           onclick="openLb(document.getElementById('modisZoomImg'))"
            onload="this.classList.remove('hidden');document.getElementById('satPlaceholder').style.display='none'"
            onerror="this.src='img/modis.png'">
+      <img id="modisZoomImg" src="img/modis.png" alt="MODIS 150km" style="display:none">
       <div class="sat-bar">
         <div class="sat-info">
           <div class="sat-label">MODIS Terra · True colour</div>

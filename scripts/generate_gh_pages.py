@@ -1088,7 +1088,27 @@ def main():
                                         _draw_lbl.text((_cx+12,_cy-14),_lbl,font=_font_pt,fill=(255,255,255))
                             except Exception as _le:
                                 print(f"  VIIRS place labels failed: {_le}")
-                        cropped = _annotate_img(cropped, d.strftime("%Y-%m-%d"), _mpp)
+                        # Try to get exact acquisition time from NASA CMR
+                        _viirs_date_str = d.strftime("%Y-%m-%d")
+                        try:
+                            _cmr_short = "VJ109GA" if "NOAA20" in layer else "VNP09GA"
+                            _cmr_r = requests.get(
+                                "https://cmr.earthdata.nasa.gov/search/granules.json",
+                                params={
+                                    "short_name": _cmr_short,
+                                    "temporal": f"{d.strftime('%Y-%m-%d')}T00:00:00Z,{d.strftime('%Y-%m-%d')}T23:59:59Z",
+                                    "bounding_box": f"{cfg.get('lon', -140)-5},{cfg.get('lat', 69)-3},{cfg.get('lon', -140)+5},{cfg.get('lat', 69)+3}",
+                                    "page_size": "3",
+                                },
+                                timeout=10,
+                            )
+                            _cmr_entries = _cmr_r.json().get("feed", {}).get("entry", [])
+                            if _cmr_entries:
+                                _viirs_date_str = _cmr_entries[0].get("time_start", _viirs_date_str)
+                                print(f"  VIIRS CMR time: {_viirs_date_str}")
+                        except Exception as _cmre:
+                            print(f"  VIIRS CMR lookup failed: {_cmre}")
+                        cropped = _annotate_img(cropped, _viirs_date_str, _mpp)
                         buf = _io.BytesIO()
                         cropped.save(buf, "PNG", optimize=True)
                         out_path.write_bytes(buf.getvalue())

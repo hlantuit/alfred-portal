@@ -1297,11 +1297,14 @@ async function renderWindRose(lat, lon, tz) {
     });
     const maxCnt=Math.max(...bins.map(b=>b.cnt));
     const W=el.offsetWidth||700, H=220;
-    const tML=20,tMR=58,tMT=24,tMB=30,tW=W-tML-tMR,tH=H-tMT-tMB,vecCy=tMT+tH/2;
-    const maxSpd=Math.max(...daily.map(d=>d.spd),1), arrowScale=(tH/2-4)/maxSpd;
-    let arrows='',xLbls='';
+    const tML=20,tMR=72,tMT=24,tMB=30,tW=W-tML-tMR,tH=H-tMT-tMB,vecCy=tMT+tH/2;
+    const slotW=tW/daily.length;
+    const maxSpd=Math.max(...daily.map(d=>d.spd),1), arrowScale=(tH/2-6)/maxSpd;
+    const dirs8=['N','NE','E','SE','S','SW','W','NW'];
+    let dayLines='',arrows='',xLbls='',hits='';
     daily.forEach((d,i)=>{
-      const x=tML+(i+0.5)*(tW/daily.length);
+      const x=tML+(i+0.5)*slotW;
+      dayLines+=`<line x1="${x.toFixed(1)}" y1="${tMT}" x2="${x.toFixed(1)}" y2="${(tMT+tH).toFixed(1)}" stroke="var(--border)" stroke-width="0.5"/>`;
       const rad=(d.dir-180)*Math.PI/180, len=d.spd*arrowScale;
       const dx=len*Math.sin(rad), dy=-len*Math.cos(rad);
       const x2=x+dx, y2=vecCy+dy, col=spColor(d.spd);
@@ -1310,18 +1313,36 @@ async function renderWindRose(lat, lon, tz) {
         arrows+=`<polygon points="${x2.toFixed(1)},${y2.toFixed(1)} ${(bx2+px*hw).toFixed(1)},${(by2+py*hw).toFixed(1)} ${(bx2-px*hw).toFixed(1)},${(by2-py*hw).toFixed(1)}" fill="${col}"/>`;}
       if(i%5===0||i===daily.length-1){const dt=new Date(d.date+'T12:00:00Z');
         xLbls+=`<text x="${x.toFixed(1)}" y="${(tMT+tH+16).toFixed(1)}" text-anchor="middle" font-size="13" fill="var(--muted)">${dt.toLocaleDateString('en-CA',{month:'short',day:'numeric'})}</text>`;}
+      const d8=dirs8[Math.round(d.dir/45)%8];
+      hits+=`<rect class="wv-hit" x="${(x-slotW/2).toFixed(1)}" y="${tMT}" width="${slotW.toFixed(1)}" height="${tH}" fill="transparent" data-date="${d.date}" data-spd="${d.spd.toFixed(1)}" data-dir="${Math.round(d.dir)}" data-dirs="${d8}"/>`;
     });
-    const cbX=tML+tW+2,cbY=tMT,cbH=tH,cbW=6,maxLbl=Math.ceil(maxSpd/10)*10;
+    const cbX=tML+tW+14,cbY=tMT,cbH=tH,cbW=6,maxLbl=Math.ceil(maxSpd/10)*10;
     let cbar=`<defs><linearGradient id="cbgSP" x1="0" y1="0" x2="0" y2="1">`;
     [['#2DD4BF'],['#A3C44C'],['#F0A830'],['#E04020'],['#8B1DBF']].forEach(([c],i,a)=>{cbar+=`<stop offset="${(i/(a.length-1)*100).toFixed(0)}%" stop-color="${c}"/>`;});
     cbar+=`</linearGradient></defs><rect x="${cbX}" y="${cbY}" width="${cbW}" height="${cbH}" fill="url(#cbgSP)" rx="2"/>`;
     [0,maxLbl/2,maxLbl].forEach(v=>{const ly=cbY+cbH-(v/maxLbl)*cbH;cbar+=`<text x="${cbX+cbW+4}" y="${(ly+4).toFixed(1)}" font-size="13" fill="var(--muted)">${Math.round(v)}</text>`;});
     cbar+=`<text x="${cbX+cbW/2}" y="${cbY-4}" text-anchor="middle" font-size="13" fill="var(--muted)">km/h</text>`;
-    const cline=`<line x1="${tML}" y1="${vecCy.toFixed(1)}" x2="${(tML+tW).toFixed(1)}" y2="${vecCy.toFixed(1)}" stroke="var(--border)" stroke-width="0.8"/>`;
+    const cline=`<line x1="${tML}" y1="${vecCy.toFixed(1)}" x2="${(tML+tW).toFixed(1)}" y2="${vecCy.toFixed(1)}" stroke="var(--muted)" stroke-width="0.8" opacity="0.4"/>`;
+    const wuid='wtipSP'+Math.random().toString(36).slice(2,6);
+    const wtip=`<g id="${wuid}" style="display:none;pointer-events:none"><rect id="${wuid}bg" rx="3" fill="rgba(0,0,0,0.82)"/><text id="${wuid}tx" font-size="13" fill="white"/></g>`;
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
     svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.style.cssText='width:100%;display:block';
-    svg.innerHTML=`${cbar}${cline}${arrows}${xLbls}`;
+    svg.innerHTML=`${cbar}${dayLines}${cline}${arrows}${xLbls}${hits}${wtip}`;
     el.innerHTML=''; el.appendChild(svg);
+    svg.querySelectorAll('.wv-hit').forEach(r=>{
+      r.addEventListener('mouseenter',()=>{
+        const dt=new Date(r.dataset.date+'T12:00:00Z');
+        const lbl=dt.toLocaleDateString('en-CA',{month:'short',day:'numeric'})+` · ${r.dataset.spd} km/h ${r.dataset.dirs} (${r.dataset.dir}°)`;
+        const tipG=svg.querySelector('#'+wuid),bg=svg.querySelector('#'+wuid+'bg'),tx=svg.querySelector('#'+wuid+'tx');
+        if(!tipG) return;
+        tx.textContent=lbl; tipG.style.display='';
+        const tw=lbl.length*7+16, rx2=parseFloat(r.getAttribute('x'))+parseFloat(r.getAttribute('width'))/2;
+        const bx2=Math.max(4,Math.min(rx2-tw/2,W-tw-4));
+        bg.setAttribute('x',bx2); bg.setAttribute('y',tMT-22); bg.setAttribute('width',tw); bg.setAttribute('height',20);
+        tx.setAttribute('x',bx2+8); tx.setAttribute('y',tMT-7);
+      });
+      r.addEventListener('mouseleave',()=>{const g=svg.querySelector('#'+wuid);if(g)g.style.display='none';});
+    });
     initExpandButtons();
   } catch(err){el.innerHTML=`<div style="padding:14px;color:var(--muted);font-size:13px">Wind data unavailable — ${err.message}</div>`;}
 }
@@ -1379,12 +1400,12 @@ async function renderRiverTrajectory(stationId, riverLabel) {
         const csv = await dmRes.text();
         csv.split('\n').forEach(line => {
           const cols = line.split(',');
-          if (cols.length < 2) return;
+          if (cols.length < 3) return;
           const dt = cols[1]?.trim().slice(0, 10);
           if (!dt || !dt.startsWith(String(curYear))) return;
-          // col 2 = water level (m), col 7 = discharge (cms)
+          // col index 2 = water level (m), col index 6 = discharge (cms)
           const lvl = parseFloat(cols[2]);
-          const dis = parseFloat(cols[7]);
+          const dis = parseFloat(cols[6]);
           const val = isNaN(lvl) ? (isNaN(dis) ? null : dis) : lvl;
           if (val == null) return;
           curPts.push({ doy: doy(dt), val });
@@ -1459,10 +1480,10 @@ async function renderRiverTrajectory(stationId, riverLabel) {
     const leg =
       `<rect x="${ML}" y="${MT-16}" width="10" height="4" fill="var(--muted)" opacity="0.4"/>` +
       `<text x="${ML+14}" y="${MT-12}" font-size="13" fill="var(--muted)">p10–p90 (${histStart}–${histEnd})</text>` +
-      `<line x1="${ML+140}" y1="${MT-14}" x2="${ML+154}" y2="${MT-14}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4,2" opacity="0.6"/>` +
-      `<text x="${ML+158}" y="${MT-10}" font-size="13" fill="var(--muted)">median</text>` +
-      `<line x1="${ML+218}" y1="${MT-14}" x2="${ML+232}" y2="${MT-14}" stroke="#2E8B57" stroke-width="2.5"/>` +
-      `<text x="${ML+236}" y="${MT-10}" font-size="13" fill="#2E8B57">${curYear}</text>`;
+      `<line x1="${ML+180}" y1="${MT-14}" x2="${ML+196}" y2="${MT-14}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4,2" opacity="0.6"/>` +
+      `<text x="${ML+200}" y="${MT-10}" font-size="13" fill="var(--muted)">median</text>` +
+      `<line x1="${ML+264}" y1="${MT-14}" x2="${ML+280}" y2="${MT-14}" stroke="#2E8B57" stroke-width="2.5"/>` +
+      `<text x="${ML+284}" y="${MT-10}" font-size="13" fill="#2E8B57">${curYear}</text>`;
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);

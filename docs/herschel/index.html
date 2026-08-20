@@ -135,6 +135,10 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .ch-area{min-height:64px;height:auto;position:relative;overflow:visible}
 svg.sp{width:100%;height:auto;display:block}
 
+/* ── Image card expand button ── */
+.img-card{position:relative}
+.img-card-exp{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.45);border:none;color:#fff;border-radius:4px;font-size:14px;padding:3px 7px;cursor:pointer;opacity:0.65;z-index:2;line-height:1;backdrop-filter:blur(4px)}
+.img-card-exp:hover{opacity:1}
 /* ── Chart expand button ── */
 .ch-exp{background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:0;margin-left:8px;opacity:0.4;line-height:1;flex-shrink:0;transition:opacity .15s;display:inline-flex;align-items:center}
 .ch-exp:hover{opacity:0.9}
@@ -1268,7 +1272,19 @@ function initExpandButtons(){
     btn.onclick=e=>{e.stopPropagation();expandChart(ch);};
     hd.appendChild(btn);
   });
+  document.querySelectorAll('.img-card').forEach(card=>{
+    if(card.querySelector('.img-card-exp')) return;
+    const img=card.querySelector('img');
+    if(!img) return;
+    const btn=document.createElement('button');
+    btn.className='img-card-exp';btn.title='Expand image';btn.textContent='⤢';
+    btn.onclick=e=>{e.stopPropagation();openLb(img);};
+    card.appendChild(btn);
+  });
 }
+
+// Expand buttons for static img-cards (climate section etc.) — run immediately
+document.addEventListener('DOMContentLoaded', ()=>initExpandButtons());
 
 // Register service worker for PWA / offline shell
 if ('serviceWorker' in navigator) {

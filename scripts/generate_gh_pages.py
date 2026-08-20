@@ -822,9 +822,19 @@ def main():
                             r_dot = 7
                             draw.ellipse([px_x-r_dot, px_y-r_dot, px_x+r_dot, px_y+r_dot],
                                          fill=(220, 60, 60), outline="white", width=2)
-                            # Label with shadow
-                            lx, ly = px_x + 12, px_y - 14
-                            draw.text((lx+1, ly+1), pt_label, font=font_sm, fill=(0,0,0,180))
+                            # Label with dark background pill for readability against clouds
+                            lx, ly = px_x + 12, px_y - 16
+                            try:
+                                tb = draw.textbbox((lx, ly), pt_label, font=font_sm)
+                                pad = 4
+                                overlay = _Img.new("RGBA", img.size, (0,0,0,0))
+                                _Draw.Draw(overlay).rounded_rectangle(
+                                    [tb[0]-pad, tb[1]-pad, tb[2]+pad, tb[3]+pad],
+                                    radius=4, fill=(0,0,0,165))
+                                img = _Img.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+                                draw = _Draw.Draw(img)
+                            except Exception:
+                                pass
                             draw.text((lx, ly), pt_label, font=font_sm, fill=(255,255,255))
 
                         buf = _io.BytesIO()

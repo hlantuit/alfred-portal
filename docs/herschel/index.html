@@ -1296,40 +1296,11 @@ async function renderWindRose(lat, lon, tz) {
 
     // Layout
     const W = el.offsetWidth || 700;
-    const roseW = Math.min(200, W * 0.28);
-    const timeW = W - roseW - 16;
     const H = 220;
-    const cx = roseW / 2, cy = H / 2, rMax = roseW / 2 - 22;
-
-    // Rose SVG petals
-    let petals = '';
-    const cardinals = ['N','NE','E','SE','S','SW','W','NW'];
-    cardinals.forEach((lbl, i) => {
-      const a = i * 45 * Math.PI / 180;
-      const r = rMax + 14;
-      const lx = (cx + r * Math.sin(a)).toFixed(1);
-      const ly = (cy - r * Math.cos(a) + 4).toFixed(1);
-      petals += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="13" fill="var(--muted)" font-weight="${lbl==='N'?'700':'400'}">${lbl}</text>`;
-    });
-    // Rings
-    [0.25,0.5,0.75,1.0].forEach(f => {
-      petals += `<circle cx="${cx}" cy="${cy}" r="${(rMax*f).toFixed(1)}" fill="none" stroke="var(--border)" stroke-width="0.5"/>`;
-    });
-    bins.forEach((b, i) => {
-      if (!b.cnt) return;
-      const r = (b.cnt / maxCnt) * rMax;
-      const a1 = ((i - 0.5) * secDeg - 90) * Math.PI / 180;
-      const a2 = ((i + 0.5) * secDeg - 90) * Math.PI / 180;
-      const x1 = (cx + r * Math.cos(a1)).toFixed(1), y1 = (cy + r * Math.sin(a1)).toFixed(1);
-      const x2 = (cx + r * Math.cos(a2)).toFixed(1), y2 = (cy + r * Math.sin(a2)).toFixed(1);
-      const meanSpd = b.cnt ? b.spSum / b.cnt : 0;
-      petals += `<path d="M ${cx} ${cy} L ${x1} ${y1} A ${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 ${x2} ${y2} Z" fill="${spColor(meanSpd)}" opacity="0.85"/>`;
-    });
-    petals += `<circle cx="${cx}" cy="${cy}" r="3" fill="var(--muted)"/>`;
 
     // Vector timeline SVG
     const tML = 4, tMR = 40, tMT = 24, tMB = 30;
-    const tW = timeW - tML - tMR, tH = H - tMT - tMB;
+    const tW = W - tML - tMR, tH = H - tMT - tMB;
     const vecCy = tMT + tH / 2;
     const maxSpd = Math.max(...daily.map(d => d.spd), 1);
     const arrowScale = (tH / 2 - 4) / maxSpd;
@@ -1376,15 +1347,10 @@ async function renderWindRose(lat, lon, tz) {
     });
     cbar += `<text x="${cbX + cbW/2}" y="${cbY - 4}" text-anchor="middle" font-size="13" fill="var(--muted)">km/h</text>`;
 
-    // Combine into outer SVG with two panels
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.style.cssText = 'width:100%;display:block';
-    // Rose panel (left)
-    const roseG = `<g transform="translate(0,0)">${petals}</g>`;
-    // Vector timeline panel (right, translated)
-    const timeG = `<g transform="translate(${roseW + 8},0)">${cbar}${cline}${arrows}${xLbls}</g>`;
-    svg.innerHTML = roseG + timeG;
+    svg.innerHTML = `${cbar}${cline}${arrows}${xLbls}`;
     el.innerHTML = '';
     el.appendChild(svg);
   } catch (err) {
@@ -1433,7 +1399,9 @@ async function loadData(){
   document.getElementById('sb-temp').textContent=(w.temperature??'—')+'°';
   document.getElementById('sb-label').textContent=(WMO[wcode]||'')+(w.feels_like!=null?' · Feels '+w.feels_like+'°':'');
   if(w.wind_speed!=null) document.getElementById('sb-wind').innerHTML=`💨 <b>${w.wind_speed} km/h ${w.wind_dir_label||''}</b> · ${beaufort(w.wind_speed)}`;
-  if(tide?.current_m!=null) document.getElementById('sb-tide').innerHTML=`🌊 <b>${sign(tide.current_m)}${parseFloat(tide.current_m).toFixed(2)} m</b> · ${tide.trend||''}`;
+  {const _sbWl=twl?.topaz?.current_m??twl?.gdsps?.current_m;
+  if(_sbWl!=null) document.getElementById('sb-tide').innerHTML=`🌊 <b>${sign(_sbWl)}${parseFloat(_sbWl).toFixed(2)} m</b> · ${twl?.topaz?'TOPAZ6':'GDSPS'}`;
+  else if(tide?.current_m!=null) document.getElementById('sb-tide').innerHTML=`🌊 <b>${sign(tide.current_m)}${parseFloat(tide.current_m).toFixed(2)} m</b> · ${tide.trend||''}`; }
 
   // Alerts
   const alerts=(d.alerts?.weather||[]).filter(a=>/No watches/i.test(a)===false);

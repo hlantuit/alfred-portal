@@ -868,15 +868,19 @@ def main():
         draw = _Draw2.Draw(img)
         iw, ih = img.size
         try:
-            font_lg = _Font2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 38)
-            font_sm = _Font2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26)
+            font_lg = _Font2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+            font_sm = _Font2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
         except Exception:
             font_lg = font_sm = _Font2.load_default()
-        # Date label
+        # Date label (with time if a full ISO datetime is provided)
         if date_str:
             try:
-                d_obj = _dt2.date.fromisoformat(date_str)
-                label = d_obj.strftime("%-d %b %Y")
+                if 'T' in date_str:
+                    _dt_obj = _dt2.datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+                    label = _dt_obj.strftime("%-d %b %Y · %H:%M UTC")
+                else:
+                    d_obj = _dt2.date.fromisoformat(date_str)
+                    label = d_obj.strftime("%-d %b %Y")
             except Exception:
                 label = date_str
             pad = 6
@@ -987,11 +991,17 @@ def main():
                         sz = 1000
                         left, top = (w - sz) // 2, (h - sz) // 2
                         cropped = rotated.crop((left, top, left + sz, top + sz))
-                        # Skip dark / empty scenes
+                        # Skip dark / empty scenes and scenes that don't cover the site
                         from PIL import ImageStat as _IStat
                         _br = sum(_IStat.Stat(cropped).mean) / 3.0
                         if _br < 10.0:
                             print(f"  VIIRS {layer} day -{delta}: too dark ({_br:.1f}), skipping")
+                            continue
+                        # Check centre region covers the site (not filled with black/no-data)
+                        _center_crop = cropped.crop((350, 350, 650, 650))
+                        _center_br = sum(_IStat.Stat(_center_crop).mean) / 3.0
+                        if _center_br < 10.0:
+                            print(f"  VIIRS {layer} day -{delta}: centre too dark ({_center_br:.1f}), site not covered, skipping")
                             continue
                         # Compute metres per pixel from bbox
                         try:
@@ -1000,35 +1010,8 @@ def main():
                         except Exception:
                             _bparts = None
                             _mpp = 400.0
-                        # Coastline overlay from local OSM GeoJSON
-                        _coast_path = COMMUNITIES_DIR / cid / cfg.get("coastline_geojson_path", "coastline_data.geojson")
-                        if _bparts and _coast_path.exists():
-                            try:
-                                import json as _json2
-                                with open(_coast_path) as _cf:
-                                    _coast = _json2.load(_cf)
-                                _draw_coast = _Draw.Draw(cropped)
-                                for _feat in _coast.get("features", []):
-                                    _geom = _feat.get("geometry", {})
-                                    if _geom.get("type") != "LineString":
-                                        continue
-                                    _prev = None
-                                    for _clon, _clat in _geom.get("coordinates", []):
-                                        _cx3, _cy3 = _ll_to_ps3413(_clat, _clon)
-                                        _cpx = (_cx3 - _bparts[0]) / (_bparts[2] - _bparts[0]) * 1500
-                                        _cpy = (_bparts[3] - _cy3) / (_bparts[3] - _bparts[1]) * 1500
-                                        _th2 = _m.radians(-rot)
-                                        _crx = 750 + (_cpx - 750) * _m.cos(_th2) - (_cpy - 750) * _m.sin(_th2)
-                                        _cry = 750 + (_cpx - 750) * _m.sin(_th2) + (_cpy - 750) * _m.cos(_th2)
-                                        _cpxc, _cpyc = _crx - 250, _cry - 250
-                                        if _prev is not None:
-                                            _draw_coast.line([_prev, (_cpxc, _cpyc)], fill=(255, 255, 255), width=2)
-                                        _prev = (_cpxc, _cpyc)
-                            except Exception as _ce:
-                                print(f"  VIIRS coastline overlay failed: {_ce}")
-
-                        # Place-name labels via polar-stereographic projection
-                        if _bparts and cfg.get("map_points"):
+                        # Polar-stereo projection (needed for both coastline and labels)
+                        if _bparts:
                             import math as _m
                             def _ll_to_ps3413(phi_d, lam_d):
                                 a, e = 6378137.0, 0.0818191908
@@ -1040,6 +1023,33 @@ def main():
                                 m0 = _m.cos(phi0) / _m.sqrt(1-(e*_m.sin(phi0))**2)
                                 rho = a * m0 * _t(phi) / _t(phi0)
                                 return rho*_m.sin(lam-lam0), -rho*_m.cos(lam-lam0)
+                            # Coastline overlay from local OSM GeoJSON
+                            _coast_path = COMMUNITIES_DIR / cid / cfg.get("coastline_geojson_path", "coastline_data.geojson")
+                            if _coast_path.exists():
+                                try:
+                                    import json as _json2
+                                    with open(_coast_path) as _cf:
+                                        _coast = _json2.load(_cf)
+                                    _draw_coast = _Draw.Draw(cropped)
+                                    for _feat in _coast.get("features", []):
+                                        _geom = _feat.get("geometry", {})
+                                        if _geom.get("type") != "LineString":
+                                            continue
+                                        _prev = None
+                                        for _clon, _clat in _geom.get("coordinates", []):
+                                            _cx3, _cy3 = _ll_to_ps3413(_clat, _clon)
+                                            _cpx = (_cx3 - _bparts[0]) / (_bparts[2]-_bparts[0]) * 1500
+                                            _cpy = (_bparts[3]-_cy3) / (_bparts[3]-_bparts[1]) * 1500
+                                            _th2 = _m.radians(-rot)
+                                            _crx = 750 + (_cpx-750)*_m.cos(_th2) - (_cpy-750)*_m.sin(_th2)
+                                            _cry = 750 + (_cpx-750)*_m.sin(_th2) + (_cpy-750)*_m.cos(_th2)
+                                            _cpxc, _cpyc = _crx-250, _cry-250
+                                            if _prev is not None:
+                                                _draw_coast.line([_prev, (_cpxc, _cpyc)], fill=(40, 40, 40), width=4)
+                                                _draw_coast.line([_prev, (_cpxc, _cpyc)], fill=(255, 255, 255), width=2)
+                                            _prev = (_cpxc, _cpyc)
+                                except Exception as _ce:
+                                    print(f"  VIIRS coastline overlay failed: {_ce}")
                             try:
                                 _draw_lbl = _Draw.Draw(cropped)
                                 _font_pt = _Font.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26) if hasattr(_Font,'truetype') else _Font.load_default()
@@ -1184,8 +1194,29 @@ def main():
             if _br < 5.0:
                 print(f"  S2 {half_width_m//1000}km: too dark ({_br:.1f}), skipping")
                 return None
-            # Get approximate date from end of window (best available)
+            # Get actual acquisition datetime from catalog (leastCC scene near site)
             date_str = end_dt.strftime("%Y-%m-%d")
+            try:
+                _cat_r = requests.post(
+                    "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search",
+                    json={
+                        "bbox": [lon - 0.5, lat - 0.3, lon + 0.5, lat + 0.3],
+                        "datetime": (f"{start_dt.strftime('%Y-%m-%dT00:00:00Z')}/"
+                                     f"{end_dt.strftime('%Y-%m-%dT23:59:59Z')}"),
+                        "collections": ["sentinel-2-l2a"],
+                        "limit": 10,
+                        "filter": "eo:cloud_cover < 80",
+                        "filter-lang": "cql2-text",
+                    },
+                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                    timeout=15,
+                )
+                _feats = _cat_r.json().get("features", [])
+                if _feats:
+                    _feats.sort(key=lambda f: f.get("properties", {}).get("eo:cloud_cover", 100))
+                    date_str = _feats[0]["properties"]["datetime"]  # full ISO datetime
+            except Exception as _cate:
+                print(f"  S2 catalog datetime failed: {_cate}")
             # Coastline overlay from local OSM GeoJSON
             import json as _json_s2, math as _math_s2
             from PIL import ImageDraw as _Draw_s2, ImageFont as _Font_s2
@@ -1231,6 +1262,7 @@ def main():
                             _ux, _uy = _ll_to_utm(_clat2, _clon2)
                             _ppx, _ppy = _utm_to_px(_ux, _uy)
                             if _prev2 is not None:
+                                _draw_cs.line([_prev2, (_ppx, _ppy)], fill=(40, 40, 40), width=4)
                                 _draw_cs.line([_prev2, (_ppx, _ppy)], fill=(255, 255, 255), width=2)
                             _prev2 = (_ppx, _ppy)
                     print(f"  S2: coastline overlay drawn")
@@ -1280,7 +1312,7 @@ def main():
     sh_token = get_sh_token()
     s2_date = None
     if sh_token:
-        s2_date = fetch_s2_image(sh_token, 75_000, img_dir / "s2_150.png")
+        s2_date = fetch_s2_image(sh_token, 150_000, img_dir / "s2_150.png")
         if s2_date:
             fetch_s2_image(sh_token, 25_000, img_dir / "s2_50.png")
     else:

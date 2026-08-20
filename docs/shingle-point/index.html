@@ -1295,24 +1295,8 @@ async function renderWindRose(lat, lon, tz) {
       const bi=Math.round(dir/secDeg)%sectors; bins[bi].cnt++; bins[bi].spSum+=spd;
     });
     const maxCnt=Math.max(...bins.map(b=>b.cnt));
-    const W=el.offsetWidth||700, roseW=Math.min(200,W*0.28), H=220;
-    const cx=roseW/2, cy=H/2, rMax=roseW/2-22;
-    let petals='';
-    ['N','NE','E','SE','S','SW','W','NW'].forEach((lbl,i)=>{
-      const a=i*45*Math.PI/180, r=rMax+14;
-      petals+=`<text x="${(cx+r*Math.sin(a)).toFixed(1)}" y="${(cy-r*Math.cos(a)+4).toFixed(1)}" text-anchor="middle" font-size="13" fill="var(--muted)" font-weight="${lbl==='N'?'700':'400'}">${lbl}</text>`;
-    });
-    [0.25,0.5,0.75,1].forEach(f=>{petals+=`<circle cx="${cx}" cy="${cy}" r="${(rMax*f).toFixed(1)}" fill="none" stroke="var(--border)" stroke-width="0.5"/>`;});
-    bins.forEach((b,i)=>{
-      if(!b.cnt) return;
-      const r=(b.cnt/maxCnt)*rMax;
-      const a1=((i-0.5)*secDeg-90)*Math.PI/180, a2=((i+0.5)*secDeg-90)*Math.PI/180;
-      const x1=(cx+r*Math.cos(a1)).toFixed(1),y1=(cy+r*Math.sin(a1)).toFixed(1);
-      const x2=(cx+r*Math.cos(a2)).toFixed(1),y2=(cy+r*Math.sin(a2)).toFixed(1);
-      petals+=`<path d="M ${cx} ${cy} L ${x1} ${y1} A ${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 ${x2} ${y2} Z" fill="${spColor(b.cnt?b.spSum/b.cnt:0)}" opacity="0.85"/>`;
-    });
-    petals+=`<circle cx="${cx}" cy="${cy}" r="3" fill="var(--muted)"/>`;
-    const tML=4,tMR=40,tMT=24,tMB=30,tW=W-roseW-16-tML-tMR,tH=H-tMT-tMB,vecCy=tMT+tH/2;
+    const W=el.offsetWidth||700, H=220;
+    const tML=4,tMR=40,tMT=24,tMB=30,tW=W-tML-tMR,tH=H-tMT-tMB,vecCy=tMT+tH/2;
     const maxSpd=Math.max(...daily.map(d=>d.spd),1), arrowScale=(tH/2-4)/maxSpd;
     let arrows='',xLbls='';
     daily.forEach((d,i)=>{
@@ -1335,7 +1319,7 @@ async function renderWindRose(lat, lon, tz) {
     const cline=`<line x1="${tML}" y1="${vecCy.toFixed(1)}" x2="${(tML+tW).toFixed(1)}" y2="${vecCy.toFixed(1)}" stroke="var(--border)" stroke-width="0.8"/>`;
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
     svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.style.cssText='width:100%;display:block';
-    svg.innerHTML=`<g>${petals}</g><g transform="translate(${roseW+8},0)">${cbar}${cline}${arrows}${xLbls}</g>`;
+    svg.innerHTML=`${cbar}${cline}${arrows}${xLbls}`;
     el.innerHTML=''; el.appendChild(svg);
   } catch(err){el.innerHTML=`<div style="padding:14px;color:var(--muted);font-size:13px">Wind data unavailable — ${err.message}</div>`;}
 }
@@ -1350,11 +1334,12 @@ async function renderRiverTrajectory(stationId, riverLabel) {
   const base = 'https://api.weather.gc.ca/collections/hydrometric-daily-mean/items';
   const today = new Date().toISOString().slice(0, 10);
   try {
-    // Fetch historical data (OGC API) + current-year via WaterOffice (OGC lags ~6 months)
-    const [histRes, woRes] = await Promise.all([
+    // Fetch historical data (OGC API) + current-year via Datamart CSV (CORS-enabled, no lag)
+    const provterr = 'NT';
+    const dmUrl = `https://dd.weather.gc.ca/hydrometric/csv/${provterr}/daily/${provterr}_${stationId}_daily_hydrometric.csv`;
+    const [histRes, dmRes] = await Promise.all([
       fetch(`${base}?STATION_NUMBER=${stationId}&datetime=${histStart}-01-01/${histEnd}-12-31&f=json&limit=10000`),
-      fetch(`https://wateroffice.ec.gc.ca/services/real_time_graph/json/inline?station=${stationId}&start_date=${curYear}-01-01&end_date=${today}&param1=46&param2=3`)
-        .catch(() => null)
+      fetch(dmUrl).catch(() => null)
     ]);
     const histJson = await histRes.json();
 
@@ -1385,30 +1370,24 @@ async function renderRiverTrajectory(stationId, riverLabel) {
       p10[d] = pct(vals, 10); p50[d] = pct(vals, 50); p90[d] = pct(vals, 90);
     });
 
-    // Current year data from WaterOffice graph API (real-time, no 6-month lag)
+    // Current year data from Datamart CSV (CORS-enabled, updated daily)
     let curPts = [];
-    if (woRes && woRes.ok) {
+    if (dmRes && dmRes.ok) {
       try {
-        const woJson = await woRes.json();
-        // Try param 46 (stage) then 3 (archived level), then any numeric key
-        const paramKeys = ['46', '3', ...Object.keys(woJson).filter(k => !isNaN(k) && k !== '46' && k !== '3')];
-        for (const pk of paramKeys) {
-          const series = woJson[pk];
-          if (!series) continue;
-          const pts = [...(series.approved || []), ...(series.provisional || [])];
-          if (!pts.length) continue;
-          // Aggregate sub-daily readings to daily means (timestamp in ms)
-          const dailySums = {};
-          pts.forEach(([ts, val]) => {
-            if (val == null) return;
-            const d = new Date(ts).toISOString().slice(0, 10);
-            if (!dailySums[d]) dailySums[d] = { sum: 0, n: 0 };
-            dailySums[d].sum += val; dailySums[d].n++;
-          });
-          curPts = Object.entries(dailySums).sort(([a],[b]) => a.localeCompare(b))
-            .map(([dt, {sum, n}]) => ({ doy: doy(dt), val: sum / n }));
-          if (curPts.length) break;
-        }
+        const csv = await dmRes.text();
+        csv.split('\n').forEach(line => {
+          const cols = line.split(',');
+          if (cols.length < 2) return;
+          const dt = cols[1]?.trim().slice(0, 10);
+          if (!dt || !dt.startsWith(String(curYear))) return;
+          // col 2 = water level (m), col 7 = discharge (cms)
+          const lvl = parseFloat(cols[2]);
+          const dis = parseFloat(cols[7]);
+          const val = isNaN(lvl) ? (isNaN(dis) ? null : dis) : lvl;
+          if (val == null) return;
+          curPts.push({ doy: doy(dt), val });
+        });
+        curPts.sort((a, b) => a.doy - b.doy);
       } catch (_) {}
     }
     // Fallback: OGC API current-year (may lag)
@@ -1534,7 +1513,9 @@ async function loadData(){
   document.getElementById('sb-temp').textContent=(w.temperature??'—')+'°';
   document.getElementById('sb-label').textContent=(WMO[wcode]||'')+(w.feels_like!=null?' · Feels '+w.feels_like+'°':'');
   if(w.wind_speed!=null) document.getElementById('sb-wind').innerHTML=`💨 <b>${w.wind_speed} km/h ${w.wind_dir_label||''}</b> · ${beaufort(w.wind_speed)}`;
-  if(tide?.current_m!=null) document.getElementById('sb-tide').innerHTML=`🌊 <b>${sign(tide.current_m)}${parseFloat(tide.current_m).toFixed(2)} m</b> · ${tide.trend||''}`;
+  {const _sbWl=twl?.topaz?.current_m??twl?.gdsps?.current_m;
+  if(_sbWl!=null) document.getElementById('sb-tide').innerHTML=`🌊 <b>${sign(_sbWl)}${parseFloat(_sbWl).toFixed(2)} m</b> · ${twl?.topaz?'TOPAZ6':'GDSPS'}`;
+  else if(tide?.current_m!=null) document.getElementById('sb-tide').innerHTML=`🌊 <b>${sign(tide.current_m)}${parseFloat(tide.current_m).toFixed(2)} m</b> · ${tide.trend||''}`; }
 
   // Alerts
   const alerts=(d.alerts?.weather||[]).filter(a=>/No watches/i.test(a)===false);

@@ -490,25 +490,27 @@ svg.sp{width:100%;height:auto;display:block}
   </div>
 
   <!-- Climate -->
-  <div id="climate" class="sec"><div class="sec-hd">Climate</div></div>
-  <div class="ch-card">
-    <div class="ch-hd">
-      <div class="ch-title">Thawing degree days · annual · ERA5</div>
-      <div><span class="ch-val" id="cv-tdd">—</span><span class="ch-unit"> °C·days this year</span></div>
+  <div id="climate" class="sec">
+    <div class="sec-hd">Climate</div>
+    <div class="ch">
+      <div class="ch-hd">
+        <div class="ch-title">Thawing degree days · annual · ERA5</div>
+        <div><span class="ch-val" id="cv-tdd">—</span><span class="ch-unit"> °C·days this year</span></div>
+      </div>
+      <div class="ch-area" id="tddChartEl" style="height:auto;min-height:60px"></div>
     </div>
-    <div class="ch-area" id="tddChartEl" style="height:auto;min-height:60px"></div>
-  </div>
-  <div class="ch-card" style="margin-top:12px">
-    <div class="ch-hd">
-      <div class="ch-title">Wind rose + daily vectors · last 30 days · Open-Meteo ERA5</div>
+    <div class="ch" style="margin-top:12px">
+      <div class="ch-hd">
+        <div class="ch-title">Wind rose + daily vectors · last 30 days · Open-Meteo ERA5</div>
+      </div>
+      <div class="ch-area" id="windRoseEl" style="height:auto;min-height:60px"></div>
     </div>
-    <div class="ch-area" id="windRoseEl" style="height:auto;min-height:60px"></div>
-  </div>
-  <div class="ch-card" style="margin-top:12px">
-    <div class="ch-hd">
-      <div class="ch-title">Napoiak Channel — Mackenzie River · annual trajectory · WSC 10MC023</div>
+    <div class="ch" style="margin-top:12px">
+      <div class="ch-hd">
+        <div class="ch-title">Napoiak Channel — Mackenzie River · annual trajectory · WSC 10MC023</div>
+      </div>
+      <div class="ch-area" id="riverClimEl" style="height:auto;min-height:60px"></div>
     </div>
-    <div class="ch-area" id="riverClimEl" style="height:auto;min-height:60px"></div>
   </div>
 
   <!-- Data sources -->
@@ -1199,7 +1201,7 @@ async function renderTddChart(lat, lon) {
     let grid = '';
     for (let v = 0; v <= maxV; v += step) {
       grid += `<line x1="${ML}" y1="${yS(v)}" x2="${ML+cW}" y2="${yS(v)}" stroke="var(--border)" stroke-width="1"/>`;
-      grid += `<text x="${ML-5}" y="${parseFloat(yS(v))+4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`;
+      grid += `<text x="${ML-5}" y="${parseFloat(yS(v))+4}" text-anchor="end" font-size="14" fill="var(--muted)">${v}</text>`;
     }
     let bars = '', xlabels = '';
     years.forEach((y, i) => {
@@ -1209,18 +1211,18 @@ async function renderTddChart(lat, lon) {
       const fill = y === curYear ? '#E07070' : '#F0A830';
       bars += `<rect class="tdd-bar" data-y="${y}" data-v="${Math.round(tdd)}" x="${bx}" y="${yS(tdd)}" width="${bW.toFixed(1)}" height="${bh}" fill="${fill}" rx="1.5"/>`;
       if (y % 5 === 1 || y === curYear || y === years[0])
-        xlabels += `<text x="${xC(i)}" y="${(MT+cH+14).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--muted)">${y}</text>`;
+        xlabels += `<text x="${xC(i)}" y="${(MT+cH+16).toFixed(1)}" text-anchor="middle" font-size="13" fill="var(--muted)">${y}</text>`;
     });
     const avgY = parseFloat(yS(avg25));
     const avgLine =
       `<line x1="${ML}" y1="${avgY.toFixed(1)}" x2="${ML+cW}" y2="${avgY.toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="5,3"/>` +
-      `<text x="${(ML+cW-4).toFixed(1)}" y="${(avgY-5).toFixed(1)}" text-anchor="end" font-size="11" fill="#C0392B">25yr avg ${Math.round(avg25)}</text>`;
+      `<text x="${(ML+cW-4).toFixed(1)}" y="${(avgY-5).toFixed(1)}" text-anchor="end" font-size="14" fill="#C0392B">25yr avg ${Math.round(avg25)}</text>`;
     const uid = 'tddTip_sp';
-    const tip = `<g id="${uid}" style="pointer-events:none;display:none"><rect id="${uid}bg" rx="4" fill="var(--card)" stroke="var(--border)" stroke-width="1"/><text id="${uid}tx" font-size="12" fill="var(--fg)" font-family="system-ui,sans-serif"/></g>`;
+    const tip = `<g id="${uid}" style="pointer-events:none;display:none"><rect id="${uid}bg" rx="4" fill="var(--card)" stroke="var(--border)" stroke-width="1"/><text id="${uid}tx" font-size="14" fill="var(--fg)" font-family="system-ui,sans-serif"/></g>`;
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.style.cssText = 'width:100%;display:block';
-    svg.innerHTML = `<text x="${ML}" y="${MT-5}" font-size="11" fill="var(--muted)">°C·days</text>${grid}${bars}${avgLine}${xlabels}${tip}`;
+    svg.innerHTML = `<text x="${ML}" y="${MT-5}" font-size="14" fill="var(--muted)">°C·days</text>${grid}${bars}${avgLine}${xlabels}${tip}`;
     el.innerHTML = ''; el.appendChild(svg);
     svg.querySelectorAll('.tdd-bar').forEach(bar => {
       bar.addEventListener('mouseenter', () => {
@@ -1278,7 +1280,7 @@ async function renderWindRose(lat, lon, tz) {
     let petals='';
     ['N','NE','E','SE','S','SW','W','NW'].forEach((lbl,i)=>{
       const a=i*45*Math.PI/180, r=rMax+14;
-      petals+=`<text x="${(cx+r*Math.sin(a)).toFixed(1)}" y="${(cy-r*Math.cos(a)+4).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--muted)" font-weight="${lbl==='N'?'700':'400'}">${lbl}</text>`;
+      petals+=`<text x="${(cx+r*Math.sin(a)).toFixed(1)}" y="${(cy-r*Math.cos(a)+4).toFixed(1)}" text-anchor="middle" font-size="13" fill="var(--muted)" font-weight="${lbl==='N'?'700':'400'}">${lbl}</text>`;
     });
     [0.25,0.5,0.75,1].forEach(f=>{petals+=`<circle cx="${cx}" cy="${cy}" r="${(rMax*f).toFixed(1)}" fill="none" stroke="var(--border)" stroke-width="0.5"/>`;});
     bins.forEach((b,i)=>{
@@ -1302,14 +1304,14 @@ async function renderWindRose(lat, lon, tz) {
       if(len>1){const hl=5,hw=3,px=-dy/(len||1),py=dx/(len||1),bx2=x2-(dx/len)*hl,by2=y2-(dy/len)*hl;
         arrows+=`<polygon points="${x2.toFixed(1)},${y2.toFixed(1)} ${(bx2+px*hw).toFixed(1)},${(by2+py*hw).toFixed(1)} ${(bx2-px*hw).toFixed(1)},${(by2-py*hw).toFixed(1)}" fill="${col}"/>`;}
       if(i%5===0||i===daily.length-1){const dt=new Date(d.date+'T12:00:00Z');
-        xLbls+=`<text x="${x.toFixed(1)}" y="${(tMT+tH+14).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--muted)">${dt.toLocaleDateString('en-CA',{month:'short',day:'numeric'})}</text>`;}
+        xLbls+=`<text x="${x.toFixed(1)}" y="${(tMT+tH+16).toFixed(1)}" text-anchor="middle" font-size="12" fill="var(--muted)">${dt.toLocaleDateString('en-CA',{month:'short',day:'numeric'})}</text>`;}
     });
     const cbX=tML+tW+2,cbY=tMT,cbH=tH,cbW=6,maxLbl=Math.ceil(maxSpd/10)*10;
     let cbar=`<defs><linearGradient id="cbgSP" x1="0" y1="0" x2="0" y2="1">`;
     [['#2DD4BF'],['#A3C44C'],['#F0A830'],['#E04020'],['#8B1DBF']].forEach(([c],i,a)=>{cbar+=`<stop offset="${(i/(a.length-1)*100).toFixed(0)}%" stop-color="${c}"/>`;});
     cbar+=`</linearGradient></defs><rect x="${cbX}" y="${cbY}" width="${cbW}" height="${cbH}" fill="url(#cbgSP)" rx="2"/>`;
-    [0,maxLbl/2,maxLbl].forEach(v=>{const ly=cbY+cbH-(v/maxLbl)*cbH;cbar+=`<text x="${cbX+cbW+2}" y="${(ly+4).toFixed(1)}" font-size="9" fill="var(--muted)">${Math.round(v)}</text>`;});
-    cbar+=`<text x="${cbX+cbW/2}" y="${cbY-4}" text-anchor="middle" font-size="9" fill="var(--muted)">km/h</text>`;
+    [0,maxLbl/2,maxLbl].forEach(v=>{const ly=cbY+cbH-(v/maxLbl)*cbH;cbar+=`<text x="${cbX+cbW+2}" y="${(ly+4).toFixed(1)}" font-size="11" fill="var(--muted)">${Math.round(v)}</text>`;});
+    cbar+=`<text x="${cbX+cbW/2}" y="${cbY-4}" text-anchor="middle" font-size="11" fill="var(--muted)">km/h</text>`;
     const cline=`<line x1="${tML}" y1="${vecCy.toFixed(1)}" x2="${(tML+tW).toFixed(1)}" y2="${vecCy.toFixed(1)}" stroke="var(--border)" stroke-width="0.8"/>`;
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
     svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.style.cssText='width:100%;display:block';
@@ -1328,8 +1330,8 @@ async function renderRiverTrajectory(stationId, riverLabel) {
   const base = 'https://api.weather.gc.ca/collections/hydrometric-daily-mean/items';
   try {
     const [histRes, curRes] = await Promise.all([
-      fetch(`${base}?STATION_NUMBER=${stationId}&datetime=${histStart}-01-01/${histEnd}-12-31&f=json&limit=10000&sortby=DATE`),
-      fetch(`${base}?STATION_NUMBER=${stationId}&datetime=${curYear}-01-01/${curYear}-12-31&f=json&limit=500&sortby=DATE`)
+      fetch(`${base}?STATION_NUMBER=${stationId}&datetime=${histStart}-01-01/${histEnd}-12-31&f=json&limit=10000`),
+      fetch(`${base}?STATION_NUMBER=${stationId}&datetime=${curYear}-01-01/${curYear}-12-31&f=json&limit=1000`)
     ]);
     const [histJson, curJson] = await Promise.all([histRes.json(), curRes.json()]);
 
@@ -1339,9 +1341,10 @@ async function renderRiverTrajectory(stationId, riverLabel) {
       const start = new Date(Date.UTC(d.getUTCFullYear(), 0, 0));
       return Math.round((d - start) / 86400000);
     }
+    const getLvl = p => p?.LEVEL ?? p?.DISCHARGE ?? null;
     const byDoy = {};
-    (histJson.features || []).forEach(f => {
-      const lvl = f.properties?.LEVEL; const dt = f.properties?.DATE?.slice(0, 10);
+    (histJson.features || []).sort((a,b)=>(a.properties?.DATE||'').localeCompare(b.properties?.DATE||'')).forEach(f => {
+      const lvl = getLvl(f.properties); const dt = f.properties?.DATE?.slice(0, 10);
       if (lvl == null || !dt) return;
       const d = doy(dt); if (!byDoy[d]) byDoy[d] = [];
       byDoy[d].push(lvl);
@@ -1360,9 +1363,9 @@ async function renderRiverTrajectory(stationId, riverLabel) {
     });
 
     // Current year data
-    const curPts = (curJson.features || []).map(f => ({
+    const curPts = (curJson.features || []).sort((a,b)=>(a.properties?.DATE||'').localeCompare(b.properties?.DATE||'')).map(f => ({
       doy: doy(f.properties.DATE.slice(0, 10)),
-      val: f.properties.LEVEL
+      val: getLvl(f.properties)
     })).filter(p => p.val != null);
 
     const allVals = [...Object.values(p90), ...curPts.map(p => p.val)].filter(v => v != null);
@@ -1383,14 +1386,14 @@ async function renderRiverTrajectory(stationId, riverLabel) {
     let grid = '';
     for (let v = Math.ceil(yMin / yStep) * yStep; v <= yMax; v += yStep) {
       grid += `<line x1="${ML}" y1="${yS(v)}" x2="${ML+cW}" y2="${yS(v)}" stroke="var(--border)" stroke-width="1"/>`;
-      grid += `<text x="${ML-5}" y="${parseFloat(yS(v))+4}" text-anchor="end" font-size="11" fill="var(--muted)">${v.toFixed(1)}</text>`;
+      grid += `<text x="${ML-5}" y="${parseFloat(yS(v))+4}" text-anchor="end" font-size="14" fill="var(--muted)">${v.toFixed(1)}</text>`;
     }
 
     // X axis: month labels
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const mDoys = [1,32,60,91,121,152,182,213,244,274,305,335];
     let xlabels = mDoys.map((d,i) =>
-      `<text x="${xS(d+15)}" y="${(MT+cH+14).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--muted)">${months[i]}</text>`
+      `<text x="${xS(d+15)}" y="${(MT+cH+16).toFixed(1)}" text-anchor="middle" font-size="13" fill="var(--muted)">${months[i]}</text>`
     ).join('');
 
     // P10-P90 band (polygon)
@@ -1414,21 +1417,21 @@ async function renderRiverTrajectory(stationId, riverLabel) {
     // "now" marker
     const nowDoy = doy(new Date().toISOString().slice(0, 10));
     const nowLine = `<line x1="${xS(nowDoy)}" y1="${MT}" x2="${xS(nowDoy)}" y2="${(MT+cH).toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/>
-      <text x="${(parseFloat(xS(nowDoy))+4).toFixed(1)}" y="${(MT+cH-6).toFixed(1)}" font-size="12" fill="#C0392B" font-weight="700">now</text>`;
+      <text x="${(parseFloat(xS(nowDoy))+4).toFixed(1)}" y="${(MT+cH-6).toFixed(1)}" font-size="14" fill="#C0392B" font-weight="700">now</text>`;
 
     // Legend
     const leg =
       `<rect x="${ML}" y="${MT-16}" width="10" height="4" fill="var(--muted)" opacity="0.4"/>` +
-      `<text x="${ML+14}" y="${MT-12}" font-size="10" fill="var(--muted)">p10–p90 (${histStart}–${histEnd})</text>` +
-      `<line x1="${ML+120}" y1="${MT-14}" x2="${ML+134}" y2="${MT-14}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4,2" opacity="0.6"/>` +
-      `<text x="${ML+138}" y="${MT-10}" font-size="10" fill="var(--muted)">median</text>` +
-      `<line x1="${ML+188}" y1="${MT-14}" x2="${ML+202}" y2="${MT-14}" stroke="#1A73E8" stroke-width="2.5"/>` +
-      `<text x="${ML+206}" y="${MT-10}" font-size="10" fill="#1A73E8">${curYear}</text>`;
+      `<text x="${ML+14}" y="${MT-12}" font-size="13" fill="var(--muted)">p10–p90 (${histStart}–${histEnd})</text>` +
+      `<line x1="${ML+140}" y1="${MT-14}" x2="${ML+154}" y2="${MT-14}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4,2" opacity="0.6"/>` +
+      `<text x="${ML+158}" y="${MT-10}" font-size="13" fill="var(--muted)">median</text>` +
+      `<line x1="${ML+218}" y1="${MT-14}" x2="${ML+232}" y2="${MT-14}" stroke="#1A73E8" stroke-width="2.5"/>` +
+      `<text x="${ML+236}" y="${MT-10}" font-size="13" fill="#1A73E8">${curYear}</text>`;
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.style.cssText = 'width:100%;display:block';
-    svg.innerHTML = `<text x="${ML}" y="${MT-5}" font-size="11" fill="var(--muted)">m (level)</text>${grid}${band}${medLine}${curLine}${nowLine}${xlabels}${leg}`;
+    svg.innerHTML = `<text x="${ML}" y="${MT-5}" font-size="14" fill="var(--muted)">m (level)</text>${grid}${band}${medLine}${curLine}${nowLine}${xlabels}${leg}`;
     el.innerHTML = ''; el.appendChild(svg);
   } catch (err) {
     el.innerHTML = `<div style="padding:14px;color:var(--muted);font-size:13px">River data unavailable — ${err.message}</div>`;

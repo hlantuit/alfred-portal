@@ -987,6 +987,12 @@ def main():
                         sz = 1000
                         left, top = (w - sz) // 2, (h - sz) // 2
                         cropped = rotated.crop((left, top, left + sz, top + sz))
+                        # Skip dark / empty scenes
+                        from PIL import ImageStat as _IStat
+                        _br = sum(_IStat.Stat(cropped).mean) / 3.0
+                        if _br < 10.0:
+                            print(f"  VIIRS {layer} day -{delta}: too dark ({_br:.1f}), skipping")
+                            continue
                         # Compute metres per pixel from bbox
                         try:
                             _bparts = [float(x) for x in bbox_3413.split(",")]
@@ -1083,10 +1089,11 @@ def main():
         bbox = [cx - half_width_m, cy - half_width_m, cx + half_width_m, cy + half_width_m]
         evalscript = (
             "//VERSION=3\n"
-            "function setup(){return{input:[{bands:[\"B04\",\"B03\",\"B02\"]}],"
+            "function setup(){return{input:[{bands:[\"B04\",\"B03\",\"B02\",\"dataMask\"]}],"
             "output:{bands:3,sampleType:\"AUTO\"}};}\n"
             "function evaluatePixel(s){"
-            "return[Math.min(1,3.0*s.B04),Math.min(1,3.0*s.B03),Math.min(1,3.0*s.B02)];}"
+            "if(!s.dataMask)return[0.04,0.06,0.10];"
+            "return[Math.min(1,4.5*s.B04),Math.min(1,4.5*s.B03),Math.min(1,4.5*s.B02)];}"
         )
         # Find latest low-cloud scene via Catalog API
         try:
@@ -1129,9 +1136,10 @@ def main():
                         "data": [{
                             "dataFilter": {
                                 "timeRange": {
-                                    "from": f"{date_str}T00:00:00Z",
-                                    "to": f"{date_str}T23:59:59Z",
+                                    "from": f"{start_dt.strftime('%Y-%m-%dT00:00:00Z')}",
+                                    "to": f"{end_dt.strftime('%Y-%m-%dT23:59:59Z')}",
                                 },
+                                "mosaickingOrder": "mostRecent",
                                 "maxCloudCoverage": 100,
                             },
                             "type": "sentinel-2-l2a",

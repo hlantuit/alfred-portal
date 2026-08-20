@@ -860,8 +860,98 @@ def main():
     if not modis_date:
         print("  MODIS banner unavailable")
 
+    # ── Shared image annotation helpers ──────────────────────────────────────
+    def _annotate_img(img, date_str, meters_per_px):
+        """Draw date label (top-left) and scale bar (bottom-right) on img."""
+        from PIL import Image as _Img2, ImageDraw as _Draw2, ImageFont as _Font2
+        import io as _io2, math as _math, datetime as _dt2
+        draw = _Draw2.Draw(img)
+        iw, ih = img.size
+        try:
+            font_lg = _Font2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 38)
+            font_sm = _Font2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26)
+        except Exception:
+            font_lg = font_sm = _Font2.load_default()
+        # Date label
+        if date_str:
+            try:
+                d_obj = _dt2.date.fromisoformat(date_str)
+                label = d_obj.strftime("%-d %b %Y")
+            except Exception:
+                label = date_str
+            pad = 6
+            try:
+                tb = draw.textbbox((0, 0), label, font=font_lg)
+                overlay = _Img2.new("RGBA", img.size, (0, 0, 0, 0))
+                _Draw2.Draw(overlay).rounded_rectangle(
+                    [10 - pad, 10 - pad, tb[2] + 10 + pad, tb[3] + 10 + pad],
+                    radius=5, fill=(0, 0, 0, 170))
+                img = _Img2.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+                draw = _Draw2.Draw(img)
+            except Exception:
+                pass
+            draw.text((11, 11), label, font=font_lg, fill=(0, 0, 0))
+            draw.text((10, 10), label, font=font_lg, fill=(255, 255, 255))
+        # Scale bar
+        target_m = (iw // 4) * meters_per_px
+        for nice in [200000, 100000, 50000, 25000, 20000, 10000, 5000, 2000, 1000, 500]:
+            if nice <= target_m:
+                scale_m = nice
+                break
+        else:
+            scale_m = max(1, int(target_m))
+        bar_px = max(10, int(scale_m / meters_per_px))
+        bar_label = f"{scale_m // 1000} km" if scale_m >= 1000 else f"{scale_m} m"
+        margin = 18
+        bar_y = ih - margin - 16
+        bar_x2 = iw - margin
+        bar_x1 = bar_x2 - bar_px
+        try:
+            tb2 = draw.textbbox((0, 0), bar_label, font=font_sm)
+            tw, th = tb2[2] - tb2[0], tb2[3] - tb2[1]
+            overlay2 = _Img2.new("RGBA", img.size, (0, 0, 0, 0))
+            _Draw2.Draw(overlay2).rounded_rectangle(
+                [bar_x1 - 6, bar_y - th - 10, bar_x2 + 6, ih - margin + 6],
+                radius=5, fill=(0, 0, 0, 160))
+            img = _Img2.alpha_composite(img.convert("RGBA"), overlay2).convert("RGB")
+            draw = _Draw2.Draw(img)
+            draw.line([(bar_x1, bar_y - 5), (bar_x1, bar_y + 5)], fill="white", width=2)
+            draw.line([(bar_x2, bar_y - 5), (bar_x2, bar_y + 5)], fill="white", width=2)
+            draw.line([(bar_x1, bar_y), (bar_x2, bar_y)], fill="white", width=3)
+            lx = (bar_x1 + bar_x2 - tw) // 2
+            draw.text((lx, bar_y - th - 6), bar_label, font=font_sm, fill=(255, 255, 255))
+        except Exception as _e:
+            print(f"  scale bar failed: {_e}")
+        return img
+
+    def _overlay_gibs_coastlines(img, lon_w, lon_e, lat_s, lat_n):
+        """Fetch GIBS Coastlines_15m+Reference_Labels_15m (transparent PNG) and composite."""
+        import io as _io3
+        from PIL import Image as _Img3
+        try:
+            r = get_with_retry(
+                "https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi",
+                params={
+                    "SERVICE": "WMS", "REQUEST": "GetMap", "VERSION": "1.3.0",
+                    "LAYERS": "Coastlines_15m,Reference_Labels_15m",
+                    "STYLES": "", "FORMAT": "image/png", "TRANSPARENT": "true",
+                    "CRS": "CRS:84",
+                    "BBOX": f"{lon_w},{lat_s},{lon_e},{lat_n}",
+                    "WIDTH": str(img.size[0]), "HEIGHT": str(img.size[1]),
+                },
+                timeout=20,
+            )
+            if r.status_code == 200 and r.content[:8] == b"\x89PNG\r\n\x1a\n":
+                ol = _Img3.open(_io3.BytesIO(r.content)).convert("RGBA")
+                base = img.convert("RGBA")
+                base.alpha_composite(ol)
+                return base.convert("RGB")
+        except Exception as _e:
+            print(f"  GIBS coastline overlay failed: {_e}")
+        return img
+
     # ── VIIRS NOAA-20 true color (EPSG:3413, north-up) ──
-    def fetch_viirs_image(out_path, max_days_back=6):
+    def fetch_viirs_image(out_path, max_days_back=10):
         import io as _io
         bbox_3413 = cfg.get("modis_bbox_3413")
         rot = cfg.get("modis_rotation_deg", 0)
@@ -878,13 +968,13 @@ def main():
                         "https://gibs.earthdata.nasa.gov/wms/epsg3413/best/wms.cgi",
                         params={
                             "SERVICE": "WMS", "REQUEST": "GetMap", "VERSION": "1.1.1",
-                            "LAYERS": f"{layer},Coastlines_15m",
+                            "LAYERS": f"{layer}",
                             "STYLES": "",
                             "FORMAT": "image/png",
                             "TRANSPARENT": "false",
                             "SRS": "EPSG:3413",
                             "BBOX": bbox_3413,
-                            "WIDTH": "900", "HEIGHT": "900",
+                            "WIDTH": "1500", "HEIGHT": "1500",
                             "TIME": d.strftime("%Y-%m-%d"),
                         },
                         timeout=30,
@@ -894,9 +984,61 @@ def main():
                         img = _Img.open(_io.BytesIO(r.content)).convert("RGB")
                         rotated = img.rotate(rot, resample=_Img.BICUBIC, expand=False)
                         w, h = rotated.size
-                        sz = 600
+                        sz = 1000
                         left, top = (w - sz) // 2, (h - sz) // 2
                         cropped = rotated.crop((left, top, left + sz, top + sz))
+                        # Compute metres per pixel from bbox
+                        try:
+                            _bparts = [float(x) for x in bbox_3413.split(",")]
+                            _mpp = (_bparts[2] - _bparts[0]) / 1500.0
+                        except Exception:
+                            _bparts = None
+                            _mpp = 400.0
+                        # Place-name labels via polar-stereographic projection
+                        if _bparts and cfg.get("map_points"):
+                            import math as _m
+                            def _ll_to_ps3413(phi_d, lam_d):
+                                a, e = 6378137.0, 0.0818191908
+                                phi0, lam0 = _m.radians(70.0), _m.radians(-45.0)
+                                phi, lam = _m.radians(phi_d), _m.radians(lam_d)
+                                def _t(p):
+                                    es = e * _m.sin(p)
+                                    return _m.tan(_m.pi/4 - p/2) / ((1-es)/(1+es))**(e/2)
+                                m0 = _m.cos(phi0) / _m.sqrt(1-(e*_m.sin(phi0))**2)
+                                rho = a * m0 * _t(phi) / _t(phi0)
+                                return rho*_m.sin(lam-lam0), -rho*_m.cos(lam-lam0)
+                            try:
+                                _draw_lbl = _Draw.Draw(cropped)
+                                _font_pt = _Font.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26) if hasattr(_Font,'truetype') else _Font.load_default()
+                                for _pt in cfg.get("map_points",[]):
+                                    _px3, _py3 = _ll_to_ps3413(_pt[0], _pt[1])
+                                    # Map to 1500×1500 pixels
+                                    _px15 = (_px3 - _bparts[0]) / (_bparts[2]-_bparts[0]) * 1500
+                                    _py15 = (_bparts[3] - _py3) / (_bparts[3]-_bparts[1]) * 1500
+                                    # Rotate around centre (750,750)
+                                    _th = _m.radians(-rot)
+                                    _rx = 750 + (_px15-750)*_m.cos(_th) - (_py15-750)*_m.sin(_th)
+                                    _ry = 750 + (_px15-750)*_m.sin(_th) + (_py15-750)*_m.cos(_th)
+                                    # To 1000×1000 crop (offset 250)
+                                    _cx, _cy = int(_rx-250), int(_ry-250)
+                                    if not (8 <= _cx <= 992 and 8 <= _cy <= 992):
+                                        continue
+                                    r_dot = 7
+                                    _draw_lbl.ellipse([_cx-r_dot,_cy-r_dot,_cx+r_dot,_cy+r_dot], fill=(220,60,60), outline="white", width=2)
+                                    _lbl = _pt[2] if len(_pt)>2 else ""
+                                    if _lbl:
+                                        try:
+                                            _tb = _draw_lbl.textbbox((_cx+12,_cy-14),_lbl,font=_font_pt)
+                                            _ov = _Img.new("RGBA",cropped.size,(0,0,0,0))
+                                            _Draw.Draw(_ov).rounded_rectangle([_tb[0]-3,_tb[1]-3,_tb[2]+3,_tb[3]+3],radius=3,fill=(0,0,0,160))
+                                            cropped = _Img.alpha_composite(cropped.convert("RGBA"),_ov).convert("RGB")
+                                            _draw_lbl = _Draw.Draw(cropped)
+                                        except Exception:
+                                            pass
+                                        _draw_lbl.text((_cx+12,_cy-14),_lbl,font=_font_pt,fill=(255,255,255))
+                            except Exception as _le:
+                                print(f"  VIIRS place labels failed: {_le}")
+                        cropped = _annotate_img(cropped, d.strftime("%Y-%m-%d"), _mpp)
                         buf = _io.BytesIO()
                         cropped.save(buf, "PNG", optimize=True)
                         out_path.write_bytes(buf.getvalue())
@@ -959,7 +1101,7 @@ def main():
                                  f"{end_dt.strftime('%Y-%m-%dT23:59:59Z')}"),
                     "collections": ["sentinel-2-l2a"],
                     "limit": 5,
-                    "filter": "eo:cloud_cover < 80",
+                    "filter": "eo:cloud_cover < 100",
                     "filter-lang": "cql2-text",
                 },
                 headers={"Authorization": f"Bearer {token}",
@@ -996,7 +1138,7 @@ def main():
                         }],
                     },
                     "output": {
-                        "width": 600, "height": 600,
+                        "width": 1200, "height": 1200,
                         "responses": [{"identifier": "default",
                                        "format": {"type": "image/png"}}],
                     },
@@ -1008,7 +1150,22 @@ def main():
             )
             ct = proc_r.headers.get("content-type", "")
             if proc_r.status_code == 200 and "image" in ct:
-                out_path.write_bytes(proc_r.content)
+                import io as _io4
+                from PIL import Image as _Img4
+                s2_img = _Img4.open(_io4.BytesIO(proc_r.content)).convert("RGB")
+                # Coastline + place-name overlay from GIBS
+                import math as _math
+                _lat_r = lat * _math.pi / 180
+                _lon_deg = half_width_m / (111000 * max(0.05, _math.cos(_lat_r)))
+                _lat_deg = half_width_m / 111000
+                s2_img = _overlay_gibs_coastlines(s2_img, lon - _lon_deg, lon + _lon_deg,
+                                                  lat - _lat_deg, lat + _lat_deg)
+                # Scale: 2*half_width_m across 1200px
+                _mpp = (2 * half_width_m) / 1200.0
+                s2_img = _annotate_img(s2_img, date_str, _mpp)
+                buf = _io4.BytesIO()
+                s2_img.save(buf, "PNG", optimize=True)
+                out_path.write_bytes(buf.getvalue())
                 print(f"  S2 {half_width_m//1000}km: {date_str} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
                 return date_str
             else:

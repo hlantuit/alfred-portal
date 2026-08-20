@@ -491,19 +491,24 @@ svg.sp{width:100%;height:auto;display:block}
 
   <!-- Climate -->
   <div id="climate" class="sec"><div class="sec-hd">Climate</div></div>
-  <div class="img-row-3">
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/tdd_histogram.png" alt="Thawing degree days" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Thawing degree days · current year vs. historic · ERA5</div>
+  <div class="ch-card">
+    <div class="ch-hd">
+      <div class="ch-title">Thawing degree days · annual · ERA5</div>
+      <div><span class="ch-val" id="cv-tdd">—</span><span class="ch-unit"> °C·days this year</span></div>
     </div>
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/wind_chart.png" alt="Wind rose" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Wind rose + daily vectors — last 30 days · ERA5</div>
+    <div class="ch-area" id="tddChartEl" style="height:auto;min-height:60px"></div>
+  </div>
+  <div class="ch-card" style="margin-top:12px">
+    <div class="ch-hd">
+      <div class="ch-title">Wind rose + daily vectors · last 30 days · Open-Meteo ERA5</div>
     </div>
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/hydrometric_clim.png" alt="River level — multi-year" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Napoiak Channel water level — multi-year record · Water Survey of Canada</div>
+    <div class="ch-area" id="windRoseEl" style="height:auto;min-height:60px"></div>
+  </div>
+  <div class="ch-card" style="margin-top:12px">
+    <div class="ch-hd">
+      <div class="ch-title">Napoiak Channel — Mackenzie River · annual trajectory · WSC 10MC023</div>
     </div>
+    <div class="ch-area" id="riverClimEl" style="height:auto;min-height:60px"></div>
   </div>
 
   <!-- Data sources -->
@@ -1156,6 +1161,279 @@ function showDayDetail(idx, fc, tz){
   panel.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
+// ── TDD (Thawing Degree Days) bar chart ──────────────────────────────────────
+async function renderTddChart(lat, lon) {
+  const el = document.getElementById('tddChartEl');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:13px">Loading ERA5 climate data…</div>';
+  const curYear = new Date().getFullYear();
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const res = await fetch(
+      `https://archive-api.open-meteo.com/v1/era5?latitude=${lat}&longitude=${lon}` +
+      `&start_date=2001-01-01&end_date=${today}&daily=temperature_2m_mean&timezone=UTC`
+    );
+    const raw = await res.json();
+    const tddY = {};
+    (raw.daily?.time || []).forEach((t, i) => {
+      const y = parseInt(t.slice(0, 4));
+      const v = raw.daily.temperature_2m_mean[i];
+      if (v != null) tddY[y] = (tddY[y] || 0) + Math.max(0, v);
+    });
+    const years = Object.keys(tddY).map(Number).sort();
+    const complete = years.filter(y => y < curYear);
+    const avg25 = complete.slice(-25).reduce((s, y) => s + tddY[y], 0) / Math.min(25, complete.length);
+    const curTdd = Math.round(tddY[curYear] || 0);
+    const cvEl = document.getElementById('cv-tdd');
+    if (cvEl) cvEl.textContent = curTdd;
+    const W = el.offsetWidth || 700;
+    const ML = 56, MR = 20, MT = 20, MB = 36;
+    const cW = W - ML - MR, cH = 200, H = MT + cH + MB;
+    const maxV = Math.max(...years.map(y => tddY[y])) * 1.08;
+    const yS = v => (MT + cH - (v / maxV) * cH).toFixed(1);
+    const slot = cW / years.length;
+    const bW = Math.max(3, slot - 2);
+    const xC = i => (ML + (i + 0.5) * slot).toFixed(1);
+    const step = maxV > 800 ? 200 : 100;
+    let grid = '';
+    for (let v = 0; v <= maxV; v += step) {
+      grid += `<line x1="${ML}" y1="${yS(v)}" x2="${ML+cW}" y2="${yS(v)}" stroke="var(--border)" stroke-width="1"/>`;
+      grid += `<text x="${ML-5}" y="${parseFloat(yS(v))+4}" text-anchor="end" font-size="11" fill="var(--muted)">${v}</text>`;
+    }
+    let bars = '', xlabels = '';
+    years.forEach((y, i) => {
+      const tdd = tddY[y];
+      const bh = Math.max(1, ((tdd / maxV) * cH)).toFixed(1);
+      const bx = (parseFloat(xC(i)) - bW / 2).toFixed(1);
+      const fill = y === curYear ? '#E07070' : '#F0A830';
+      bars += `<rect class="tdd-bar" data-y="${y}" data-v="${Math.round(tdd)}" x="${bx}" y="${yS(tdd)}" width="${bW.toFixed(1)}" height="${bh}" fill="${fill}" rx="1.5"/>`;
+      if (y % 5 === 1 || y === curYear || y === years[0])
+        xlabels += `<text x="${xC(i)}" y="${(MT+cH+14).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--muted)">${y}</text>`;
+    });
+    const avgY = parseFloat(yS(avg25));
+    const avgLine =
+      `<line x1="${ML}" y1="${avgY.toFixed(1)}" x2="${ML+cW}" y2="${avgY.toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="5,3"/>` +
+      `<text x="${(ML+cW-4).toFixed(1)}" y="${(avgY-5).toFixed(1)}" text-anchor="end" font-size="11" fill="#C0392B">25yr avg ${Math.round(avg25)}</text>`;
+    const uid = 'tddTip_sp';
+    const tip = `<g id="${uid}" style="pointer-events:none;display:none"><rect id="${uid}bg" rx="4" fill="var(--card)" stroke="var(--border)" stroke-width="1"/><text id="${uid}tx" font-size="12" fill="var(--fg)" font-family="system-ui,sans-serif"/></g>`;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.style.cssText = 'width:100%;display:block';
+    svg.innerHTML = `<text x="${ML}" y="${MT-5}" font-size="11" fill="var(--muted)">°C·days</text>${grid}${bars}${avgLine}${xlabels}${tip}`;
+    el.innerHTML = ''; el.appendChild(svg);
+    svg.querySelectorAll('.tdd-bar').forEach(bar => {
+      bar.addEventListener('mouseenter', () => {
+        const yr = bar.getAttribute('data-y'), val = bar.getAttribute('data-v');
+        const lbl = `${yr}: ${val} °C·days`;
+        const tip = svg.getElementById(uid), bg = svg.getElementById(uid+'bg'), tx = svg.getElementById(uid+'tx');
+        tx.textContent = lbl; tip.style.display = '';
+        const bx = parseFloat(bar.getAttribute('x')), by = parseFloat(bar.getAttribute('y'));
+        const tw = lbl.length * 7 + 16;
+        const tx2 = Math.min(bx, W-tw-6), ty2 = Math.max(MT, by-28);
+        bg.setAttribute('x',tx2); bg.setAttribute('y',ty2); bg.setAttribute('width',tw); bg.setAttribute('height',20);
+        tx.setAttribute('x',tx2+8); tx.setAttribute('y',ty2+14);
+      });
+      bar.addEventListener('mouseleave', () => { svg.getElementById(uid).style.display='none'; });
+    });
+  } catch (err) {
+    el.innerHTML = `<div style="padding:14px;color:var(--muted);font-size:13px">TDD unavailable — ${err.message}</div>`;
+  }
+}
+
+// ── Wind rose + vector timeline ───────────────────────────────────────────────
+async function renderWindRose(lat, lon, tz) {
+  const el = document.getElementById('windRoseEl');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:13px">Loading wind data…</div>';
+  function spColor(s){return s<5?'#2DD4BF':s<15?'#A3C44C':s<25?'#F0A830':s<35?'#E04020':'#8B1DBF';}
+  try {
+    const res = await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+      `&hourly=windspeed_10m,winddirection_10m&wind_speed_unit=kmh` +
+      `&past_days=30&forecast_days=0&timezone=${encodeURIComponent(tz||'UTC')}`
+    );
+    const raw = await res.json();
+    const times = raw.hourly?.time||[], speeds = raw.hourly?.windspeed_10m||[], dirs = raw.hourly?.winddirection_10m||[];
+    const byDay = {};
+    times.forEach((t,i) => {
+      const d = t.slice(0,10); if(!byDay[d]) byDay[d]={sx:0,sy:0,sp:0,n:0};
+      const spd=speeds[i],dir=dirs[i]; if(spd==null||dir==null) return;
+      const rad=dir*Math.PI/180;
+      byDay[d].sx+=spd*Math.sin(rad); byDay[d].sy+=spd*Math.cos(rad); byDay[d].sp+=spd; byDay[d].n++;
+    });
+    const daily = Object.keys(byDay).sort().map(d=>{
+      const e=byDay[d]; if(!e.n) return null;
+      return {date:d, dir:((Math.atan2(e.sx/e.n,e.sy/e.n)*180/Math.PI)+360)%360, spd:e.sp/e.n};
+    }).filter(Boolean);
+    const sectors=16, secDeg=360/sectors;
+    const bins=Array.from({length:sectors},()=>({cnt:0,spSum:0}));
+    times.forEach((_,i)=>{
+      const spd=speeds[i],dir=dirs[i]; if(spd==null||dir==null) return;
+      const bi=Math.round(dir/secDeg)%sectors; bins[bi].cnt++; bins[bi].spSum+=spd;
+    });
+    const maxCnt=Math.max(...bins.map(b=>b.cnt));
+    const W=el.offsetWidth||700, roseW=Math.min(200,W*0.28), H=220;
+    const cx=roseW/2, cy=H/2, rMax=roseW/2-18;
+    let petals='';
+    ['N','NE','E','SE','S','SW','W','NW'].forEach((lbl,i)=>{
+      const a=i*45*Math.PI/180, r=rMax+14;
+      petals+=`<text x="${(cx+r*Math.sin(a)).toFixed(1)}" y="${(cy-r*Math.cos(a)+4).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--muted)" font-weight="${lbl==='N'?'700':'400'}">${lbl}</text>`;
+    });
+    [0.25,0.5,0.75,1].forEach(f=>{petals+=`<circle cx="${cx}" cy="${cy}" r="${(rMax*f).toFixed(1)}" fill="none" stroke="var(--border)" stroke-width="0.5"/>`;});
+    bins.forEach((b,i)=>{
+      if(!b.cnt) return;
+      const r=(b.cnt/maxCnt)*rMax;
+      const a1=((i-0.5)*secDeg-90)*Math.PI/180, a2=((i+0.5)*secDeg-90)*Math.PI/180;
+      const x1=(cx+r*Math.cos(a1)).toFixed(1),y1=(cy+r*Math.sin(a1)).toFixed(1);
+      const x2=(cx+r*Math.cos(a2)).toFixed(1),y2=(cy+r*Math.sin(a2)).toFixed(1);
+      petals+=`<path d="M ${cx} ${cy} L ${x1} ${y1} A ${r.toFixed(1)} ${r.toFixed(1)} 0 0 1 ${x2} ${y2} Z" fill="${spColor(b.cnt?b.spSum/b.cnt:0)}" opacity="0.85"/>`;
+    });
+    petals+=`<circle cx="${cx}" cy="${cy}" r="3" fill="var(--muted)"/>`;
+    const tML=4,tMR=8,tMT=24,tMB=30,tW=W-roseW-16-tML-tMR,tH=H-tMT-tMB,vecCy=tMT+tH/2;
+    const maxSpd=Math.max(...daily.map(d=>d.spd),1), arrowScale=(tH/2-4)/maxSpd;
+    let arrows='',xLbls='';
+    daily.forEach((d,i)=>{
+      const x=tML+(i+0.5)*(tW/daily.length);
+      const rad=(d.dir-180)*Math.PI/180, len=d.spd*arrowScale;
+      const dx=len*Math.sin(rad), dy=-len*Math.cos(rad);
+      const x2=x+dx, y2=vecCy+dy, col=spColor(d.spd);
+      arrows+=`<line x1="${x.toFixed(1)}" y1="${vecCy.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${col}" stroke-width="2" stroke-linecap="round"/>`;
+      if(len>1){const hl=5,hw=3,px=-dy/(len||1),py=dx/(len||1),bx2=x2-(dx/len)*hl,by2=y2-(dy/len)*hl;
+        arrows+=`<polygon points="${x2.toFixed(1)},${y2.toFixed(1)} ${(bx2+px*hw).toFixed(1)},${(by2+py*hw).toFixed(1)} ${(bx2-px*hw).toFixed(1)},${(by2-py*hw).toFixed(1)}" fill="${col}"/>`;}
+      if(i%5===0||i===daily.length-1){const dt=new Date(d.date+'T12:00:00Z');
+        xLbls+=`<text x="${x.toFixed(1)}" y="${(tMT+tH+14).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--muted)">${dt.toLocaleDateString('en-CA',{month:'short',day:'numeric'})}</text>`;}
+    });
+    const cbX=tML+tW+2,cbY=tMT,cbH=tH,cbW=6,maxLbl=Math.ceil(maxSpd/10)*10;
+    let cbar=`<defs><linearGradient id="cbgSP" x1="0" y1="0" x2="0" y2="1">`;
+    [['#2DD4BF'],['#A3C44C'],['#F0A830'],['#E04020'],['#8B1DBF']].forEach(([c],i,a)=>{cbar+=`<stop offset="${(i/(a.length-1)*100).toFixed(0)}%" stop-color="${c}"/>`;});
+    cbar+=`</linearGradient></defs><rect x="${cbX}" y="${cbY}" width="${cbW}" height="${cbH}" fill="url(#cbgSP)" rx="2"/>`;
+    [0,maxLbl/2,maxLbl].forEach(v=>{const ly=cbY+cbH-(v/maxLbl)*cbH;cbar+=`<text x="${cbX+cbW+2}" y="${(ly+4).toFixed(1)}" font-size="9" fill="var(--muted)">${Math.round(v)}</text>`;});
+    cbar+=`<text x="${cbX+cbW/2}" y="${cbY-4}" text-anchor="middle" font-size="9" fill="var(--muted)">km/h</text>`;
+    const cline=`<line x1="${tML}" y1="${vecCy.toFixed(1)}" x2="${(tML+tW).toFixed(1)}" y2="${vecCy.toFixed(1)}" stroke="var(--border)" stroke-width="0.8"/>`;
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.style.cssText='width:100%;display:block';
+    svg.innerHTML=`<g>${petals}</g><g transform="translate(${roseW+8},0)">${cbar}${cline}${arrows}${xLbls}</g>`;
+    el.innerHTML=''; el.appendChild(svg);
+  } catch(err){el.innerHTML=`<div style="padding:14px;color:var(--muted);font-size:13px">Wind data unavailable — ${err.message}</div>`;}
+}
+
+// ── River level annual trajectory (WSC) ───────────────────────────────────────
+async function renderRiverTrajectory(stationId, riverLabel) {
+  const el = document.getElementById('riverClimEl');
+  if (!el) return;
+  el.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:13px">Loading river data…</div>';
+  const curYear = new Date().getFullYear();
+  const histStart = curYear - 15, histEnd = curYear - 1;
+  const base = 'https://api.weather.gc.ca/collections/hydrometric-daily-mean/items';
+  try {
+    const [histRes, curRes] = await Promise.all([
+      fetch(`${base}?STATION_NUMBER=${stationId}&datetime=${histStart}-01-01/${histEnd}-12-31&f=json&limit=10000&sortby=DATE`),
+      fetch(`${base}?STATION_NUMBER=${stationId}&datetime=${curYear}-01-01/${curYear}-12-31&f=json&limit=500&sortby=DATE`)
+    ]);
+    const [histJson, curJson] = await Promise.all([histRes.json(), curRes.json()]);
+
+    // Index by day-of-year (1-366) → array of values
+    function doy(dateStr) {
+      const d = new Date(dateStr + 'T12:00:00Z');
+      const start = new Date(Date.UTC(d.getUTCFullYear(), 0, 0));
+      return Math.round((d - start) / 86400000);
+    }
+    const byDoy = {};
+    (histJson.features || []).forEach(f => {
+      const lvl = f.properties?.LEVEL; const dt = f.properties?.DATE?.slice(0, 10);
+      if (lvl == null || !dt) return;
+      const d = doy(dt); if (!byDoy[d]) byDoy[d] = [];
+      byDoy[d].push(lvl);
+    });
+    // Percentiles
+    function pct(arr, p) {
+      const s = [...arr].sort((a, b) => a - b);
+      const i = (p / 100) * (s.length - 1);
+      const lo = Math.floor(i), hi = Math.ceil(i);
+      return s[lo] + (s[hi] - s[lo]) * (i - lo);
+    }
+    const p10 = {}, p50 = {}, p90 = {};
+    Object.entries(byDoy).forEach(([d, vals]) => {
+      if (vals.length < 3) return;
+      p10[d] = pct(vals, 10); p50[d] = pct(vals, 50); p90[d] = pct(vals, 90);
+    });
+
+    // Current year data
+    const curPts = (curJson.features || []).map(f => ({
+      doy: doy(f.properties.DATE.slice(0, 10)),
+      val: f.properties.LEVEL
+    })).filter(p => p.val != null);
+
+    const allVals = [...Object.values(p90), ...curPts.map(p => p.val)].filter(v => v != null);
+    const allMin = Math.min(...Object.values(p10), ...curPts.map(p => p.val));
+    const allMax = Math.max(...allVals);
+
+    const W = el.offsetWidth || 700;
+    const ML = 52, MR = 20, MT = 20, MB = 36;
+    const cW = W - ML - MR, cH = 200, H = MT + cH + MB;
+    const xS = d => (ML + ((d - 1) / 365) * cW).toFixed(1);
+    const pad = (allMax - allMin) * 0.06;
+    const yMin = allMin - pad, yMax = allMax + pad;
+    const yS = v => (MT + cH - ((v - yMin) / (yMax - yMin)) * cH).toFixed(1);
+
+    // Y grid
+    const range = yMax - yMin;
+    const yStep = range > 5 ? 2 : range > 2 ? 1 : 0.5;
+    let grid = '';
+    for (let v = Math.ceil(yMin / yStep) * yStep; v <= yMax; v += yStep) {
+      grid += `<line x1="${ML}" y1="${yS(v)}" x2="${ML+cW}" y2="${yS(v)}" stroke="var(--border)" stroke-width="1"/>`;
+      grid += `<text x="${ML-5}" y="${parseFloat(yS(v))+4}" text-anchor="end" font-size="11" fill="var(--muted)">${v.toFixed(1)}</text>`;
+    }
+
+    // X axis: month labels
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const mDoys = [1,32,60,91,121,152,182,213,244,274,305,335];
+    let xlabels = mDoys.map((d,i) =>
+      `<text x="${xS(d+15)}" y="${(MT+cH+14).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--muted)">${months[i]}</text>`
+    ).join('');
+
+    // P10-P90 band (polygon)
+    const doys = Object.keys(p50).map(Number).sort((a,b)=>a-b);
+    const bandUp = doys.map(d => `${xS(d)},${yS(p90[d])}`).join(' ');
+    const bandDn = doys.slice().reverse().map(d => `${xS(d)},${yS(p10[d])}`).join(' ');
+    const band = doys.length > 1
+      ? `<polygon points="${bandUp} ${bandDn}" fill="var(--muted)" opacity="0.18"/>`
+      : '';
+
+    // P50 line
+    const medLine = doys.length > 1
+      ? `<polyline points="${doys.map(d=>`${xS(d)},${yS(p50[d])}`).join(' ')}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4,2" opacity="0.6"/>`
+      : '';
+
+    // Current year line
+    const curLine = curPts.length > 1
+      ? `<polyline points="${curPts.map(p=>`${xS(p.doy)},${yS(p.val)}`).join(' ')}" fill="none" stroke="#1A73E8" stroke-width="2.5" stroke-linejoin="round"/>`
+      : '';
+
+    // "now" marker
+    const nowDoy = doy(new Date().toISOString().slice(0, 10));
+    const nowLine = `<line x1="${xS(nowDoy)}" y1="${MT}" x2="${xS(nowDoy)}" y2="${(MT+cH).toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/>
+      <text x="${(parseFloat(xS(nowDoy))+4).toFixed(1)}" y="${(MT+cH-6).toFixed(1)}" font-size="12" fill="#C0392B" font-weight="700">now</text>`;
+
+    // Legend
+    const leg =
+      `<rect x="${ML}" y="${MT-16}" width="10" height="4" fill="var(--muted)" opacity="0.4"/>` +
+      `<text x="${ML+14}" y="${MT-12}" font-size="10" fill="var(--muted)">p10–p90 (${histStart}–${histEnd})</text>` +
+      `<line x1="${ML+120}" y1="${MT-14}" x2="${ML+134}" y2="${MT-14}" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4,2" opacity="0.6"/>` +
+      `<text x="${ML+138}" y="${MT-10}" font-size="10" fill="var(--muted)">median</text>` +
+      `<line x1="${ML+188}" y1="${MT-14}" x2="${ML+202}" y2="${MT-14}" stroke="#1A73E8" stroke-width="2.5"/>` +
+      `<text x="${ML+206}" y="${MT-10}" font-size="10" fill="#1A73E8">${curYear}</text>`;
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.style.cssText = 'width:100%;display:block';
+    svg.innerHTML = `<text x="${ML}" y="${MT-5}" font-size="11" fill="var(--muted)">m (level)</text>${grid}${band}${medLine}${curLine}${nowLine}${xlabels}${leg}`;
+    el.innerHTML = ''; el.appendChild(svg);
+  } catch (err) {
+    el.innerHTML = `<div style="padding:14px;color:var(--muted);font-size:13px">River data unavailable — ${err.message}</div>`;
+  }
+}
+
 // ── Load data.json ──
 async function loadData(){
   _lastFetch=Date.now();
@@ -1306,6 +1584,15 @@ async function loadData(){
   }
   // Add expand buttons to all chart cards that have an SVG
   initExpandButtons();
+
+  // Climate charts (async — fetch from ERA5/Open-Meteo independently)
+  const _clat = d.community?.lat;
+  const _clon = d.community?.lon;
+  if (_clat && _clon) {
+    renderTddChart(_clat, _clon);
+    renderWindRose(_clat, _clon, tz);
+    renderRiverTrajectory('10MC023', 'Napoiak Channel');
+  }
 }
 
 function fmtTime(utcStr,tz){

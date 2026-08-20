@@ -952,8 +952,8 @@ function renderWaveChart(containerId, series, tz){
   const ystep=maxH<=2?0.5:maxH<=4?1:2;
   for(let v=0;v<=maxH+0.01;v+=ystep){
     const yy=py(v);
-    yticks+=`<line x1="${ML-3}" y1="${yy.toFixed(1)}" x2="${ML+cW}" y2="${yy.toFixed(1)}" stroke="currentColor" stroke-width="0.5" opacity="0.1"/>`;
-    yticks+=`<text x="${ML-8}" y="${(yy+5).toFixed(1)}" text-anchor="end" font-size="16" fill="currentColor" opacity="0.55" font-family="system-ui,sans-serif">${v.toFixed(v%1?1:0)}</text>`;
+    yticks+=`<line x1="${ML-3}" y1="${yy.toFixed(1)}" x2="${ML+cW}" y2="${yy.toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.15"/>`;
+    yticks+=`<text x="${ML-8}" y="${(yy+5).toFixed(1)}" text-anchor="end" font-size="16" fill="currentColor" opacity="0.7" font-family="system-ui,sans-serif">${v.toFixed(v%1?1:0)}</text>`;
   }
   // X date labels
   let xlabels='';
@@ -963,8 +963,8 @@ function renderWaveChart(containerId, series, tz){
     const xx=px(d.getTime());
     if(xx>ML+15&&xx<ML+cW-15){
       const lbl=d.toLocaleDateString('en',{timeZone:tz,month:'short',day:'numeric'});
-      xlabels+=`<line x1="${xx.toFixed(1)}" y1="${MT}" x2="${xx.toFixed(1)}" y2="${(MT+cH+4).toFixed(1)}" stroke="currentColor" stroke-width="0.5" opacity="0.15"/>`;
-      xlabels+=`<text x="${xx.toFixed(1)}" y="${(H-MB+20).toFixed(1)}" text-anchor="middle" font-size="16" fill="currentColor" opacity="0.55" font-family="system-ui,sans-serif">${lbl}</text>`;
+      xlabels+=`<line x1="${xx.toFixed(1)}" y1="${MT}" x2="${xx.toFixed(1)}" y2="${(MT+cH+4).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.25"/>`;
+      xlabels+=`<text x="${xx.toFixed(1)}" y="${(H-MB+20).toFixed(1)}" text-anchor="middle" font-size="16" fill="currentColor" opacity="0.7" font-family="system-ui,sans-serif">${lbl}</text>`;
     }
     d=new Date(d.getTime()+dayMs);
   }

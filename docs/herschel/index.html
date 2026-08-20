@@ -1232,6 +1232,7 @@ async function renderTddChart(lat, lon) {
       });
       bar.addEventListener('mouseleave', () => { const tipEl = svg.querySelector('#'+uid); if (tipEl) tipEl.style.display = 'none'; });
     });
+    initExpandButtons();
   } catch (err) {
     el.innerHTML = `<div style="padding:14px;color:var(--muted);font-size:13px">TDD unavailable — ${err.message}</div>`;
   }
@@ -1353,6 +1354,7 @@ async function renderWindRose(lat, lon, tz) {
     svg.innerHTML = `${cbar}${cline}${arrows}${xLbls}`;
     el.innerHTML = '';
     el.appendChild(svg);
+    initExpandButtons();
   } catch (err) {
     el.innerHTML = `<div style="padding:14px;color:var(--muted);font-size:13px">Wind data unavailable — ${err.message}</div>`;
   }

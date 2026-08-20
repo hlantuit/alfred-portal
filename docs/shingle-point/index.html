@@ -1258,6 +1258,7 @@ async function renderTddChart(lat, lon) {
       });
       bar.addEventListener('mouseleave', () => { const tipEl = svg.querySelector('#'+uid); if (tipEl) tipEl.style.display='none'; });
     });
+    initExpandButtons();
   } catch (err) {
     el.innerHTML = `<div style="padding:14px;color:var(--muted);font-size:13px">TDD unavailable — ${err.message}</div>`;
   }
@@ -1321,6 +1322,7 @@ async function renderWindRose(lat, lon, tz) {
     svg.setAttribute('viewBox',`0 0 ${W} ${H}`); svg.style.cssText='width:100%;display:block';
     svg.innerHTML=`${cbar}${cline}${arrows}${xLbls}`;
     el.innerHTML=''; el.appendChild(svg);
+    initExpandButtons();
   } catch(err){el.innerHTML=`<div style="padding:14px;color:var(--muted);font-size:13px">Wind data unavailable — ${err.message}</div>`;}
 }
 
@@ -1465,8 +1467,40 @@ async function renderRiverTrajectory(stationId, riverLabel) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.style.cssText = 'width:100%;display:block';
-    svg.innerHTML = `<text x="${ML}" y="${MT-5}" font-size="14" fill="var(--muted)">m (level)</text>${grid}${band}${medLine}${curLine}${nowLine}${xlabels}${leg}`;
+    // Tooltip elements
+    const ruid = 'rtip' + Math.random().toString(36).slice(2,7);
+    const tip2 = `<g id="${ruid}" style="display:none;pointer-events:none">
+      <line id="${ruid}vl" x1="0" y1="${MT}" x2="0" y2="${MT+cH}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3,2"/>
+      <rect id="${ruid}bg" x="0" y="0" width="10" height="10" rx="3" fill="rgba(0,0,0,0.82)"/>
+      <text id="${ruid}tx" x="0" y="0" font-size="13" fill="white"></text>
+    </g>`;
+    svg.innerHTML = `<text x="${ML}" y="${MT-5}" font-size="14" fill="var(--muted)">m (level)</text>${grid}${band}${medLine}${curLine}${nowLine}${xlabels}${leg}${tip2}`;
     el.innerHTML = ''; el.appendChild(svg);
+
+    // Crosshair tooltip
+    svg.addEventListener('mousemove', ev => {
+      const rect2 = svg.getBoundingClientRect();
+      const mx = (ev.clientX - rect2.left) * (W / rect2.width);
+      const tipD = Math.round(((mx - ML) / cW) * 366);
+      if (tipD < 1 || tipD > 366) { const te=svg.querySelector('#'+ruid); if(te) te.style.display='none'; return; }
+      const nearest = doys.reduce((a,b)=>Math.abs(b-tipD)<Math.abs(a-tipD)?b:a, doys[0]||1);
+      const curNear = curPts.reduce((a,b)=>b&&Math.abs(b.doy-tipD)<Math.abs((a?.doy||999)-tipD)?b:a, null);
+      const parts = [];
+      if (p10[nearest]!=null) parts.push(`p10–p90: ${p10[nearest].toFixed(2)}–${p90[nearest]?.toFixed(2)} m`);
+      if (p50[nearest]!=null) parts.push(`median: ${p50[nearest].toFixed(2)} m`);
+      if (curNear) parts.push(`${curYear}: ${curNear.val.toFixed(2)} m`);
+      const lbl2 = months[Math.floor((tipD-1)/30.5)]?.slice(0,3) + ' · ' + parts.join(' · ');
+      const tipEl=svg.querySelector('#'+ruid), vl=svg.querySelector('#'+ruid+'vl'), bg=svg.querySelector('#'+ruid+'bg'), tx2=svg.querySelector('#'+ruid+'tx');
+      if (!tipEl) return;
+      const lx = parseFloat(xS(nearest));
+      vl.setAttribute('x1', lx); vl.setAttribute('x2', lx);
+      tx2.textContent = lbl2; tipEl.style.display = '';
+      const tw2 = lbl2.length * 7 + 16, tx3 = Math.min(lx+6, W-tw2-4), ty3 = MT + 6;
+      bg.setAttribute('x', tx3); bg.setAttribute('y', ty3); bg.setAttribute('width', tw2); bg.setAttribute('height', 22);
+      tx2.setAttribute('x', tx3+8); tx2.setAttribute('y', ty3+15);
+    });
+    svg.addEventListener('mouseleave', () => { const te=svg.querySelector('#'+ruid); if(te) te.style.display='none'; });
+    initExpandButtons();
   } catch (err) {
     el.innerHTML = `<div style="padding:14px;color:var(--muted);font-size:13px">River data unavailable — ${err.message}</div>`;
   }

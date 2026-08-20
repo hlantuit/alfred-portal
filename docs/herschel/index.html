@@ -1299,7 +1299,7 @@ async function renderWindRose(lat, lon, tz) {
     const H = 220;
 
     // Vector timeline SVG
-    const tML = 4, tMR = 40, tMT = 24, tMB = 30;
+    const tML = 20, tMR = 58, tMT = 24, tMB = 30;
     const tW = W - tML - tMR, tH = H - tMT - tMB;
     const vecCy = tMT + tH / 2;
     const maxSpd = Math.max(...daily.map(d => d.spd), 1);

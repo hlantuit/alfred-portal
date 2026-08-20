@@ -1296,7 +1296,7 @@ async function renderWindRose(lat, lon, tz) {
     });
     const maxCnt=Math.max(...bins.map(b=>b.cnt));
     const W=el.offsetWidth||700, H=220;
-    const tML=4,tMR=40,tMT=24,tMB=30,tW=W-tML-tMR,tH=H-tMT-tMB,vecCy=tMT+tH/2;
+    const tML=20,tMR=58,tMT=24,tMB=30,tW=W-tML-tMR,tH=H-tMT-tMB,vecCy=tMT+tH/2;
     const maxSpd=Math.max(...daily.map(d=>d.spd),1), arrowScale=(tH/2-4)/maxSpd;
     let arrows='',xLbls='';
     daily.forEach((d,i)=>{

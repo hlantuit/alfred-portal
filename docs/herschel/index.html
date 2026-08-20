@@ -1433,7 +1433,7 @@ async function loadData(){
   document.getElementById('sb-temp').textContent=(w.temperature??'—')+'°';
   document.getElementById('sb-label').textContent=(WMO[wcode]||'')+(w.feels_like!=null?' · Feels '+w.feels_like+'°':'');
   if(w.wind_speed!=null) document.getElementById('sb-wind').innerHTML=`💨 <b>${w.wind_speed} km/h ${w.wind_dir_label||''}</b> · ${beaufort(w.wind_speed)}`;
-  if(tide?.current_m!=null) document.getElementById('sb-tide').innerHTML=`🌊 <b>${sign(tide.current_m)}${tide.current_m} m</b> · ${tide.trend||''}`;
+  if(tide?.current_m!=null) document.getElementById('sb-tide').innerHTML=`🌊 <b>${sign(tide.current_m)}${parseFloat(tide.current_m).toFixed(2)} m</b> · ${tide.trend||''}`;
 
   // Alerts
   const alerts=(d.alerts?.weather||[]).filter(a=>/No watches/i.test(a)===false);
@@ -1461,7 +1461,7 @@ async function loadData(){
       document.getElementById('c-tide-sub').textContent=(twl?.topaz?'TOPAZ6':'GDSPS')+' · above yearly mean';
       document.getElementById('c-tide-pill').innerHTML='';
     } else if(tide?.current_m!=null){
-      document.getElementById('c-tide').innerHTML=`${sign(tide.current_m)}${tide.current_m}<span class="cc-unit"> m</span>`;
+      document.getElementById('c-tide').innerHTML=`${sign(tide.current_m)}${parseFloat(tide.current_m).toFixed(2)}<span class="cc-unit"> m</span>`;
       let sub=tide.trend?tide.trend[0].toUpperCase()+tide.trend.slice(1):'';
       if(tide.next_high) sub+=` · High at ${fmtTime(tide.next_high.time_utc,tz)} (${sign(tide.next_high.m)}${tide.next_high.m} m)`;
       document.getElementById('c-tide-sub').textContent=sub;

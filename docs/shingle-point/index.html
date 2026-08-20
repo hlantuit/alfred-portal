@@ -101,7 +101,7 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .fc-wrap{padding:14px 20px 0}
 .fc-scroll{}
 .fc-row{display:flex;flex-wrap:wrap;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;background:var(--surf)}
-.fc-cell{padding:10px 14px;text-align:center;border-right:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);min-width:86px;flex:1 1 86px;cursor:pointer;transition:background .1s;user-select:none}
+.fc-cell{padding:10px 14px;text-align:center;border-right:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);min-width:86px;flex:1 1 20%;cursor:pointer;transition:background .1s;user-select:none}
 .fc-cell:last-child{border-right:none}
 .fc-cell.today{background:var(--acc-l)}
 .fc-cell:hover{background:var(--surf2)}
@@ -127,16 +127,16 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 /* ── Charts ── */
 .chart-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 20px 0}
 .chart-1{padding:14px 20px 14px}
-.ch{background:var(--surf);border-radius:8px;padding:14px;border:1px solid var(--bdr2)}
+.ch{background:var(--surf);border-radius:8px;padding:14px;border:1px solid var(--bdr2);display:flex;flex-direction:column}
 .ch-hd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
 .ch-title{font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
 .ch-val{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
 .ch-unit{font-size:12px;font-weight:400;color:var(--muted)}
-.ch-area{min-height:64px;height:auto;position:relative;overflow:visible}
+.ch-area{min-height:64px;height:auto;position:relative;overflow:visible;flex:1}
 svg.sp{width:100%;height:100%;display:block}
 
 /* ── Expandable weather details ── */
-.expand-btn{display:flex;align-items:center;justify-content:space-between;padding:11px 20px;cursor:pointer;font-size:12px;font-weight:700;color:var(--acc);background:var(--surf2);border-top:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);user-select:none}
+.expand-btn{display:flex;align-items:center;gap:10px;padding:11px 20px;cursor:pointer;font-size:12px;font-weight:700;color:var(--acc);background:var(--surf2);border-top:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);user-select:none}
 .expand-btn .chev{font-style:normal;font-size:14px;font-weight:700;line-height:20px;width:22px;height:22px;text-align:center;flex-shrink:0;border:2px solid var(--acc);border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
 .expand-btn.open .chev{}
 .expand-body{display:none}
@@ -323,8 +323,8 @@ svg.sp{width:100%;height:100%;display:block}
 
   <!-- Expandable: wind / precip / pressure / cloud — 10-day hourly -->
   <div class="expand-btn" id="detToggle" onclick="toggleDetail()">
-    <span>Wind · Precipitation · Pressure · Cloud cover — 10-day hourly</span>
     <i class="chev" id="detToggleIcon">+</i>
+    <span>Wind · Precipitation · Pressure · Cloud cover — 10-day hourly</span>
   </div>
   <div class="expand-body" id="detBody">
     <div class="chart-row" style="padding-top:14px;padding-bottom:14px">
@@ -553,13 +553,27 @@ function sparkline(svgId, data, stroke, times){
   const yLabels=`
     <text x="${ML-5}" y="${(MT+6).toFixed(1)}" text-anchor="end" font-size="18" fill="currentColor" opacity="0.5" font-family="system-ui,sans-serif">${fmtV(max)}</text>
     <text x="${ML-5}" y="${(MT+cH).toFixed(1)}" text-anchor="end" font-size="18" fill="currentColor" opacity="0.5" font-family="system-ui,sans-serif">${fmtV(min)}</text>`;
-  let xlabels='';
-  if(hasTimes){let lastDay='';times.forEach((t,i)=>{if(!t)return;const dt=new Date(t);const dk=dt.toLocaleDateString('en',{timeZone:'UTC',month:'short',day:'numeric'});if(dk!==lastDay){lastDay=dk;const xx=px(i);if(xx>ML+12&&xx<ML+cW-12){xlabels+=`<line x1="${xx.toFixed(1)}" y1="${(MT+cH).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(MT+cH+4).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.2"/><text x="${xx.toFixed(1)}" y="${(H-2).toFixed(1)}" text-anchor="middle" font-size="13" fill="currentColor" opacity="0.55" font-family="system-ui,sans-serif">${dk}</text>`;}}});}
+  const spXhId=`spxh_${svgId}`,spDotId=`spdot_${svgId}`;
+  function genSpXlabels(cPx){
+    if(!hasTimes) return '';
+    const minSep=cPx>50?Math.max(50,48*W/cPx):65;
+    let xl='',lastDay='',lastXX=-9999;
+    times.forEach((t,i)=>{
+      if(!t) return;
+      const dt=new Date(t);
+      const dk=dt.toLocaleDateString('en',{timeZone:'UTC',month:'short',day:'numeric'});
+      if(dk!==lastDay){lastDay=dk;const xx=px(i);if(xx>ML+12&&xx<ML+cW-12&&xx-lastXX>=minSep){xl+=`<line x1="${xx.toFixed(1)}" y1="${(MT+cH).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(MT+cH+4).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.2"/><text x="${xx.toFixed(1)}" y="${(H-2).toFixed(1)}" text-anchor="middle" font-size="13" fill="currentColor" opacity="0.55" font-family="system-ui,sans-serif">${dk}</text>`;lastXX=xx;}}
+    });
+    return xl;
+  }
+  function renderSpInner(cPx){
+    svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.18"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.01"/></linearGradient></defs>${yLabels}${genSpXlabels(cPx)}<path d="${dF}" fill="url(#g${svgId})"/><path d="${dL}" fill="none" stroke="${stroke}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4" fill="${stroke}" stroke="white" stroke-width="1.5"/><line id="${spXhId}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="${stroke}" stroke-width="1" stroke-dasharray="3,2" opacity="0.45"/><circle id="${spDotId}" cx="-100" cy="-100" r="4" fill="${stroke}" stroke="white" stroke-width="1.5"/>`;
+  }
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   svg.setAttribute('preserveAspectRatio','none');
   svg.style.cssText='width:100%;display:block;cursor:crosshair;overflow:visible';
-  const spXhId=`spxh_${svgId}`,spDotId=`spdot_${svgId}`;
-  svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.18"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.01"/></linearGradient></defs>${yLabels}${xlabels}<path d="${dF}" fill="url(#g${svgId})"/><path d="${dL}" fill="none" stroke="${stroke}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4" fill="${stroke}" stroke="white" stroke-width="1.5"/><line id="${spXhId}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="${stroke}" stroke-width="1" stroke-dasharray="3,2" opacity="0.45"/><circle id="${spDotId}" cx="-100" cy="-100" r="4" fill="${stroke}" stroke="white" stroke-width="1.5"/>`;
+  renderSpInner(svg.parentElement?svg.parentElement.getBoundingClientRect().width:0);
+  if(window.ResizeObserver&&svg.parentElement){const _ro=new ResizeObserver(es=>renderSpInner(es[0].contentRect.width));_ro.observe(svg.parentElement);}
   svg.parentElement.style.position='relative';
   const spTip=Object.assign(document.createElement('div'),{});
   spTip.style.cssText='position:absolute;background:var(--surf);border:1px solid var(--bdr2);border-radius:5px;padding:4px 10px;font-size:11px;pointer-events:none;display:none;z-index:10;white-space:nowrap;color:var(--txt);box-shadow:0 2px 6px rgba(0,0,0,.1)';
@@ -1170,7 +1184,7 @@ async function loadData(){
   if(rivers.length){
     const rv=rivers[0];
     if(rv.series?.length) sparkline('riverSVG', rv.series.map(p=>p.m), GREEN, rv.series.map(p=>p.t));
-    if(rv.current_m!=null) document.getElementById('cv-river').textContent=rv.current_m;
+    if(rv.current_m!=null) document.getElementById('cv-river').textContent=parseFloat(rv.current_m).toFixed(1);
     const short=(rv.river_name||'River').split(',')[0];
     document.getElementById('river-title').textContent=short;
   }

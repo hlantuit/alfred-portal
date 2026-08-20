@@ -135,6 +135,13 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .ch-area{min-height:64px;height:auto;position:relative;overflow:visible}
 svg.sp{width:100%;height:auto;display:block}
 
+/* ── Chart expand button ── */
+.ch-exp{background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px;padding:0;margin-left:8px;opacity:0.4;line-height:1;flex-shrink:0;transition:opacity .15s;display:inline-flex;align-items:center}
+.ch-exp:hover{opacity:0.9}
+.ch-exp-overlay{position:fixed;inset:0;z-index:9100;background:var(--bg);display:flex;flex-direction:column;justify-content:center;padding:20px 16px;box-sizing:border-box;cursor:zoom-out}
+.ch-exp-overlay svg{width:100%;height:auto;display:block;max-height:72vh}
+.ch-exp-title{font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);margin-bottom:14px}
+.ch-exp-hint{font-size:11px;color:var(--muted);margin-top:14px;text-align:center}
 /* ── Expandable weather details ── */
 .expand-btn{display:flex;align-items:center;gap:10px;padding:11px 20px;cursor:pointer;font-size:12px;font-weight:700;color:var(--acc);background:var(--surf2);border-top:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);user-select:none}
 .expand-btn .chev{font-style:normal;font-size:14px;font-weight:700;line-height:20px;width:22px;height:22px;text-align:center;flex-shrink:0;border:2px solid var(--acc);border-radius:50%;display:inline-flex;align-items:center;justify-content:center}
@@ -904,8 +911,8 @@ function renderPrecipChart(containerId, rain, snow, times, tz){
   }
   el.innerHTML=`<svg id="psvg_${uid}" viewBox="0 0 ${W} ${H}" style="width:100%;display:block;overflow:visible;cursor:crosshair">
     ${yticks}${xlabels}${bars}
-    <text x="${ML+cW-4}" y="${(MT+12).toFixed(1)}" text-anchor="end" font-size="11" fill="#005FA3" opacity="0.7" font-family="system-ui,sans-serif">■ rain</text>
-    <text x="${ML+cW-4}" y="${(MT+24).toFixed(1)}" text-anchor="end" font-size="11" fill="#A8D4F5" opacity="0.9" font-family="system-ui,sans-serif">■ snow</text>
+    <text x="${ML+cW-4}" y="${(MT+12).toFixed(1)}" text-anchor="end" font-size="14" fill="#005FA3" opacity="0.75" font-family="system-ui,sans-serif">■ rain</text>
+    <text x="${ML+cW-4}" y="${(MT+24).toFixed(1)}" text-anchor="end" font-size="14" fill="#A8D4F5" opacity="0.95" font-family="system-ui,sans-serif">■ snow</text>
     <line id="pxh_${uid}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#6B8499" stroke-width="1" stroke-dasharray="3,2" opacity="0.45"/>
   </svg>`;
   el.style.position='relative';
@@ -971,10 +978,10 @@ function renderWaveChart(containerId, series, tz){
   // "now" marker
   const nowX=Math.max(ML,Math.min(ML+cW,px(now)));
   // "now" label offset right of line to avoid overlap
-  const nowMark=(now>=tMin&&now<=tMax)?`<line x1="${nowX.toFixed(1)}" y1="${MT}" x2="${nowX.toFixed(1)}" y2="${(MT+cH).toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/><text x="${(nowX+6).toFixed(1)}" y="${(MT+18).toFixed(1)}" text-anchor="start" font-size="14" fill="#C0392B" font-weight="700" font-family="system-ui,sans-serif">now</text>`:'';
+  const nowMark=(now>=tMin&&now<=tMax)?`<line x1="${nowX.toFixed(1)}" y1="${MT}" x2="${nowX.toFixed(1)}" y2="${(MT+cH).toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/><text x="${(nowX+6).toFixed(1)}" y="${(MT+18).toFixed(1)}" text-anchor="start" font-size="15" fill="#C0392B" font-weight="700" font-family="system-ui,sans-serif">now</text>`:'';
   // Threshold labels: right-aligned inside chart, below each line
-  const roughMark=ROUGH<maxH?`<line x1="${ML}" y1="${py(ROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(ROUGH).toFixed(1)}" stroke="#B86F00" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW-6).toFixed(1)}" y="${(py(ROUGH)+15).toFixed(1)}" text-anchor="end" font-size="14" fill="#B86F00" opacity="0.8" font-family="system-ui,sans-serif">rough 1.25 m</text>`:'';
-  const vroughMark=VROUGH<maxH?`<line x1="${ML}" y1="${py(VROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(VROUGH).toFixed(1)}" stroke="#C0392B" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW-6).toFixed(1)}" y="${(py(VROUGH)+15).toFixed(1)}" text-anchor="end" font-size="14" fill="#C0392B" opacity="0.8" font-family="system-ui,sans-serif">very rough 2.5 m</text>`:'';
+  const roughMark=ROUGH<maxH?`<line x1="${ML}" y1="${py(ROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(ROUGH).toFixed(1)}" stroke="#B86F00" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW-6).toFixed(1)}" y="${(py(ROUGH)+15).toFixed(1)}" text-anchor="end" font-size="15" fill="#B86F00" opacity="0.85" font-family="system-ui,sans-serif">rough 1.25 m</text>`:'';
+  const vroughMark=VROUGH<maxH?`<line x1="${ML}" y1="${py(VROUGH).toFixed(1)}" x2="${(ML+cW).toFixed(1)}" y2="${py(VROUGH).toFixed(1)}" stroke="#C0392B" stroke-width="1" stroke-dasharray="6,3" opacity="0.7"/><text x="${(ML+cW-6).toFixed(1)}" y="${(py(VROUGH)+15).toFixed(1)}" text-anchor="end" font-size="15" fill="#C0392B" opacity="0.85" font-family="system-ui,sans-serif">very rough 2.5 m</text>`:'';
   const svgStr=`<svg id="waveSVGinner" viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block;overflow:visible;cursor:crosshair">
     <defs><linearGradient id="waveGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#005FA3" stop-opacity="0.3"/><stop offset="100%" stop-color="#005FA3" stop-opacity="0.02"/></linearGradient></defs>
     ${yticks}${xlabels}${nowMark}${roughMark}${vroughMark}
@@ -1216,6 +1223,7 @@ async function loadData(){
   } else {
     mt.innerHTML='<span style="color:var(--muted)">Marine forecast unavailable — check Environment Canada directly.</span>';
   }
+  initExpandButtons();
 }
 
 function fmtTime(utcStr,tz){
@@ -1230,6 +1238,37 @@ document.addEventListener('visibilitychange',()=>{
 });
 setInterval(()=>{if(Date.now()-_lastFetch>29*60*1000) loadData();},5*60*1000);
 loadData();
+
+// ── Chart full-screen expand ──
+function expandChart(ch){
+  const svg=ch.querySelector('svg');
+  if(!svg) return;
+  const clone=svg.cloneNode(true);
+  clone.style.cssText='width:100%;height:auto;display:block;max-height:72vh';
+  clone.querySelectorAll('[id]').forEach(e=>e.removeAttribute('id'));
+  const overlay=document.createElement('div');
+  overlay.className='ch-exp-overlay';
+  const title=ch.querySelector('.ch-title');
+  if(title){const t=document.createElement('div');t.className='ch-exp-title';t.textContent=title.textContent;overlay.appendChild(t);}
+  overlay.appendChild(clone);
+  const hint=document.createElement('div');hint.className='ch-exp-hint';hint.textContent='Tap anywhere to close';overlay.appendChild(hint);
+  overlay.onclick=()=>overlay.remove();
+  document.addEventListener('keydown',function esc(e){if(e.key==='Escape'){overlay.remove();document.removeEventListener('keydown',esc);}});
+  document.body.appendChild(overlay);
+}
+function initExpandButtons(){
+  document.querySelectorAll('.ch').forEach(ch=>{
+    if(ch.querySelector('.ch-exp')) return;
+    const svg=ch.querySelector('svg');
+    if(!svg) return;
+    const hd=ch.querySelector('.ch-hd');
+    if(!hd) return;
+    const btn=document.createElement('button');
+    btn.className='ch-exp';btn.title='Expand chart';btn.textContent='⤢';
+    btn.onclick=e=>{e.stopPropagation();expandChart(ch);};
+    hd.appendChild(btn);
+  });
+}
 
 // Register service worker for PWA / offline shell
 if ('serviceWorker' in navigator) {

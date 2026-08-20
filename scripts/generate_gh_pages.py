@@ -194,6 +194,7 @@ def fetch_weather(lat, lon, tz):
         "hourly_times_10d": hourly_times_10d,
         "hourly_temperature_10d": h_10d("temperature_2m"),
         "hourly_wind_10d": h_10d("windspeed_10m"),
+        "hourly_winddir_10d": h_10d("winddirection_10m"),
         "hourly_pressure_10d": h_10d("pressure_msl"),
         "hourly_cloud_10d": h_10d("cloudcover"),
         "hourly_precip_10d": h_10d("precipitation", decimals=2),
@@ -844,13 +845,14 @@ def main():
                         print(f"  MODIS crop/label failed ({crop_err}), saving raw")
                         out_path.write_bytes(r.content)
                     print(f"  MODIS banner: {d} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
-                    return True
+                    return d.strftime("%Y-%m-%d")
             except Exception as e:
                 print(f"  MODIS banner day -{delta} failed: {e}")
-        return False
+        return None
 
     banner_path = img_dir / "modis_banner.jpg"
-    if not fetch_modis_banner(lat, lon, banner_path):
+    modis_date = fetch_modis_banner(lat, lon, banner_path)
+    if not modis_date:
         print("  MODIS banner unavailable")
 
     marine = None
@@ -875,6 +877,7 @@ def main():
             "institution": cfg.get("institution_text", ""),
         },
         "updated_utc": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "modis_date": modis_date,
         "weather": weather,
         "total_water_level": total_water_level,
         "tide": tide,

@@ -270,7 +270,7 @@ svg.sp{width:100%;height:100%;display:block}
         <div class="sat-info">
           <div class="sat-label">MODIS Terra · True colour</div>
           <div class="sat-title">Qikiqtaruk — Beaufort Sea</div>
-          <div class="sat-date">Updated each workflow run · click to zoom · <a href="#sar-card" style="color:rgba(255,255,255,.55);text-decoration:underline">↓ SAR image below</a></div>
+          <div class="sat-date" id="modis-date-label">click to zoom · <a href="#sar-card" style="color:rgba(255,255,255,.55);text-decoration:underline">↓ SAR image below</a></div>
         </div>
       </div>
     </div>
@@ -655,8 +655,11 @@ function renderChart(containerId, vals, opts){
   const tz=opts.tz||'UTC';
   const unit=opts.unit||'';
   const stroke=opts.stroke||'var(--acc)';
-  const W=1000, ML=55, MR=12, MT=18, MB=times.length?42:10;
-  const H=260, cW=W-ML-MR, cH=H-MT-MB;
+  const dirs=opts.directions||null;
+  const hasDirs=dirs&&dirs.length>0;
+  const GUTTER=hasDirs?26:0;
+  const W=1000, ML=55, MR=12, MT=18, MB=times.length?(hasDirs?56:42):(hasDirs?30:10);
+  const H=260, cW=W-ML-MR, cH=H-MT-MB-GUTTER;
   const n=vals.length;
   const minV=Math.min(...clean), maxV=Math.max(...clean), rng=maxV-minV||1;
   const px=i=>ML+cW*i/(n-1);
@@ -708,16 +711,31 @@ function renderChart(containerId, vals, opts){
     });
   }
 
+  const DIR_CHARS=['↓','↙','←','↖','↑','↗','→','↘'];
+  let darrows='';
+  if(hasDirs){
+    const gutterY=(MT+cH+GUTTER*0.5).toFixed(1);
+    const baseY=(MT+cH).toFixed(1);
+    darrows+=`<line x1="${ML}" y1="${baseY}" x2="${ML+cW}" y2="${baseY}" stroke="currentColor" stroke-width="0.6" opacity="0.15"/>`;
+    const step=Math.max(1,Math.round(dirs.length/n)*6);
+    for(let i=0;i<dirs.length;i+=step){
+      const d=dirs[i]; if(d==null) continue;
+      const sector=Math.round((d%360+22.5)/45)%8;
+      const xx=px(Math.round(i*(n-1)/(dirs.length-1))).toFixed(1);
+      darrows+=`<text x="${xx}" y="${gutterY}" text-anchor="middle" dominant-baseline="middle" font-size="16" fill="${stroke}" opacity="0.65" font-family="system-ui,sans-serif">${DIR_CHARS[sector]}</text>`;
+    }
+  }
+
   const uid=containerId.replace(/[^a-z0-9]/gi,'_');
   el.innerHTML=`<svg id="svg_${uid}" viewBox="0 0 ${W} ${H}" style="width:100%;display:block;overflow:visible;cursor:crosshair">
     <defs><linearGradient id="gr_${uid}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="${stroke}" stop-opacity="0.18"/>
       <stop offset="100%" stop-color="${stroke}" stop-opacity="0.01"/>
     </linearGradient></defs>
-    ${yticks}${xlabels}
+    ${yticks}${xlabels}${darrows}
     <path d="${areaD}" fill="url(#gr_${uid})"/>
     <path d="${pathD}" fill="none" stroke="${stroke}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-    <line id="xh_${uid}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="${stroke}" stroke-width="1" stroke-dasharray="3,2" opacity="0.45"/>
+    <line id="xh_${uid}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH+GUTTER}" stroke="${stroke}" stroke-width="1" stroke-dasharray="3,2" opacity="0.45"/>
     <circle id="dot_${uid}" cx="-100" cy="-100" r="4" fill="${stroke}" stroke="white" stroke-width="1.5"/>
   </svg>`;
   el.style.position='relative';
@@ -1014,6 +1032,10 @@ async function loadData(){
     document.getElementById('tb-time').textContent=loc;
     document.getElementById('foot-updated').textContent='Last update: '+loc;
   }
+  if(d.modis_date){
+    const md=new Date(d.modis_date+'T12:00:00Z').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'});
+    document.getElementById('modis-date-label').innerHTML=`Acquired ${md} · click to zoom · <a href="#sar-card" style="color:rgba(255,255,255,.55);text-decoration:underline">↓ SAR image below</a>`;
+  }
 
   // Sidebar
   const wcode=w.weathercode??2;
@@ -1075,7 +1097,7 @@ async function loadData(){
   renderChart('tempChart', w.hourly_temperature_10d||[], {times:htimes,tz,unit:'°C',stroke:YELLOW});
 
   // Expandable detail charts — all 10-day hourly
-  renderChart('windChart',   w.hourly_wind_10d||[],     {times:htimes,tz,unit:' km/h',stroke:BLUE});
+  renderChart('windChart',   w.hourly_wind_10d||[],     {times:htimes,tz,unit:' km/h',stroke:BLUE,directions:w.hourly_winddir_10d||[]});
   renderPrecipChart('precipChart', w.hourly_rain_10d||w.hourly_precip_10d||[], w.hourly_snow_10d||[], htimes, tz);
   renderChart('presChart',   w.hourly_pressure_10d||[], {times:htimes,tz,unit:' hPa', stroke:BROWN});
   renderChart('cloudChart',  w.hourly_cloud_10d||[],    {times:htimes,tz,unit:'%',    stroke:GREY});

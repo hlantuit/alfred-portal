@@ -820,6 +820,13 @@ function renderChart(containerId, vals, opts){
     dot.setAttribute('cx',cx.toFixed(1));dot.setAttribute('cy',cy.toFixed(1));
     const valLabel=typeof v==='number'&&!Number.isInteger(v)?v.toFixed(1):v;
     let txt=`<b>${valLabel}${unit}</b>`;
+    if(dirs&&dirs[idx]!=null){
+      const d=dirs[idx];
+      const sector=Math.round((d%360+22.5)/45)%8;
+      const arrow=DIR_CHARS[sector];
+      const cardinals=['N','NE','E','SE','S','SW','W','NW'];
+      txt+=` <span style="color:var(--muted);font-size:10px">${arrow} ${cardinals[sector]} (${Math.round(d)}°)</span>`;
+    }
     if(times[idx]){
       const dt=new Date(times[idx]);
       txt+=` <span style="color:var(--muted);font-size:10px">${dt.toLocaleString('en-CA',{timeZone:tz,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})}</span>`;

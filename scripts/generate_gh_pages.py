@@ -819,6 +819,11 @@ def main():
                                 continue
                             px_x = int((pt_lon - lon_w) / (lon_e - lon_w) * iw)
                             px_y = int((lat_n - pt_lat) / (lat_n - lat_s) * ih)
+                            # Skip points whose dot falls outside the image (can happen when
+                            # map_points bbox is wider than the actual cropped image)
+                            margin = 10
+                            if not (margin <= px_x <= iw - margin and margin <= px_y <= ih - margin):
+                                continue
                             # Dot
                             r_dot = 7
                             draw.ellipse([px_x-r_dot, px_y-r_dot, px_x+r_dot, px_y+r_dot],

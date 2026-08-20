@@ -132,8 +132,8 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .ch-title{font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--muted)}
 .ch-val{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
 .ch-unit{font-size:12px;font-weight:400;color:var(--muted)}
-.ch-area{min-height:64px;height:auto;position:relative;overflow:visible;flex:1}
-svg.sp{width:100%;height:100%;display:block}
+.ch-area{min-height:64px;height:auto;position:relative;overflow:visible}
+svg.sp{width:100%;height:auto;display:block}
 
 /* ── Expandable weather details ── */
 .expand-btn{display:flex;align-items:center;gap:10px;padding:11px 20px;cursor:pointer;font-size:12px;font-weight:700;color:var(--acc);background:var(--surf2);border-top:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);user-select:none}
@@ -151,6 +151,32 @@ svg.sp{width:100%;height:100%;display:block}
 .img-card.portrait{max-width:480px}
 /* 3-column imagery row */
 .img-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding:14px 20px 0}
+
+/* ── Fog forecast ── */
+:root{--fog-0:#d8eeed;--fog-1:#82c4c3;--fog-2:#3b8fa3;--fog-3:#1c4258}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--fog-0:#152c2e;--fog-1:#1f5566;--fog-2:#2f8aa0;--fog-3:#7fe0e6}}
+:root[data-theme="dark"]{--fog-0:#152c2e;--fog-1:#1f5566;--fog-2:#2f8aa0;--fog-3:#7fe0e6}
+.ffw-scroll{overflow-x:auto;padding-bottom:4px;margin:0 -14px;padding-left:14px;padding-right:14px}
+.ffw-days{display:flex;gap:0;min-width:max-content}
+.ffw-day{flex-shrink:0;padding-left:8px;border-left:1px solid var(--bdr2)}
+.ffw-day:first-child{border-left:none;padding-left:0}
+.ffw-day-label{font-size:11px;color:var(--txt2);margin-bottom:6px;white-space:nowrap}
+.ffw-day-label b{color:var(--txt);font-weight:700}
+.ffw-slots{display:flex;gap:3px}
+.ffw-slot{display:flex;flex-direction:column;align-items:center;gap:4px;width:26px}
+.ffw-glyph{width:20px;height:20px;border-radius:50%;cursor:pointer;transition:transform .1s;flex-shrink:0}
+.ffw-glyph:hover,.ffw-glyph:focus-visible{transform:scale(1.35);outline:none}
+.ffw-hour{font-size:9px;color:var(--muted);font-variant-numeric:tabular-nums}
+.ffw-hour.tick{font-weight:700;color:var(--txt2)}
+.ffw-legend-row{display:flex;flex-wrap:wrap;gap:10px;font-size:11px;color:var(--txt2);margin-bottom:4px}
+.ffw-legend-item{display:flex;align-items:center;gap:4px}
+.ffw-legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
+.ffw-conf-legend{display:flex;flex-wrap:wrap;gap:8px;font-size:10px;color:var(--muted);margin-bottom:10px}
+.ffw-conf-swatch{width:8px;height:8px;border-radius:50%;background:var(--fog-2);display:inline-block;margin-right:3px}
+#ffwTooltip{position:fixed;pointer-events:none;background:var(--txt);color:var(--bg);border-radius:6px;padding:8px 10px;font-size:11px;box-shadow:0 2px 8px rgba(0,0,0,.25);opacity:0;transition:opacity .1s;z-index:9998;min-width:190px;max-width:240px}
+#ffwTooltip .tt-date{font-weight:700;margin-bottom:3px;font-size:12px}
+#ffwTooltip .tt-row{display:flex;justify-content:space-between;gap:12px;padding:1.5px 0;opacity:0.85}
+#ffwTooltip .tt-conf{margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,.2);font-size:10px;opacity:0.7}
 
 /* ── Marine ── */
 .marine-text{font-size:13px;color:var(--txt2);line-height:1.7}
@@ -202,6 +228,7 @@ svg.sp{width:100%;height:100%;display:block}
 <body>
 
 <!-- Lightbox -->
+<div id="ffwTooltip"></div>
 <div class="lightbox" id="lb" onclick="closeLb()">
   <span class="lb-close">✕</span>
   <img id="lb-img" src="" alt="" onclick="event.stopPropagation()">
@@ -230,6 +257,7 @@ svg.sp{width:100%;height:100%;display:block}
     <a class="nav-a on" href="#imagery"><span class="nav-i">🛰️</span>Satellite imagery</a>
     <div class="nav-grp">Forecast</div>
     <a class="nav-a" href="#forecast"><span class="nav-i">📅</span>10-day</a>
+    <a class="nav-a" href="#fog"><span class="nav-i">🌫️</span>Fog risk</a>
     <a class="nav-a" href="#marine"><span class="nav-i">🌊</span>Waves · Marine</a>
     <div class="nav-grp">Water</div>
     <a class="nav-a" href="#water"><span class="nav-i">📈</span>Water level</a>
@@ -244,6 +272,9 @@ svg.sp{width:100%;height:100%;display:block}
   <div style="padding:10px 16px 14px">
     <button id="installBtn" onclick="triggerInstall()" style="display:none;width:100%;padding:9px 12px;background:var(--acc);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.3px">📲 Add to Home Screen</button>
     <div id="iosHint" style="display:none;font-size:10px;color:var(--muted);text-align:center;line-height:1.5">On iPhone: tap <b>Share</b> → <b>Add to Home Screen</b></div>
+  </div>
+  <div style="padding:0 16px 16px;margin-top:auto;opacity:0.35;filter:grayscale(1)">
+    <img src="alfred-logo.png" alt="Alfred Wegener Institute" style="width:80px;display:block;height:auto">
   </div>
 </aside>
 
@@ -357,6 +388,26 @@ svg.sp{width:100%;height:100%;display:block}
         </div>
         <div id="cloudChart" style="height:auto"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- Fog risk forecast -->
+  <div id="fog" class="sec"><div class="sec-hd">Fog risk forecast · 10 days</div></div>
+  <div class="chart-1">
+    <div class="ch">
+      <div class="ffw-legend-row">
+        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-0)"></span>Clear (&le;15%)</span>
+        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-1)"></span>Possible (&le;40%)</span>
+        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-2)"></span>Likely (&le;65%)</span>
+        <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-3)"></span>Dense risk (&gt;65%)</span>
+      </div>
+      <div class="ffw-conf-legend">
+        <span><span class="ffw-conf-swatch" style="opacity:1"></span>High confidence — CAPS 0-48h</span>
+        <span><span class="ffw-conf-swatch" style="opacity:0.72"></span>Medium — GDPS day 3-5</span>
+        <span><span class="ffw-conf-swatch" style="opacity:0.46"></span>Low — GDPS day 6-10</span>
+      </div>
+      <div class="ffw-scroll"><div class="ffw-days" id="fogDays"><span style="color:var(--muted);font-size:12px">Loading…</span></div></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:8px">CAPS/GDPS · XGBoost model · Model underestimates fog risk — treat P(fog) as a lower bound · Generated <span id="fogGenTime">—</span> MDT</div>
     </div>
   </div>
 
@@ -1221,6 +1272,65 @@ loadData();
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
+
+// ── Fog forecast ──
+const FOG_BANDS=[{max:0.15,label:'Clear',tok:'--fog-0'},{max:0.40,label:'Possible',tok:'--fog-1'},{max:0.65,label:'Likely',tok:'--fog-2'},{max:1.01,label:'Dense risk',tok:'--fog-3'}];
+const CONF_OP={high:1,medium:0.72,low:0.46};
+function fogBand(p){return FOG_BANDS.find(b=>p<=b.max)||FOG_BANDS[3];}
+function fogRunStart(feed,src){
+  const rh=parseInt(src.startsWith('gdps')?feed.gdps_run:feed.caps_run,10);
+  const gen=new Date(feed.generated_at_utc);
+  const rs=new Date(Date.UTC(gen.getUTCFullYear(),gen.getUTCMonth(),gen.getUTCDate(),rh,0,0));
+  if(rs>gen) rs.setUTCDate(rs.getUTCDate()-1);
+  return rs;
+}
+const FOG_TZ_OFF=-6;
+function fogLocal(feed,pt){return new Date(fogRunStart(feed,pt.source).getTime()+pt.lead_hour*3600000+FOG_TZ_OFF*3600000);}
+function renderFogBlock(feed,siteKey){
+  const site=feed.sites[siteKey]; if(!site){document.getElementById('fogDays').textContent='Site data unavailable';return;}
+  const pts=site.points.map(p=>({...p,_loc:fogLocal(feed,p)}));
+  const days=[]; let ck=null,cd=null;
+  pts.forEach(p=>{const k=p._loc.toDateString();if(k!==ck){ck=k;cd={date:p._loc,pts:[]};days.push(cd);}cd.pts.push(p);});
+  document.getElementById('fogDays').innerHTML=days.map(d=>{
+    const slots=d.pts.map(p=>{
+      const band=fogBand(p.p_fog);
+      const tick=p._loc.getHours()%6===0;
+      return `<div class="ffw-slot"><div class="ffw-glyph" style="background:var(${band.tok});opacity:${CONF_OP[p.confidence]||1}" data-pi="${pts.indexOf(p)}" tabindex="0"></div><span class="ffw-hour${tick?' tick':''}">${String(p._loc.getHours()).padStart(2,'0')}</span></div>`;
+    }).join('');
+    const lbl=d.date.toLocaleDateString('en',{weekday:'short',month:'short',day:'numeric'});
+    return `<div class="ffw-day"><div class="ffw-day-label"><b>${lbl}</b></div><div class="ffw-slots">${slots}</div></div>`;
+  }).join('');
+  const gen=new Date(feed.generated_at_utc);
+  const genLoc=new Date(gen.getTime()+FOG_TZ_OFF*3600000);
+  document.getElementById('fogGenTime').textContent=genLoc.toLocaleString('en-CA',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});
+  const tip=document.getElementById('ffwTooltip');
+  document.getElementById('fogDays').querySelectorAll('.ffw-glyph').forEach(g=>{
+    const p=pts[parseInt(g.dataset.pi,10)];
+    const band=fogBand(p.p_fog);
+    function showTip(){
+      const ds=p._loc.toLocaleString('en',{weekday:'short',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      let rows=`<div class="tt-row"><span>Fog risk</span><span><b>${band.label}</b> (${(p.p_fog*100).toFixed(0)}%)</span></div>`;
+      if(p.t2m_c!=null) rows+=`<div class="tt-row"><span>Temp / RH</span><span>${p.t2m_c.toFixed(1)}&deg;C / ${p.rh_pct!=null?p.rh_pct.toFixed(0):'-'}%</span></div>`;
+      if(p.wind_ms!=null) rows+=`<div class="tt-row"><span>Wind</span><span>${p.wind_ms.toFixed(1)} m/s</span></div>`;
+      if(p.sic_pct!=null) rows+=`<div class="tt-row"><span>Sea ice</span><span>${p.sic_pct.toFixed(0)}%</span></div>`;
+      const cn=p.confidence==='high'?'High confidence — CAPS ~3km, 0-48h':p.confidence==='medium'?'Medium — GDPS ~15km, ocean state held from +48h':'Low — GDPS, NWP skill declining at this range';
+      tip.innerHTML=`<div class="tt-date">${ds} MDT</div>${rows}<div class="tt-conf">${cn}</div>`;
+      tip.style.opacity=1;
+      const r=g.getBoundingClientRect();
+      tip.style.left=Math.min(r.left,window.innerWidth-220)+'px';
+      tip.style.top=(r.top-10)+'px';
+      tip.style.transform='translateY(-100%)';
+    }
+    g.addEventListener('mouseenter',showTip);
+    g.addEventListener('focus',showTip);
+    g.addEventListener('mouseleave',()=>{tip.style.opacity=0;});
+    g.addEventListener('blur',()=>{tip.style.opacity=0;});
+  });
+}
+fetch('../data/fog_feed_10day.json?t='+Date.now())
+  .then(r=>r.json())
+  .then(feed=>renderFogBlock(feed,'shingle_point'))
+  .catch(()=>{document.getElementById('fogDays').textContent='Fog forecast unavailable';});
 </script>
 </body>
 </html>

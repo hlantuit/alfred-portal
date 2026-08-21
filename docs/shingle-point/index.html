@@ -1322,7 +1322,7 @@ async function renderWindRose(lat, lon, tz) {
     const cbX=tML+tW+14,cbY=tMT,cbH=tH,cbW=6,maxLbl=Math.ceil(maxSpd/10)*10;
     const clipId='wvclipSP'+Math.random().toString(36).slice(2,6);
     let cbar=`<defs><linearGradient id="cbgSP" x1="0" y1="0" x2="0" y2="1">`;
-    [['#2DD4BF'],['#A3C44C'],['#F0A830'],['#E04020'],['#8B1DBF']].forEach(([c],i,a)=>{cbar+=`<stop offset="${(i/(a.length-1)*100).toFixed(0)}%" stop-color="${c}"/>`;});
+    [['#8B1DBF'],['#E04020'],['#F0A830'],['#A3C44C'],['#2DD4BF']].forEach(([c],i,a)=>{cbar+=`<stop offset="${(i/(a.length-1)*100).toFixed(0)}%" stop-color="${c}"/>`;});
     cbar+=`</linearGradient><clipPath id="${clipId}"><rect x="${tML}" y="${tMT}" width="${tW}" height="${tH}"/></clipPath></defs>`;
     cbar+=`<rect x="${cbX}" y="${cbY}" width="${cbW}" height="${cbH}" fill="url(#cbgSP)" rx="2"/>`;
     [0,maxLbl/2,maxLbl].forEach(v=>{const ly=cbY+cbH-(v/maxLbl)*cbH;cbar+=`<text x="${cbX+cbW+4}" y="${(ly+4).toFixed(1)}" font-size="13" fill="var(--muted)">${Math.round(v)}</text>`;});

@@ -1528,7 +1528,7 @@ async function loadData(){
   // River sparkline
   if(rivers.length){
     const rv=rivers[0];
-    if(rv.series?.length) sparkline('riverSVG', rv.series.map(p=>p.m), GREEN, rv.series.map(p=>p.t), 240);
+    if(rv.series?.length) sparkline('riverSVG', rv.series.map(p=>p.m), GREEN, rv.series.map(p=>p.t), 240, 2);
     if(rv.current_m!=null) document.getElementById('cv-river').textContent=rv.current_m;
     const short=(rv.river_name||'River').split(',')[0];
     document.getElementById('river-title').textContent=short;

@@ -673,9 +673,11 @@ function sparkline(svgId, data, stroke, times, chartH){
   const spTip=Object.assign(document.createElement('div'),{});
   spTip.style.cssText='position:absolute;background:var(--surf);border:1px solid var(--bdr2);border-radius:5px;padding:4px 10px;font-size:11px;pointer-events:none;display:none;z-index:10;white-space:nowrap;color:var(--txt);box-shadow:0 2px 6px rgba(0,0,0,.1)';
   svg.parentElement.appendChild(spTip);
-  const spXh=svg.querySelector(`#${spXhId}`),spDot=svg.querySelector(`#${spDotId}`);
   const n2=vals.length;
+  const getSpXh=()=>svg.querySelector(`#${spXhId}`);
+  const getSpDot=()=>svg.querySelector(`#${spDotId}`);
   svg.addEventListener('mousemove',e=>{
+    const spXh=getSpXh(),spDot=getSpDot(); if(!spXh||!spDot) return;
     const rect=svg.getBoundingClientRect();
     const svgX=(e.clientX-rect.left)/rect.width*W;
     const idx=Math.max(0,Math.min(n2-1,Math.round((svgX-ML)/cW*(n2-1))));
@@ -690,7 +692,7 @@ function sparkline(svgId, data, stroke, times, chartH){
     spTip.style.left=Math.min(e.clientX-rect.left+10,rect.width-180)+'px';
     spTip.style.top=Math.max(0,e.clientY-rect.top-34)+'px';
   });
-  svg.addEventListener('mouseleave',()=>{spTip.style.display='none';spXh.setAttribute('x1','-2');spXh.setAttribute('x2','-2');spDot.setAttribute('visibility','hidden');});
+  svg.addEventListener('mouseleave',()=>{spTip.style.display='none';const spXh=getSpXh(),spDot=getSpDot();if(spXh){spXh.setAttribute('x1','-2');spXh.setAttribute('x2','-2');}if(spDot)spDot.setAttribute('visibility','hidden');});
 }
 
 // ── Dual-curve water level sparkline (TOPAZ + GDSPS) ──

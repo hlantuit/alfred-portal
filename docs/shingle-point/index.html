@@ -819,7 +819,7 @@ function renderChart(containerId, vals, opts){
   const hasDirs=dirs&&dirs.length>0;
   const GUTTER=hasDirs?26:0;
   const W=1000, ML=55, MR=12, MT=18, MB=times.length?(hasDirs?56:42):(hasDirs?30:10);
-  const H=300, cW=W-ML-MR, cH=H-MT-MB-GUTTER;
+  const H=opts.svgH||300, cW=W-ML-MR, cH=H-MT-MB-GUTTER;
   const n=vals.length;
   const minV=Math.min(...clean), maxV=Math.max(...clean), rng=maxV-minV||1;
   const px=i=>ML+cW*i/(n-1);
@@ -1373,6 +1373,8 @@ function renderRiverTrajectory(clim) {
     p10[d] = pct(vals, 10); p50[d] = pct(vals, 50); p90[d] = pct(vals, 90);
   });
   const curPts = (clim.current_year || []).map(([d, v]) => ({ doy: d, val: v }));
+  const histStart = clim.hist_start ?? (curYear - 15);
+  const histEnd   = clim.hist_end   ?? (curYear - 1);
   try {
 
     const allVals = [...Object.values(p90), ...curPts.map(p => p.val)].filter(v => v != null);
@@ -1581,7 +1583,7 @@ async function loadData(){
 
   // Temperature — hourly line
   document.getElementById('cv-temp').textContent=w.temperature??'—';
-  renderChart('tempChart', w.hourly_temperature_10d||[], {times:htimes,tz,unit:'°C',stroke:YELLOW});
+  renderChart('tempChart', w.hourly_temperature_10d||[], {times:htimes,tz,unit:'°C',stroke:YELLOW,svgH:150});
 
   // Expandable detail charts — all 10-day hourly
   renderChart('windChart',   w.hourly_wind_10d||[],     {times:htimes,tz,unit:' km/h',stroke:BLUE,directions:w.hourly_winddir_10d||[]});

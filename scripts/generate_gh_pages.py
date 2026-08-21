@@ -962,10 +962,13 @@ def main():
                     raise RuntimeError("dashboard_lib not available")
                 doy_vals, cur_list, clim_unit = fetch_hydrometric_climatology(sid, clim_years=15, provterr=prov)
                 if doy_vals:
+                    _cy = _dt_mod.datetime.utcnow().year
                     entry["clim"] = {
                         "doy_values": {k: v for k, v in doy_vals.items()},
                         "current_year": cur_list,
                         "unit": clim_unit,
+                        "hist_start": max(1970, _cy - 15),
+                        "hist_end": _cy - 1,
                     }
             except Exception as _ce:
                 print(f"  River climatology failed for {sid}: {_ce}")

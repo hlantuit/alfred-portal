@@ -1732,7 +1732,8 @@ const FOG_TZ_OFF=-6;
 function fogLocal(feed,pt){return new Date(fogRunStart(feed,pt.source).getTime()+pt.lead_hour*3600000+FOG_TZ_OFF*3600000);}
 function renderFogBlock(feed,siteKey){
   const site=feed.sites[siteKey]; if(!site){document.getElementById('fogDays').textContent='Site data unavailable';return;}
-  const pts=site.points.map(p=>({...p,_loc:fogLocal(feed,p)}));
+  const _nowH=new Date(); _nowH.setMinutes(0,0,0);
+  const pts=site.points.map(p=>({...p,_loc:fogLocal(feed,p)})).filter(p=>p._loc>=_nowH);
   const days=[]; let ck=null,cd=null;
   pts.forEach(p=>{const k=p._loc.toDateString();if(k!==ck){ck=k;cd={date:p._loc,pts:[]};days.push(cd);}cd.pts.push(p);});
   document.getElementById('fogDays').innerHTML=days.map(d=>{

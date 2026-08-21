@@ -6235,11 +6235,51 @@ def fetch_hydrometric_climatology(station_id, clim_years=30, provterr=None):
 
         print(f"HYDROMETRIC CLIM [{station_id}]: fetching {clim_start_year}–{clim_end_year} + current year")
         clim_features = _fetch_range(f"{clim_start_year}-01-01", f"{clim_end_year}-12-31")
+        print(f"HYDROMETRIC CLIM [{station_id}]: OGC API returned {len(clim_features)} historical features")
+
+        # Datamart CSV fallback for historical data when OGC returns nothing
+        _csv_all_daily = {}  # date -> float, all years — built once, shared with Source 2
+        if not clim_features and provterr:
+            import csv as _csv_hist
+            for _csv_url_hist in [
+                f"https://dd.weather.gc.ca/today/hydrometric/csv/{provterr}/daily/{provterr}_{station_id}_daily_hydrometric.csv",
+                f"https://dd.weather.gc.ca/hydrometric/csv/{provterr}/daily/{provterr}_{station_id}_daily_hydrometric.csv",
+            ]:
+                try:
+                    _csv_hist_resp = get_with_retry(_csv_url_hist, timeout=30, retries=1, backoff_seconds=3)
+                    for _row_hist in _csv_hist.reader(_csv_hist_resp.text.splitlines()[1:]):
+                        if len(_row_hist) < 3:
+                            continue
+                        _dstr = _row_hist[1].strip()
+                        _lstr = _row_hist[2].strip() or (len(_row_hist) >= 4 and _row_hist[3].strip())
+                        if not _dstr or not _lstr:
+                            continue
+                        try:
+                            _d_hist = _dt.date.fromisoformat(_dstr[:10])
+                            _csv_all_daily[_d_hist] = float(_lstr)
+                        except Exception:
+                            continue
+                    print(f"HYDROMETRIC CLIM [{station_id}]: Datamart CSV fallback gave {len(_csv_all_daily)} total rows")
+                    if _csv_all_daily:
+                        # Synthesise OGC-style feature dicts for the climatology years
+                        clim_features = [
+                            {"properties": {"DATE": str(d), "LEVEL": v}}
+                            for d, v in sorted(_csv_all_daily.items())
+                            if clim_start_year <= d.year <= clim_end_year
+                        ]
+                        print(f"HYDROMETRIC CLIM [{station_id}]: {len(clim_features)} historical features from Datamart CSV")
+                        break
+                except Exception as _e_hist:
+                    print(f"HYDROMETRIC CLIM [{station_id}]: Datamart CSV hist failed ({_csv_url_hist}): {_e_hist}")
 
         # The OGC hydrometric-daily-mean collection lags by ~6 months.  Fetch
         # any current-year data it has, then fill the recent end with the
         # Datamart rolling CSV (~30 days).
         cur_daily = {}  # date -> float (daily mean)
+        # Pre-fill from the full Datamart CSV if we already loaded it
+        for _d_pre, _v_pre in _csv_all_daily.items():
+            if _d_pre.year == current_year:
+                cur_daily[_d_pre] = _v_pre
 
         # Source 1: WaterOffice graph JSON API — full current year, sub-hourly.
         # The endpoint needs a disclaimer session cookie.  Strategy: try directly

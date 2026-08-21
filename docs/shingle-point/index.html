@@ -1004,10 +1004,11 @@ function renderPrecipChart(containerId, rain, snow, times, tz){
       }
     }
   }
+  const hasSnow=snow.some(v=>v>0);
   el.innerHTML=`<svg id="psvg_${uid}" viewBox="0 0 ${W} ${H}" style="width:100%;display:block;overflow:visible;cursor:crosshair">
     ${yticks}${xlabels}${bars}
     <text x="${ML+4}" y="${(MT+18).toFixed(1)}" text-anchor="start" font-size="16" fill="#005FA3" opacity="0.75" font-family="system-ui,sans-serif">■ rain</text>
-    <text x="${ML+4}" y="${(MT+38).toFixed(1)}" text-anchor="start" font-size="16" fill="#A8D4F5" opacity="0.95" font-family="system-ui,sans-serif">■ snow cm/h</text>
+    ${hasSnow?`<text x="${ML+4}" y="${(MT+38).toFixed(1)}" text-anchor="start" font-size="16" fill="#A8D4F5" opacity="0.95" font-family="system-ui,sans-serif">■ snow cm/h</text>`:''}
     <line id="pxh_${uid}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#6B8499" stroke-width="1" stroke-dasharray="3,2" opacity="0.45"/>
   </svg>`;
   el.style.position='relative';
@@ -1022,7 +1023,7 @@ function renderPrecipChart(containerId, rain, snow, times, tz){
     const r=rain[idx]||0,s=snow[idx]||0;
     const xx=ML+cW*idx/(n-1);
     pxh.setAttribute('x1',xx.toFixed(1));pxh.setAttribute('x2',xx.toFixed(1));
-    let txt=`<b>Rain: ${r.toFixed(2)} mm · Snow: ${s.toFixed(2)} cm</b>`;
+    let txt=`<b>Rain: ${r.toFixed(2)} mm${hasSnow?` · Snow: ${s.toFixed(2)} cm`:''}</b>`;
     if(times&&times[idx]){
       const dt=new Date(times[idx]);
       txt+=` <span style="color:var(--muted);font-size:10px">${dt.toLocaleString('en-CA',{timeZone:tz,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})}</span>`;

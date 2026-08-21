@@ -1421,7 +1421,7 @@ function renderRiverTrajectory(clim) {
       : '';
 
     // "now" marker
-    const nowDoy = doy(new Date().toISOString().slice(0, 10));
+    const _nd = new Date(); const nowDoy = Math.round((_nd - new Date(Date.UTC(_nd.getUTCFullYear(), 0, 0))) / 86400000);
     const nowLine = `<line x1="${xS(nowDoy)}" y1="${MT}" x2="${xS(nowDoy)}" y2="${(MT+cH).toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/>
       <text x="${(parseFloat(xS(nowDoy))+4).toFixed(1)}" y="${(MT+cH-6).toFixed(1)}" font-size="14" fill="#C0392B" font-weight="700">now</text>`;
 

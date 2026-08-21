@@ -6,6 +6,10 @@ on:
     - cron: "30 * * * *"
   workflow_dispatch:
 
+concurrency:
+  group: gh-pages-shingle
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -39,6 +43,9 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "chore: update gh-pages shingle-point [skip ci]"
-            git pull --rebase origin main || true
-            git push
+            for i in 1 2 3; do
+              git pull --rebase origin main && git push && break
+              echo "Push attempt $i failed, retrying..."
+              sleep 5
+            done
           fi

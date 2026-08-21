@@ -16,11 +16,197 @@ from pathlib import Path
 
 import requests
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-try:
-    from dashboard_lib import fetch_hydrometric_climatology
-except Exception:
-    fetch_hydrometric_climatology = None
+import csv as _csv_mod
+import datetime as _dt_mod
+from collections import defaultdict as _defaultdict
+
+
+def _is_leap_year(year):
+    return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0)
+
+
+def _date_to_clim_doy(date):
+    """Day-of-year 1-365, mapping Feb 29 → 59 and shifting Mar 1+ back by 1 in leap years."""
+    doy = date.timetuple().tm_yday
+    if _is_leap_year(date.year) and doy >= 60:
+        doy -= 1
+    return min(doy, 365)
+
+
+def fetch_hydrometric_climatology(station_id, clim_years=30, provterr=None):
+    """Standalone version — only needs requests (already imported above)."""
+    try:
+        now = _dt_mod.datetime.utcnow()
+        current_year = now.year
+        clim_start_year = max(1970, current_year - clim_years)
+        clim_end_year = current_year - 1
+
+        def _get_json(url, **kwargs):
+            r = requests.get(url, **kwargs)
+            r.raise_for_status()
+            return r.json()
+
+        def _fetch_range(date_from, date_to):
+            base = "https://api.weather.gc.ca/collections/hydrometric-daily-mean/items"
+            records = []
+            offset = 0
+            limit = 10000
+            while True:
+                data = _get_json(base, params={
+                    "STATION_NUMBER": station_id,
+                    "datetime": f"{date_from}/{date_to}",
+                    "limit": limit, "offset": offset, "f": "json",
+                }, timeout=40)
+                features = data.get("features", [])
+                records.extend(features)
+                if len(features) < limit:
+                    break
+                offset += limit
+            return records
+
+        print(f"  HYDROMETRIC CLIM [{station_id}]: fetching {clim_start_year}–{clim_end_year}")
+        clim_features = _fetch_range(f"{clim_start_year}-01-01", f"{clim_end_year}-12-31")
+        print(f"  HYDROMETRIC CLIM [{station_id}]: OGC returned {len(clim_features)} historical features")
+
+        # Datamart CSV fallback for historical data when OGC returns nothing
+        _csv_all_daily = {}
+        if not clim_features and provterr:
+            pv = provterr.upper()
+            for _csv_url_hist in [
+                f"https://dd.weather.gc.ca/today/hydrometric/csv/{pv}/daily/{pv}_{station_id}_daily_hydrometric.csv",
+                f"https://dd.weather.gc.ca/hydrometric/csv/{pv}/daily/{pv}_{station_id}_daily_hydrometric.csv",
+            ]:
+                try:
+                    resp = requests.get(_csv_url_hist, timeout=30)
+                    resp.raise_for_status()
+                    for row in _csv_mod.reader(resp.text.splitlines()[1:]):
+                        if len(row) < 3:
+                            continue
+                        dstr = row[1].strip()
+                        lstr = row[2].strip() or (len(row) >= 4 and row[3].strip())
+                        if not dstr or not lstr:
+                            continue
+                        try:
+                            d = _dt_mod.date.fromisoformat(dstr[:10])
+                            _csv_all_daily[d] = float(lstr)
+                        except Exception:
+                            continue
+                    print(f"  HYDROMETRIC CLIM [{station_id}]: Datamart CSV gave {len(_csv_all_daily)} rows")
+                    if _csv_all_daily:
+                        clim_features = [
+                            {"properties": {"DATE": str(d), "LEVEL": v}}
+                            for d, v in sorted(_csv_all_daily.items())
+                            if clim_start_year <= d.year <= clim_end_year
+                        ]
+                        print(f"  HYDROMETRIC CLIM [{station_id}]: {len(clim_features)} historical from Datamart")
+                        break
+                except Exception as e:
+                    print(f"  HYDROMETRIC CLIM [{station_id}]: Datamart hist failed: {e}")
+
+        # Current-year data: pre-fill from Datamart CSV if already loaded
+        cur_daily = {d: v for d, v in _csv_all_daily.items() if d.year == current_year}
+
+        # Try WaterOffice graph JSON API for more complete current-year coverage
+        try:
+            wo_session = requests.Session()
+            wo_session.headers.update({"User-Agent": "Mozilla/5.0 (compatible; alfred-portal/1.0)"})
+            graph_url = "https://wateroffice.ec.gc.ca/services/real_time_graph/json/inline"
+            graph_params = {"station": station_id,
+                            "start_date": f"{current_year}-01-01",
+                            "end_date": str(_dt_mod.date.today()),
+                            "param1": 46, "param2": 3}
+
+            def _try_graph(sess):
+                r = sess.get(graph_url, params=graph_params, timeout=60)
+                r.raise_for_status()
+                if "text/html" in r.headers.get("Content-Type", ""):
+                    raise ValueError("HTML disclaimer page")
+                return r.json()
+
+            try:
+                wo_data = _try_graph(wo_session)
+            except Exception:
+                rpt = wo_session.get(
+                    "https://wateroffice.ec.gc.ca/report/real_time_e.html",
+                    params={"stn": station_id, "startDate": f"{current_year}-01-01",
+                            "endDate": str(_dt_mod.date.today()), "prm1": 46, "prm2": 3, "mode": "Graph"},
+                    timeout=60)
+                wo_session.post("https://wateroffice.ec.gc.ca/disclaimer_e.html",
+                                data={"agree": "1"}, headers={"Referer": rpt.url},
+                                timeout=30, allow_redirects=True)
+                wo_data = _try_graph(wo_session)
+
+            daily_sums = _defaultdict(list)
+            for pk in ("46", "3"):
+                series = wo_data.get(pk, {})
+                for pt in series.get("approved", []) + series.get("provisional", []):
+                    if len(pt) < 2 or pt[1] is None:
+                        continue
+                    try:
+                        d = _dt_mod.date.fromtimestamp(pt[0] / 1000)
+                        if d.year == current_year:
+                            daily_sums[d].append(float(pt[1]))
+                    except Exception:
+                        continue
+                if daily_sums:
+                    break
+            wo_cur = {d: sum(vs) / len(vs) for d, vs in daily_sums.items()}
+            cur_daily.update(wo_cur)
+            print(f"  HYDROMETRIC CLIM [{station_id}]: WO graph API gave {len(wo_cur)} current-year days")
+        except Exception as e:
+            print(f"  HYDROMETRIC CLIM [{station_id}]: WO graph API failed: {e}")
+
+        cur_features = [
+            {"properties": {"DATE": str(d), "LEVEL": v}}
+            for d, v in sorted(cur_daily.items())
+        ]
+        print(f"  HYDROMETRIC CLIM [{station_id}]: {len(clim_features)} hist + {len(cur_features)} current-year records")
+
+        def _parse(features):
+            out = []
+            for f in features:
+                p = f.get("properties", {})
+                date_str = p.get("DATE") or p.get("DATETIME", "")
+                try:
+                    d = _dt_mod.date.fromisoformat(date_str[:10])
+                except Exception:
+                    continue
+                level = p.get("LEVEL")
+                discharge = p.get("DISCHARGE")
+                out.append((d, level, discharge))
+            return out
+
+        clim_records = _parse(clim_features)
+        cur_records = _parse(cur_features)
+
+        use_level = any(r[1] is not None for r in clim_records + cur_records)
+        unit = "level" if use_level else "discharge"
+
+        def _val(r):
+            return r[1] if use_level else r[2]
+
+        doy_values = _defaultdict(list)
+        for r in clim_records:
+            v = _val(r)
+            if v is not None:
+                doy_values[_date_to_clim_doy(r[0])].append(float(v))
+
+        current_year_list = sorted(
+            (_date_to_clim_doy(r[0]), float(_val(r)))
+            for r in cur_records if _val(r) is not None
+        )
+
+        if not doy_values and not current_year_list:
+            print(f"  HYDROMETRIC CLIM [{station_id}]: no data returned")
+            return None, None, unit
+
+        print(f"  HYDROMETRIC CLIM [{station_id}]: {len({r[0].year for r in clim_records})} clim years, "
+              f"{len(current_year_list)} current-year points, unit={unit}")
+        return dict(doy_values), current_year_list, unit
+
+    except Exception as e:
+        print(f"  HYDROMETRIC CLIM [{station_id}] FAILED: {e}")
+        return None, None, "level"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 COMMUNITIES_DIR = REPO_ROOT / "communities"

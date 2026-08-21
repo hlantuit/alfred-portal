@@ -624,13 +624,13 @@ function navTo(id,btn){
 }
 
 // ── Compact sparkline (condition cards: tide, river) ──
-function sparkline(svgId, data, stroke, times){
+function sparkline(svgId, data, stroke, times, chartH){
   const svg=document.getElementById(svgId); if(!svg) return;
   const vals=data.filter(v=>v!=null);
   if(vals.length<2) return;
   const hasTimes=times&&times.length===data.length;
   const min=Math.min(...vals),max=Math.max(...vals),rng=max-min||1;
-  const W=800,H=160,ML=52,MR=6,MT=10,MB=hasTimes?32:10;
+  const W=800,H=chartH||160,ML=52,MR=6,MT=10,MB=hasTimes?32:10;
   const cW=W-ML-MR,cH=H-MT-MB;
   const px=i=>ML+(cW)*i/(vals.length-1);
   const py=v=>MT+cH*(1-(v-min)/rng);
@@ -700,7 +700,7 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback){
   const primary = topaz || gdsps || tide_fallback;
   if(!primary?.series?.length) return;
 
-  const W=800,H=160,ML=52,MR=8,MT=10,MB=30;
+  const W=800,H=240,ML=52,MR=8,MT=10,MB=30;
   const cW=W-ML-MR,cH=H-MT-MB;
 
   // Collect all values to find common scale
@@ -819,7 +819,7 @@ function renderChart(containerId, vals, opts){
   const hasDirs=dirs&&dirs.length>0;
   const GUTTER=hasDirs?26:0;
   const W=1000, ML=55, MR=12, MT=18, MB=times.length?(hasDirs?56:42):(hasDirs?30:10);
-  const H=260, cW=W-ML-MR, cH=H-MT-MB-GUTTER;
+  const H=300, cW=W-ML-MR, cH=H-MT-MB-GUTTER;
   const n=vals.length;
   const minV=Math.min(...clean), maxV=Math.max(...clean), rng=maxV-minV||1;
   const px=i=>ML+cW*i/(n-1);
@@ -1325,7 +1325,7 @@ async function renderWindRose(lat, lon, tz) {
     cbar+=`</linearGradient><clipPath id="${clipId}"><rect x="${tML}" y="${tMT}" width="${tW}" height="${tH}"/></clipPath></defs>`;
     cbar+=`<rect x="${cbX}" y="${cbY}" width="${cbW}" height="${cbH}" fill="url(#cbgSP)" rx="2"/>`;
     [0,maxLbl/2,maxLbl].forEach(v=>{const ly=cbY+cbH-(v/maxLbl)*cbH;cbar+=`<text x="${cbX+cbW+4}" y="${(ly+4).toFixed(1)}" font-size="13" fill="var(--muted)">${Math.round(v)}</text>`;});
-    cbar+=`<text x="${cbX+cbW/2}" y="${cbY-4}" text-anchor="middle" font-size="13" fill="var(--muted)">km/h</text>`;
+    cbar+=`<text x="${cbX+cbW/2}" y="${cbY-16}" text-anchor="middle" font-size="13" fill="var(--muted)">km/h</text>`;
     const cline=`<line x1="${tML}" y1="${vecCy.toFixed(1)}" x2="${(tML+tW).toFixed(1)}" y2="${vecCy.toFixed(1)}" stroke="var(--muted)" stroke-width="0.8" opacity="0.4"/>`;
     const wuid='wtipSP'+Math.random().toString(36).slice(2,6);
     const wtip=`<g id="${wuid}" style="display:none;pointer-events:none"><rect id="${wuid}bg" rx="3" fill="rgba(0,0,0,0.82)"/><text id="${wuid}tx" font-size="13" fill="white"/></g>`;
@@ -1613,7 +1613,7 @@ async function loadData(){
   // River sparkline
   if(rivers.length){
     const rv=rivers[0];
-    if(rv.series?.length) sparkline('riverSVG', rv.series.map(p=>p.m), GREEN, rv.series.map(p=>p.t));
+    if(rv.series?.length) sparkline('riverSVG', rv.series.map(p=>p.m), GREEN, rv.series.map(p=>p.t), 240);
     if(rv.current_m!=null) document.getElementById('cv-river').textContent=parseFloat(rv.current_m).toFixed(1);
     const short=(rv.river_name||'River').split(',')[0];
     document.getElementById('river-title').textContent=short;

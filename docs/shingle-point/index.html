@@ -1210,7 +1210,7 @@ async function renderTddChart(lat, lon) {
     if (cvEl) cvEl.textContent = curTdd;
     const W = el.offsetWidth || 700;
     const ML = 56, MR = 20, MT = 20, MB = 36;
-    const cW = W - ML - MR, cH = 200, H = MT + cH + MB;
+    const cW = W - ML - MR, H = Math.max(180, Math.round(W * 0.3)), cH = H - MT - MB;
     const maxV = Math.max(...years.map(y => tddY[y])) * 1.08;
     const yS = v => (MT + cH - (v / maxV) * cH).toFixed(1);
     const slot = cW / years.length;
@@ -1298,7 +1298,7 @@ async function renderWindRose(lat, lon, tz) {
       const bi=Math.round(dir/secDeg)%sectors; bins[bi].cnt++; bins[bi].spSum+=spd;
     });
     const maxCnt=Math.max(...bins.map(b=>b.cnt));
-    const W=el.offsetWidth||700, H=220;
+    const W=el.offsetWidth||700, H=Math.max(180,Math.round(W*0.3));
     const tML=20,tMR=72,tMT=24,tMB=30,tW=W-tML-tMR,tH=H-tMT-tMB,vecCy=tMT+tH/2;
     const slotW=tW/daily.length;
     const maxSpd=Math.max(...daily.map(d=>d.spd),1), arrowScale=(tH/2-6)/maxSpd;
@@ -1383,7 +1383,7 @@ function renderRiverTrajectory(clim) {
 
     const W = el.offsetWidth || 700;
     const ML = 52, MR = 20, MT = 50, MB = 36;
-    const cW = W - ML - MR, cH = 200, H = MT + cH + MB;
+    const cW = W - ML - MR, H = Math.max(200, Math.round(W * 0.15)), cH = H - MT - MB;
     const xS = d => (ML + ((d - 1) / 365) * cW).toFixed(1);
     const pad = (allMax - allMin) * 0.06;
     const yMin = allMin - pad, yMax = allMax + pad;

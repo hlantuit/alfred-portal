@@ -1441,15 +1441,13 @@ def main():
                                      f"{end_dt.strftime('%Y-%m-%dT23:59:59Z')}"),
                         "collections": ["sentinel-2-l2a"],
                         "limit": 10,
-                        "filter": "eo:cloud_cover < 80",
-                        "filter-lang": "cql2-text",
                     },
                     headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                     timeout=15,
                 )
                 _feats = _cat_r.json().get("features", [])
                 if _feats:
-                    _feats.sort(key=lambda f: f.get("properties", {}).get("eo:cloud_cover", 100))
+                    _feats.sort(key=lambda f: f.get("properties", {}).get("datetime", ""), reverse=True)
                     date_str = _feats[0]["properties"]["datetime"]  # full ISO datetime
             except Exception as _cate:
                 print(f"  S2 catalog datetime failed: {_cate}")

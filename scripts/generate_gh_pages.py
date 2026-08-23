@@ -1182,7 +1182,9 @@ def main():
         from datetime import timedelta, date as _date
         for delta in range(0, max_days_back + 1):
             d = _date.today() - timedelta(days=delta)
-            for layer in ["VIIRS_NOAA20_CorrectedReflectance_TrueColor",
+            for layer in ["VIIRS_NOAA20_CorrectedReflectance_TrueColor_NRT",
+                          "VIIRS_SNPP_CorrectedReflectance_TrueColor_NRT",
+                          "VIIRS_NOAA20_CorrectedReflectance_TrueColor",
                           "VIIRS_SNPP_CorrectedReflectance_TrueColor"]:
                 try:
                     r = get_with_retry(
@@ -1300,7 +1302,8 @@ def main():
                         # Try to get exact acquisition time from NASA CMR
                         _viirs_date_str = d.strftime("%Y-%m-%d")
                         try:
-                            _cmr_short = "VJ109GA" if "NOAA20" in layer else "VNP09GA"
+                            _is_nrt = "NRT" in layer
+                            _cmr_short = ("VJ109GA" if "NOAA20" in layer else "VNP09GA") + ("_NRT" if _is_nrt else "")
                             _cmr_r = requests.get(
                                 "https://cmr.earthdata.nasa.gov/search/granules.json",
                                 params={

@@ -1307,14 +1307,25 @@ def main():
                                     "short_name": _cmr_short,
                                     "temporal": f"{d.strftime('%Y-%m-%d')}T00:00:00Z,{d.strftime('%Y-%m-%d')}T23:59:59Z",
                                     "bounding_box": f"{cfg.get('lon', -140)-5},{cfg.get('lat', 69)-3},{cfg.get('lon', -140)+5},{cfg.get('lat', 69)+3}",
-                                    "page_size": "3",
+                                    "page_size": "5",
+                                    "sort_key": "-start_date",
                                 },
-                                timeout=10,
+                                timeout=20,
                             )
                             _cmr_entries = _cmr_r.json().get("feed", {}).get("entry", [])
                             if _cmr_entries:
-                                _viirs_date_str = _cmr_entries[0].get("time_start", _viirs_date_str)
-                                print(f"  VIIRS CMR time: {_viirs_date_str}")
+                                _ts = _cmr_entries[0].get("time_start", "")
+                                if _ts:
+                                    _viirs_date_str = _ts
+                                    print(f"  VIIRS CMR time: {_viirs_date_str}")
+                                else:
+                                    # Fallback: parse HHMM from producer_granule_id (e.g. VJ109GA.A2024234.1800.002...)
+                                    _pgid = _cmr_entries[0].get("producer_granule_id", "")
+                                    import re as _re_cmr
+                                    _m = _re_cmr.search(r'\.A\d{7}\.(\d{2})(\d{2})\.', _pgid)
+                                    if _m:
+                                        _viirs_date_str = f"{d.strftime('%Y-%m-%d')}T{_m.group(1)}:{_m.group(2)}:00Z"
+                                        print(f"  VIIRS CMR time from granule id: {_viirs_date_str}")
                         except Exception as _cmre:
                             print(f"  VIIRS CMR lookup failed: {_cmre}")
                         cropped = _annotate_img(cropped, _viirs_date_str, _mpp)

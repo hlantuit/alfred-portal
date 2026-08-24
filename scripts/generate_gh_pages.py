@@ -1374,13 +1374,19 @@ def main():
             print("  S2: no utm_center_x/y in config, skipping")
             return None
         bbox = [cx - half_width_m, cy - half_width_m, cx + half_width_m, cy + half_width_m]
+        # Highlight Optimized Natural Color: sigmoid tone-map + gamma, matching Copernicus Browser
+        # adj(v) = (gain*v / (gain*v + C))^(1/gamma)
+        # gain=2.5, C=0.55, gamma=1.6 → lifts dark land/water, compresses clouds without clipping
         evalscript = (
             "//VERSION=3\n"
             "function setup(){return{input:[{bands:[\"B04\",\"B03\",\"B02\",\"dataMask\"]}],"
             "output:{bands:4,sampleType:\"AUTO\"}};}\n"
-            "function evaluatePixel(s){"
-            "if(!s.dataMask)return[0,0,0,0];"  # transparent for no-data
-            "return[Math.min(1,3.5*s.B04),Math.min(1,3.5*s.B03),Math.min(1,3.5*s.B02),1];}"
+            "function evaluatePixel(s){\n"
+            "  if(!s.dataMask)return[0,0,0,0];\n"
+            "  const g=2.5,C=0.55,gm=1.6;\n"
+            "  function adj(v){var x=v*g;return Math.pow(x/(x+C),1/gm);}\n"
+            "  return[adj(s.B04),adj(s.B03),adj(s.B02),1];\n"
+            "}"
         )
         # Find most recent acquisition date from catalog first
         try:

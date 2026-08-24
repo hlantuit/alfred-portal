@@ -1382,11 +1382,45 @@ def main():
             "if(!s.dataMask)return[0,0,0,0];"  # transparent for no-data
             "return[Math.min(1,3.5*s.B04),Math.min(1,3.5*s.B03),Math.min(1,3.5*s.B02),1];}"
         )
-        # Fetch via Process API using leastCC mosaicking over the window
+        # Find most recent acquisition date from catalog first
         try:
+            from datetime import timedelta as _td, datetime as _dtparse
+            end_dt = now_utc
+            start_dt = end_dt - _td(days=max_days_back)
+            _cat_r = requests.post(
+                "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search",
+                json={
+                    "bbox": [lon - 0.5, lat - 0.3, lon + 0.5, lat + 0.3],
+                    "datetime": (f"{start_dt.strftime('%Y-%m-%dT00:00:00Z')}/"
+                                 f"{end_dt.strftime('%Y-%m-%dT23:59:59Z')}"),
+                    "collections": ["sentinel-2-l2a"],
+                    "limit": 10,
+                },
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                timeout=15,
+            )
+            _feats = _cat_r.json().get("features", [])
+            if _feats:
+                _feats.sort(key=lambda f: f.get("properties", {}).get("datetime", ""), reverse=True)
+                _acq_iso = _feats[0]["properties"]["datetime"]
+                _acq_dt = _dtparse.fromisoformat(_acq_iso.replace("Z", "+00:00"))
+                _proc_from = (_acq_dt - _td(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
+                _proc_to   = (_acq_dt + _td(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            else:
+                _acq_iso = None
+                _proc_from = start_dt.strftime("%Y-%m-%dT00:00:00Z")
+                _proc_to   = end_dt.strftime("%Y-%m-%dT23:59:59Z")
+        except Exception as _cat_pre:
+            print(f"  S2 pre-catalog failed: {_cat_pre}")
             from datetime import timedelta as _td
             end_dt = now_utc
             start_dt = end_dt - _td(days=max_days_back)
+            _acq_iso = None
+            _proc_from = start_dt.strftime("%Y-%m-%dT00:00:00Z")
+            _proc_to   = end_dt.strftime("%Y-%m-%dT23:59:59Z")
+
+        # Fetch via Process API using the specific acquisition date window
+        try:
             proc_r = requests.post(
                 "https://sh.dataspace.copernicus.eu/api/v1/process",
                 json={
@@ -1398,10 +1432,10 @@ def main():
                         "data": [{
                             "dataFilter": {
                                 "timeRange": {
-                                    "from": f"{start_dt.strftime('%Y-%m-%dT00:00:00Z')}",
-                                    "to": f"{end_dt.strftime('%Y-%m-%dT23:59:59Z')}",
+                                    "from": _proc_from,
+                                    "to": _proc_to,
                                 },
-                                "mosaickingOrder": "leastCC",
+                                "mosaickingOrder": "mostRecent",
                                 "maxCloudCoverage": 100,
                             },
                             "type": "sentinel-2-l2a",
@@ -1444,27 +1478,8 @@ def main():
             if _br < 5.0:
                 print(f"  S2 {half_width_m//1000}km: too dark ({_br:.1f}), skipping")
                 return None
-            # Get actual acquisition datetime from catalog (leastCC scene near site)
-            date_str = end_dt.strftime("%Y-%m-%d")
-            try:
-                _cat_r = requests.post(
-                    "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search",
-                    json={
-                        "bbox": [lon - 0.5, lat - 0.3, lon + 0.5, lat + 0.3],
-                        "datetime": (f"{start_dt.strftime('%Y-%m-%dT00:00:00Z')}/"
-                                     f"{end_dt.strftime('%Y-%m-%dT23:59:59Z')}"),
-                        "collections": ["sentinel-2-l2a"],
-                        "limit": 10,
-                    },
-                    headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                    timeout=15,
-                )
-                _feats = _cat_r.json().get("features", [])
-                if _feats:
-                    _feats.sort(key=lambda f: f.get("properties", {}).get("datetime", ""), reverse=True)
-                    date_str = _feats[0]["properties"]["datetime"]  # full ISO datetime
-            except Exception as _cate:
-                print(f"  S2 catalog datetime failed: {_cate}")
+            # Use acquisition datetime from catalog pre-fetch
+            date_str = _acq_iso or end_dt.strftime("%Y-%m-%d")
             # Coastline overlay from local OSM GeoJSON
             import json as _json_s2, math as _math_s2
             from PIL import ImageDraw as _Draw_s2, ImageFont as _Font_s2

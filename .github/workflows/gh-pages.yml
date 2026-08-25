@@ -5,13 +5,12 @@ on:
     - cron: "45 * * * *"   # hourly
   workflow_dispatch:
 
-concurrency:
-  group: gh-pages-${{ matrix.community }}
-  cancel-in-progress: false
-
 jobs:
   build:
     name: update (${{ matrix.community }})
+    concurrency:
+      group: gh-pages-${{ matrix.community }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

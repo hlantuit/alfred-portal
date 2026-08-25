@@ -7,6 +7,10 @@
 <meta name="description" content="Pan-Arctic environmental dashboard portal — Alfred Wegener Institute">
 <meta name="theme-color" content="#005FA3">
 <link rel="icon" type="image/png" href="herschel/alfred-logo.png">
+<link rel="manifest" href="manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ALFRED Portal">
+<link rel="apple-touch-icon" href="herschel/alfred-logo.png">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 :root {
@@ -100,7 +104,10 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
     <div class="hdr-title">ALFRED Portal</div>
     <div class="hdr-sub">Arctic Coastal Dynamics · Alfred Wegener Institute</div>
   </div>
-  <div class="hdr-right" id="hdr-time"></div>
+  <div class="hdr-right" style="display:flex;align-items:center;gap:10px">
+    <div id="hdr-time"></div>
+    <button id="installBtn" style="display:none;padding:6px 14px;border-radius:20px;border:1px solid var(--bdr2);background:var(--surf);color:var(--txt);font-size:13px;cursor:pointer;white-space:nowrap" title="Add ALFRED Portal to your home screen">📲 Add to Home Screen</button>
+  </div>
 </header>
 
 <div id="map"></div>
@@ -335,6 +342,28 @@ SITES.forEach(s=>{
         );
       }
     });
+});
+// ── Add to Home Screen (PWA install prompt) ──
+let _deferredInstall = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _deferredInstall = e;
+  const btn = document.getElementById('installBtn');
+  if (btn) btn.style.display = '';
+});
+document.getElementById('installBtn')?.addEventListener('click', async () => {
+  if (!_deferredInstall) return;
+  _deferredInstall.prompt();
+  const { outcome } = await _deferredInstall.userChoice;
+  if (outcome === 'accepted') {
+    const btn = document.getElementById('installBtn');
+    if (btn) btn.style.display = 'none';
+  }
+  _deferredInstall = null;
+});
+window.addEventListener('appinstalled', () => {
+  const btn = document.getElementById('installBtn');
+  if (btn) btn.style.display = 'none';
 });
 </script>
 </body>

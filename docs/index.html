@@ -141,6 +141,13 @@ const SITES = [
 
 const TYPE_COLOR = {coastal:"#005FA3",riverine:"#1A7A52",lake:"#7B68EE",terrestrial:"#6B8499"};
 
+const ALFRED_ICON = L.icon({
+  iconUrl: 'herschel/alfred-logo.png',
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+  popupAnchor: [0, -20],
+});
+
 // ── Clock ──
 function tick(){
   const d=new Date();
@@ -156,21 +163,9 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
   attribution:'© OpenStreetMap contributors'
 }).addTo(map);
 
-function makeIcon(type){
-  const c=TYPE_COLOR[type]||'#6B8499';
-  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="22" height="28" viewBox="0 0 22 28">
-    <path d="M11 0C4.9 0 0 4.9 0 11c0 8.3 11 17 11 17s11-8.7 11-17C22 4.9 17.1 0 11 0z" fill="${c}" stroke="white" stroke-width="1.5"/>
-    <circle cx="11" cy="11" r="4.5" fill="white" opacity=".9"/>
-  </svg>`;
-  return L.divIcon({
-    html:svg,iconSize:[22,28],iconAnchor:[11,28],popupAnchor:[0,-30],className:'',
-  });
-}
-
 const markers = {};
 SITES.forEach(s=>{
-  const icon=makeIcon(s.type);
-  const m=L.marker([s.lat,s.lon],{icon}).addTo(map);
+  const m=L.marker([s.lat,s.lon],{icon:ALFRED_ICON}).addTo(map);
   const label=s.alt ? `${s.name} · ${s.alt}` : s.name;
   m.bindPopup(
     `<b style="font-size:13px">${label}</b><br>`+

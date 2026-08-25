@@ -109,10 +109,10 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 /* ── Forecast strip ── */
 .fc-wrap{padding:14px 20px 0}
 .fc-scroll{}
-.fc-row{display:flex;flex-wrap:wrap;border:1px solid var(--bdr);border-radius:8px;overflow:hidden;background:var(--surf)}
-.fc-cell{padding:10px 14px;text-align:center;border-right:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);min-width:86px;flex:1 1 86px;cursor:pointer;transition:background .1s;user-select:none}
-.fc-cell:last-child{border-right:none}
-@media (max-width:650px){.fc-cell{flex-basis:20%;min-width:0}.fc-cell:nth-child(5n){border-right:none}}
+.fc-row{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid var(--bdr);border-radius:8px;overflow:hidden;background:var(--surf)}
+.fc-cell{padding:10px 14px;text-align:center;border-right:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);cursor:pointer;transition:background .1s;user-select:none}
+.fc-cell:nth-child(5n){border-right:none}
+@media (max-width:650px){.fc-row{grid-template-columns:repeat(5,1fr)}}
 .fc-cell.today{background:var(--acc-l)}
 .fc-cell:hover{background:var(--surf2)}
 .fc-cell.today:hover{background:#d4e8f6}
@@ -249,7 +249,7 @@ svg.sp{width:100%;height:auto;display:block}
 }
 </style>
 <style>
-#marine,#water,#cc-tide{display:none!important}
+#marine,#marine-content,#water,#cc-tide,#tide-row{display:none!important}
 </style>
 </head>
 <body>
@@ -512,7 +512,7 @@ svg.sp{width:100%;height:auto;display:block}
 
   <!-- Marine & waves -->
   <div id="marine" class="sec"><div class="sec-hd">Marine forecast · Alaska North Slope</div></div>
-  <div class="chart-row" style="align-items:start">
+  <div id="marine-content" class="chart-row" style="align-items:start">
     <div class="ch">
       <div class="ch-hd">
         <div class="ch-title">Wave height — Open-Meteo GWAM · 8-day</div>
@@ -612,6 +612,15 @@ svg.sp{width:100%;height:auto;display:block}
           <div class="ch-title">Daily wind vectors · last 30 days · Open-Meteo ERA5</div>
         </div>
         <div class="ch-area" id="windRoseEl" style="height:auto;min-height:60px"></div>
+      </div>
+    </div>
+    <!-- River level annual chart — only shown for hydrometric communities -->
+    <div class="climate-grid" id="river-clim-row" style="display:none">
+      <div class="ch" style="grid-column:1/-1">
+        <div class="ch-hd">
+          <div class="ch-title" id="river-clim-title">River level · annual cycle</div>
+        </div>
+        <div class="ch-area" id="riverClimEl" style="height:auto;min-height:60px"></div>
       </div>
     </div>
   </div>
@@ -1477,6 +1486,70 @@ async function renderWindRose(lat, lon, tz) {
   }
 }
 
+// ── River level annual cycle chart ──────────────────────────────────────────
+function renderRiverClim(el, clim, riverName) {
+  if (!el || !clim?.current_year?.length) return;
+  // current_year: array of [doy, value] pairs
+  const pts = clim.current_year.map(p => Array.isArray(p) ? {doy:p[0],v:p[1]} : {doy:p[0],v:p[1]}).filter(p=>p.v!=null).sort((a,b)=>a.doy-b.doy);
+  if (!pts.length) return;
+  const W = el.offsetWidth || 700;
+  const ML = 52, MR = 20, MT = 24, MB = 36;
+  const cW = W - ML - MR, H = Math.max(160, Math.round(W * 0.28)), cH = H - MT - MB;
+  const minV = Math.min(...pts.map(p=>p.v)), maxV = Math.max(...pts.map(p=>p.v));
+  const span = maxV - minV || 0.5;
+  const lo = minV - span*0.08, hi = maxV + span*0.08, rng = hi - lo;
+  const pxX = doy => ML + (doy - 1) / 365 * cW;
+  const pxY = v => MT + cH * (1 - (v - lo) / rng);
+  // Y grid
+  const step = span < 1 ? 0.2 : span < 3 ? 0.5 : span < 6 ? 1 : 2;
+  let grid = '';
+  for (let v = Math.ceil(lo/step)*step; v <= hi + step*0.01; v = Math.round((v+step)*1e6)/1e6) {
+    const gy = pxY(v);
+    if (gy < MT - 2 || gy > MT + cH + 2) continue;
+    grid += `<line x1="${ML}" y1="${gy.toFixed(1)}" x2="${ML+cW}" y2="${gy.toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.18"/>`;
+    grid += `<text x="${ML-5}" y="${(gy+4).toFixed(1)}" text-anchor="end" font-size="13" fill="currentColor" opacity="0.7" font-family="system-ui,sans-serif">${v.toFixed(1)}</text>`;
+  }
+  // Month labels
+  const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const DOY=[1,32,60,91,121,152,182,213,244,274,305,335];
+  let xlbls = '';
+  DOY.forEach((d,i) => { const xx = pxX(d); xlbls += `<text x="${xx.toFixed(1)}" y="${(H-4).toFixed(1)}" text-anchor="middle" font-size="12" fill="currentColor" opacity="0.65" font-family="system-ui,sans-serif">${MONTHS[i]}</text>`; });
+  // Line path
+  const dL = pts.map((p,i) => (i?'L':'M') + pxX(p.doy).toFixed(1) + ',' + pxY(p.v).toFixed(1)).join(' ');
+  const lastPt = pts[pts.length-1];
+  const dF = dL + `L${pxX(lastPt.doy).toFixed(1)},${(MT+cH).toFixed(1)} L${pxX(pts[0].doy).toFixed(1)},${(MT+cH).toFixed(1)} Z`;
+  const todayDoy = Math.round((Date.now() - Date.UTC(new Date().getFullYear(),0,0)) / 86400000);
+  const nowX = pxX(Math.min(todayDoy, 365));
+  const nowMark = `<line x1="${nowX.toFixed(1)}" y1="${MT}" x2="${nowX.toFixed(1)}" y2="${(MT+cH).toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/><text x="${(nowX+5).toFixed(1)}" y="${(MT+14).toFixed(1)}" font-size="12" fill="#C0392B" font-weight="700" font-family="system-ui,sans-serif">today</text>`;
+  const uid = 'rcXh' + Math.random().toString(36).slice(2,5);
+  const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  svg.style.cssText = 'width:100%;display:block;cursor:crosshair;overflow:visible';
+  svg.innerHTML = `<defs><linearGradient id="rcGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1A7A52" stop-opacity="0.25"/><stop offset="100%" stop-color="#1A7A52" stop-opacity="0.02"/></linearGradient></defs>${grid}${xlbls}${nowMark}<path d="${dF}" fill="url(#rcGrad)"/><path d="${dL}" fill="none" stroke="#1A7A52" stroke-width="2" stroke-linejoin="round"/><line id="${uid}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#1A7A52" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/><circle id="${uid}d" cx="0" cy="0" r="4" fill="#1A7A52" stroke="white" stroke-width="1.5" visibility="hidden"/>`;
+  el.innerHTML = '';
+  el.appendChild(svg);
+  el.style.position = 'relative';
+  const tip = document.createElement('div');
+  tip.style.cssText = 'position:absolute;background:var(--surf);border:1px solid var(--bdr2);border-radius:5px;padding:4px 10px;font-size:11px;pointer-events:none;display:none;z-index:10;white-space:nowrap;color:var(--txt);box-shadow:0 2px 6px rgba(0,0,0,.1)';
+  el.appendChild(tip);
+  const xh = svg.querySelector('#'+uid), dot = svg.querySelector('#'+uid+'d');
+  svg.addEventListener('mousemove', e => {
+    const rect = svg.getBoundingClientRect();
+    const svgX = (e.clientX - rect.left) / rect.width * W;
+    const doy = Math.round((svgX - ML) / cW * 365 + 1);
+    const near = pts.reduce((a,b) => Math.abs(b.doy-doy) < Math.abs(a.doy-doy) ? b : a);
+    const nx = pxX(near.doy).toFixed(1), ny = pxY(near.v).toFixed(1);
+    xh.setAttribute('x1',nx); xh.setAttribute('x2',nx);
+    dot.setAttribute('cx',nx); dot.setAttribute('cy',ny); dot.setAttribute('visibility','visible');
+    tip.innerHTML = `<b>${near.v.toFixed(2)} m</b> · day ${near.doy}`;
+    tip.style.display = 'block';
+    tip.style.left = Math.min(e.clientX-rect.left+12, rect.width-160) + 'px';
+    tip.style.top = Math.max(0, e.clientY-rect.top-34) + 'px';
+  });
+  svg.addEventListener('mouseleave', () => { tip.style.display='none'; xh.setAttribute('x1','-2'); xh.setAttribute('x2','-2'); dot.setAttribute('visibility','hidden'); });
+  initExpandButtons();
+}
+
 // ── Load data.json ──
 async function loadData(){
   _lastFetch=Date.now();
@@ -1497,6 +1570,7 @@ async function loadData(){
   const twl=d.total_water_level||null;
   const tide=d.tide||null;
   const rivers=d.rivers||[];
+  const marine=d.marine||[];
   const tz=d.community?.tz||'UTC';
 
   // Updated
@@ -1601,6 +1675,7 @@ async function loadData(){
   // Wave chart — hide entire marine section if no wave data AND no marine text
   if(!d.wave?.length && !marine.length){
     const ms=document.getElementById('marine'); if(ms) ms.style.display='none';
+    const mc=document.getElementById('marine-content'); if(mc) mc.style.display='none';
     const mn=document.querySelector('a[href="#marine"]'); if(mn) mn.style.display='none';
   } else {
     renderWaveChart('waveChartEl', d.wave, tz);
@@ -1653,7 +1728,7 @@ async function loadData(){
     sparkline('snowSVG', snowDepth, SNOW_BLUE, w.hourly_times_10d||[], 240, 1);
   }
 
-  // River sparkline
+  // River sparkline (30-day) + annual climate chart
   if(rivers.length){
     const rv=rivers[0];
     const rrow=document.getElementById('river-row');
@@ -1664,10 +1739,18 @@ async function loadData(){
     if(rv.current_m!=null) document.getElementById('cv-river').textContent=rv.current_m;
     const short=(rv.river_name||'River').split(',')[0];
     document.getElementById('river-title').textContent=short;
+    // Annual river climate chart in climate section
+    if(rv.clim){
+      const climRow=document.getElementById('river-clim-row');
+      const climEl=document.getElementById('riverClimEl');
+      if(climRow) climRow.style.display='';
+      const climTitle=document.getElementById('river-clim-title');
+      if(climTitle) climTitle.textContent=`${short} · water level · ${rv.clim.hist_start||''}–${rv.clim.hist_end||new Date().getFullYear()} (${rv.clim.unit||'m'})`;
+      renderRiverClim(climEl, rv.clim, short);
+    }
   }
 
   // Marine forecast
-  const marine=d.marine||[];
   const mt=document.getElementById('marineTxt');
   if(marine.length){
     const _dec=s=>{const t=document.createElement('textarea');t.innerHTML=s;return t.value;};

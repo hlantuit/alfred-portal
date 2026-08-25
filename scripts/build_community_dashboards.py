@@ -253,13 +253,15 @@ def build_dashboard(cid):
     hide = []
     if "marine" not in blocks and "wave_forecast" not in blocks:
         hide.append("#marine")
+        hide.append("#marine-content")
     if "sea_ice" not in blocks and "lake_river_ice" not in blocks:
         hide.append("#ice")
     if "water_level" not in blocks and "hydrometric" not in blocks:
         hide.append("#water")
-    # Hide Total water level condition card for non-coastal communities
+    # Hide tide charts and condition card for non-coastal (no DFO/TOPAZ data)
     if "water_level" not in blocks:
         hide.append("#cc-tide")
+        hide.append("#tide-row")
 
     if hide:
         hide_css = (

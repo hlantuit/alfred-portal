@@ -874,6 +874,17 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback){
   svg.addEventListener('mouseleave',()=>{tip2.style.display='none';xhEl.setAttribute('x1','-2');xhEl.setAttribute('x2','-2');wlDot.setAttribute('visibility','hidden');});
 }
 
+// ── Synchronized crosshair registry ─────────────────────────────────────────
+// Charts that share the same time axis register a showAtIdx(idx) callback.
+// Hovering any chart fires all others at the same data index.
+const _chartSync = (() => {
+  const _h = [];
+  return {
+    reg(fn) { _h.push(fn); },
+    fire(idx, self) { _h.forEach(fn => { if (fn !== self) fn(idx); }); }
+  };
+})();
+
 // ── Full interactive chart (hover crosshair + tooltip, day labels, Y ticks) ──
 function renderChart(containerId, vals, opts){
   opts=opts||{};
@@ -980,15 +991,23 @@ function renderChart(containerId, vals, opts){
   const xh=svg.querySelector(`#xh_${uid}`);
   const dot=svg.querySelector(`#dot_${uid}`);
 
+  // crosshair-only update — called both locally and by _chartSync from other charts
+  function showAtIdx(idx){
+    if(idx<0){xh.setAttribute('x1','-2');xh.setAttribute('x2','-2');dot.setAttribute('visibility','hidden');tip.style.display='none';return;}
+    const v=vals[idx];if(v==null)return;
+    const cx=px(idx).toFixed(1),cy=py(v).toFixed(1);
+    xh.setAttribute('x1',cx);xh.setAttribute('x2',cx);
+    dot.setAttribute('cx',cx);dot.setAttribute('cy',cy);dot.setAttribute('visibility','visible');
+  }
+  _chartSync.reg(showAtIdx);
+
   svg.addEventListener('mousemove',e=>{
     const rect=svg.getBoundingClientRect();
     const svgX=(e.clientX-rect.left)/rect.width*W;
     const idx=Math.max(0,Math.min(n-1,Math.round((svgX-ML)/cW*(n-1))));
     const v=vals[idx];
     if(v==null) return;
-    const cx=px(idx),cy=py(v);
-    xh.setAttribute('x1',cx.toFixed(1));xh.setAttribute('x2',cx.toFixed(1));
-    dot.setAttribute('cx',cx.toFixed(1));dot.setAttribute('cy',cy.toFixed(1));dot.setAttribute('visibility','visible');
+    showAtIdx(idx);
     const valLabel=typeof v==='number'&&!Number.isInteger(v)?v.toFixed(1):v;
     let txt=`<b>${valLabel}${unit}</b>`;
     if(dirs&&dirs[idx]!=null){
@@ -1003,14 +1022,14 @@ function renderChart(containerId, vals, opts){
       txt+=` <span style="color:var(--muted);font-size:10px">${dt.toLocaleString('en-CA',{timeZone:tz,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})}</span>`;
     }
     tip.innerHTML=txt;tip.style.display='block';
-    const tipX=Math.min(e.clientX-rect.left+14,rect.width-165);
-    tip.style.left=tipX+'px';
+    tip.style.left=Math.min(e.clientX-rect.left+14,rect.width-165)+'px';
     tip.style.top=Math.max(0,e.clientY-rect.top-34)+'px';
+    _chartSync.fire(idx,showAtIdx);
   });
   svg.addEventListener('mouseleave',()=>{
     tip.style.display='none';
-    xh.setAttribute('x1','-2');xh.setAttribute('x2','-2');
-    dot.setAttribute('visibility','hidden');
+    showAtIdx(-1);
+    _chartSync.fire(-1,showAtIdx);
   });
 }
 
@@ -1085,13 +1104,20 @@ function renderPrecipChart(containerId, rain, snow, times, tz){
   tip.style.cssText='position:absolute;background:var(--surf);border:1px solid var(--bdr2);border-radius:5px;padding:4px 10px;font-size:11px;pointer-events:none;display:none;z-index:10;white-space:nowrap;color:var(--txt);box-shadow:0 2px 6px rgba(0,0,0,.1)';
   el.appendChild(tip);
   const psvg=el.querySelector(`#psvg_${uid}`), pxh=psvg.querySelector(`#pxh_${uid}`);
+
+  function showPrecipAtIdx(idx){
+    if(idx<0){pxh.setAttribute('x1','-2');pxh.setAttribute('x2','-2');tip.style.display='none';return;}
+    const xx=(ML+cW*idx/(n-1)).toFixed(1);
+    pxh.setAttribute('x1',xx);pxh.setAttribute('x2',xx);
+  }
+  _chartSync.reg(showPrecipAtIdx);
+
   psvg.addEventListener('mousemove',e=>{
     const rect=psvg.getBoundingClientRect();
     const svgX=(e.clientX-rect.left)/rect.width*W;
     const idx=Math.max(0,Math.min(n-1,Math.round((svgX-ML)/cW*(n-1))));
+    showPrecipAtIdx(idx);
     const r=rain[idx]||0,s=snow[idx]||0;
-    const xx=ML+cW*idx/(n-1);
-    pxh.setAttribute('x1',xx.toFixed(1));pxh.setAttribute('x2',xx.toFixed(1));
     let txt=`<b>Rain: ${r.toFixed(2)} mm${hasSnow?` · Snow: ${s.toFixed(2)} cm`:''}</b>`;
     if(times&&times[idx]){
       const dt=new Date(times[idx]);
@@ -1100,8 +1126,9 @@ function renderPrecipChart(containerId, rain, snow, times, tz){
     tip.innerHTML=txt;tip.style.display='block';
     tip.style.left=Math.min(e.clientX-rect.left+14,rect.width-220)+'px';
     tip.style.top=Math.max(0,e.clientY-rect.top-34)+'px';
+    _chartSync.fire(idx,showPrecipAtIdx);
   });
-  psvg.addEventListener('mouseleave',()=>{tip.style.display='none';pxh.setAttribute('x1','-2');pxh.setAttribute('x2','-2');});
+  psvg.addEventListener('mouseleave',()=>{showPrecipAtIdx(-1);_chartSync.fire(-1,showPrecipAtIdx);});
 }
 
 // ── Interactive wave height chart ──

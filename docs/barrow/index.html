@@ -1525,9 +1525,9 @@ async function loadData(){
   // Updated
   if(d.updated_utc){
     const loc=new Date(d.updated_utc).toLocaleString('en-CA',{timeZone:tz,hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
-    document.getElementById('sb-updated').textContent='Updated '+loc;
-    document.getElementById('tb-time').textContent=loc;
-    document.getElementById('foot-updated').textContent='Last update: '+loc;
+    const _sbUpd=document.getElementById('sb-updated'); if(_sbUpd) _sbUpd.textContent='Updated '+loc;
+    const _tbTime=document.getElementById('tb-time'); if(_tbTime) _tbTime.textContent=loc;
+    const _ftUpd=document.getElementById('foot-updated'); if(_ftUpd) _ftUpd.textContent='Last update: '+loc;
   }
   if(d.modis_date){
     const md=new Date(d.modis_date+'T12:00:00Z').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'});

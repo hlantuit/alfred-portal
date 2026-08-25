@@ -23,13 +23,13 @@ jobs:
 
       - run: pip install requests pillow matplotlib numpy notion-client cairosvg xarray netcdf4 scipy cartopy shapely
 
-      # All communities, fast blocks only (no satellite imagery)
-      - name: Update Notion dashboards (fast blocks only)
-        env:
-          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-        run: |
-          python scripts/generate_dashboards.py \
-            --skip-blocks sentinel1,sea_ice,sea_ice_zoom,modis
+      # Notion push disabled — GitHub Pages dashboards are now the primary output
+      # - name: Update Notion dashboards (fast blocks only)
+      #   env:
+      #     NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      #   run: |
+      #     python scripts/generate_dashboards.py \
+      #       --skip-blocks sentinel1,sea_ice,sea_ice_zoom,modis
 
       - name: Commit and push
         run: |

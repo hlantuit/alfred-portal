@@ -553,6 +553,15 @@ svg.sp{width:100%;height:auto;display:block}
       <div class="ch-area"><svg class="sp" id="riverSVG" viewBox="0 0 800 100" preserveAspectRatio="none"></svg></div>
       <div style="font-size:10px;color:var(--muted);margin-top:6px">Water Survey of Canada · 7-day</div>
     </div>
+    <!-- Webcam card injected here by JS when community has webcam + river -->
+    <div id="river-webcam-slot" style="display:none;flex:1;min-width:200px">
+      <div class="img-card" id="river-webcam-card">
+        <a id="river-webcam-link" href="#" target="_blank" rel="noopener">
+          <img id="river-webcam-img" src="" alt="Webcam" style="width:100%;border-radius:6px" onerror="document.getElementById('river-webcam-card').style.display='none'">
+        </a>
+        <div class="img-cap" id="river-webcam-cap">Webcam</div>
+      </div>
+    </div>
   </div>
 
   <!-- True color optical imagery -->
@@ -610,10 +619,8 @@ svg.sp{width:100%;height:auto;display:block}
         </div>
         <div class="ch-area" id="windRoseEl" style="height:auto;min-height:60px"></div>
       </div>
-    </div>
-    <!-- River level annual chart — only shown for hydrometric communities -->
-    <div class="climate-grid" id="river-clim-row" style="display:none">
-      <div class="ch" style="grid-column:1/-1">
+      <!-- River level annual chart — only shown for hydrometric communities -->
+      <div id="river-clim-row" class="ch" style="display:none;grid-column:1/-1">
         <div class="ch-hd">
           <div class="ch-title" id="river-clim-title">River level · annual cycle</div>
         </div>
@@ -1499,17 +1506,32 @@ async function renderWindRose(lat, lon, tz) {
 // ── River level annual cycle chart ──────────────────────────────────────────
 function renderRiverClim(el, clim, riverName) {
   if (!el || !clim?.current_year?.length) return;
-  // current_year: array of [doy, value] pairs
-  const pts = clim.current_year.map(p => Array.isArray(p) ? {doy:p[0],v:p[1]} : {doy:p[0],v:p[1]}).filter(p=>p.v!=null).sort((a,b)=>a.doy-b.doy);
+  const pts = clim.current_year.map(p => ({doy:p[0],v:p[1]})).filter(p=>p.v!=null).sort((a,b)=>a.doy-b.doy);
   if (!pts.length) return;
+
+  // Compute mean ± std per doy from doy_values (historical per-year observations)
+  const dv = clim.doy_values || {};
+  const climBand = [];
+  for (let d = 1; d <= 365; d++) {
+    const key = String(d), vals = (dv[key]||[]).filter(v=>v!=null);
+    if (vals.length < 2) continue;
+    const mean = vals.reduce((a,b)=>a+b,0)/vals.length;
+    const std = Math.sqrt(vals.reduce((a,b)=>a+(b-mean)**2,0)/vals.length);
+    climBand.push({doy:d, mean, lo:mean-std, hi:mean+std});
+  }
+
+  // Domain from current year + clim band combined
+  const allVals = pts.map(p=>p.v).concat(climBand.flatMap(b=>[b.lo,b.hi]));
+  const minV = Math.min(...allVals), maxV = Math.max(...allVals);
+  const span = maxV - minV || 0.5;
+  const lo = minV - span*0.08, hi = maxV + span*0.08, rng = hi - lo;
+
   const W = el.offsetWidth || 700;
   const ML = 52, MR = 20, MT = 24, MB = 36;
   const cW = W - ML - MR, H = Math.max(160, Math.round(W * 0.28)), cH = H - MT - MB;
-  const minV = Math.min(...pts.map(p=>p.v)), maxV = Math.max(...pts.map(p=>p.v));
-  const span = maxV - minV || 0.5;
-  const lo = minV - span*0.08, hi = maxV + span*0.08, rng = hi - lo;
   const pxX = doy => ML + (doy - 1) / 365 * cW;
   const pxY = v => MT + cH * (1 - (v - lo) / rng);
+
   // Y grid
   const step = span < 1 ? 0.2 : span < 3 ? 0.5 : span < 6 ? 1 : 2;
   let grid = '';
@@ -1519,15 +1541,27 @@ function renderRiverClim(el, clim, riverName) {
     grid += `<line x1="${ML}" y1="${gy.toFixed(1)}" x2="${ML+cW}" y2="${gy.toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.18"/>`;
     grid += `<text x="${ML-5}" y="${(gy+4).toFixed(1)}" text-anchor="end" font-size="13" fill="currentColor" opacity="0.7" font-family="system-ui,sans-serif">${v.toFixed(1)}</text>`;
   }
+
   // Month labels
   const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const DOY=[1,32,60,91,121,152,182,213,244,274,305,335];
   let xlbls = '';
   DOY.forEach((d,i) => { const xx = pxX(d); xlbls += `<text x="${xx.toFixed(1)}" y="${(H-4).toFixed(1)}" text-anchor="middle" font-size="12" fill="currentColor" opacity="0.65" font-family="system-ui,sans-serif">${MONTHS[i]}</text>`; });
-  // Line path
+
+  // Historical band (mean ± std) + dashed mean line
+  let bandPath = '', meanPath = '';
+  if (climBand.length > 2) {
+    const top = climBand.map((b,i) => (i?'L':'M')+pxX(b.doy).toFixed(1)+','+pxY(b.hi).toFixed(1)).join(' ');
+    const bot = [...climBand].reverse().map(b => 'L'+pxX(b.doy).toFixed(1)+','+pxY(b.lo).toFixed(1)).join(' ');
+    bandPath = `<path d="${top} ${bot} Z" fill="#1A7A52" fill-opacity="0.12"/>`;
+    meanPath = `<path d="${climBand.map((b,i)=>(i?'L':'M')+pxX(b.doy).toFixed(1)+','+pxY(b.mean).toFixed(1)).join(' ')}" fill="none" stroke="#1A7A52" stroke-width="1" stroke-dasharray="4,3" opacity="0.45"/>`;
+  }
+
+  // Current-year line + fill
   const dL = pts.map((p,i) => (i?'L':'M') + pxX(p.doy).toFixed(1) + ',' + pxY(p.v).toFixed(1)).join(' ');
   const lastPt = pts[pts.length-1];
   const dF = dL + `L${pxX(lastPt.doy).toFixed(1)},${(MT+cH).toFixed(1)} L${pxX(pts[0].doy).toFixed(1)},${(MT+cH).toFixed(1)} Z`;
+
   const todayDoy = Math.round((Date.now() - Date.UTC(new Date().getFullYear(),0,0)) / 86400000);
   const nowX = pxX(Math.min(todayDoy, 365));
   const nowMark = `<line x1="${nowX.toFixed(1)}" y1="${MT}" x2="${nowX.toFixed(1)}" y2="${(MT+cH).toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/><text x="${(nowX+5).toFixed(1)}" y="${(MT+14).toFixed(1)}" font-size="12" fill="#C0392B" font-weight="700" font-family="system-ui,sans-serif">today</text>`;
@@ -1535,7 +1569,7 @@ function renderRiverClim(el, clim, riverName) {
   const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   svg.style.cssText = 'width:100%;display:block;cursor:crosshair;overflow:visible';
-  svg.innerHTML = `<defs><linearGradient id="rcGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1A7A52" stop-opacity="0.25"/><stop offset="100%" stop-color="#1A7A52" stop-opacity="0.02"/></linearGradient></defs>${grid}${xlbls}${nowMark}<path d="${dF}" fill="url(#rcGrad)"/><path d="${dL}" fill="none" stroke="#1A7A52" stroke-width="2" stroke-linejoin="round"/><line id="${uid}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#1A7A52" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/><circle id="${uid}d" cx="0" cy="0" r="4" fill="#1A7A52" stroke="white" stroke-width="1.5" visibility="hidden"/>`;
+  svg.innerHTML = `<defs><linearGradient id="rcGrad${uid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1A7A52" stop-opacity="0.3"/><stop offset="100%" stop-color="#1A7A52" stop-opacity="0.03"/></linearGradient></defs>${grid}${xlbls}${bandPath}${meanPath}${nowMark}<path d="${dF}" fill="url(#rcGrad${uid})"/><path d="${dL}" fill="none" stroke="#1A7A52" stroke-width="2" stroke-linejoin="round"/><line id="${uid}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#1A7A52" stroke-width="1" stroke-dasharray="3,2" opacity="0.5"/><circle id="${uid}d" cx="0" cy="0" r="4" fill="#1A7A52" stroke="white" stroke-width="1.5" visibility="hidden"/>`;
   el.innerHTML = '';
   el.appendChild(svg);
   el.style.position = 'relative';
@@ -1551,9 +1585,11 @@ function renderRiverClim(el, clim, riverName) {
     const nx = pxX(near.doy).toFixed(1), ny = pxY(near.v).toFixed(1);
     xh.setAttribute('x1',nx); xh.setAttribute('x2',nx);
     dot.setAttribute('cx',nx); dot.setAttribute('cy',ny); dot.setAttribute('visibility','visible');
-    tip.innerHTML = `<b>${near.v.toFixed(2)} m</b> · day ${near.doy}`;
+    const cb = climBand.length ? climBand.reduce((a,b)=>Math.abs(b.doy-near.doy)<Math.abs(a.doy-near.doy)?b:a) : null;
+    const climStr = cb ? ` · hist. ${cb.mean.toFixed(2)} \xb1 ${(cb.hi-cb.mean).toFixed(2)} m` : '';
+    tip.innerHTML = `<b>${near.v.toFixed(2)} m</b> · day ${near.doy}${climStr}`;
     tip.style.display = 'block';
-    tip.style.left = Math.min(e.clientX-rect.left+12, rect.width-160) + 'px';
+    tip.style.left = Math.min(e.clientX-rect.left+12, rect.width-220) + 'px';
     tip.style.top = Math.max(0, e.clientY-rect.top-34) + 'px';
   });
   svg.addEventListener('mouseleave', () => { tip.style.display='none'; xh.setAttribute('x1','-2'); xh.setAttribute('x2','-2'); dot.setAttribute('visibility','hidden'); });
@@ -1708,20 +1744,38 @@ async function loadData(){
     if(tide.current_m!=null) document.getElementById('cv-tide-sp').textContent=(tide.current_m>0?'+':'')+parseFloat(tide.current_m).toFixed(2);
   }
 
-  // Webcam
+  // Webcam — show next to river level if hydrometric data present, else own section
   const blocks=d.community?.blocks||[];
   if(d.community?.webcam_url && blocks.includes('webcam')){
-    const wc=document.getElementById('webcam');
-    const wcc=document.getElementById('webcam-content');
-    if(wc) wc.style.display='';
-    if(wcc) wcc.style.display='';
-    const nwc=document.getElementById('nav-webcam'); if(nwc) nwc.style.display='';
-    const img=document.getElementById('webcam-img');
-    const lnk=document.getElementById('webcam-link');
-    const cap=document.getElementById('webcam-cap');
-    if(img) img.src=d.community.webcam_url+'?t='+Date.now();
-    if(lnk) lnk.href=d.community.webcam_page_url||d.community.webcam_url;
-    if(cap) cap.textContent=d.community.webcam_label||'Webcam';
+    const hasRiver=rivers.length>0;
+    const url=d.community.webcam_url+'?t='+Date.now();
+    const pageUrl=d.community.webcam_page_url||d.community.webcam_url;
+    const label=d.community.webcam_label||'Webcam';
+    if(hasRiver){
+      // Place webcam card next to river level chart
+      const slot=document.getElementById('river-webcam-slot');
+      const img=document.getElementById('river-webcam-img');
+      const lnk=document.getElementById('river-webcam-link');
+      const cap=document.getElementById('river-webcam-cap');
+      if(slot) slot.style.display='';
+      if(img) img.src=url;
+      if(lnk) lnk.href=pageUrl;
+      if(cap) cap.textContent=label;
+      const nwc=document.getElementById('nav-webcam'); if(nwc) nwc.style.display='';
+    } else {
+      // No river — show in own webcam section
+      const wc=document.getElementById('webcam');
+      const wcc=document.getElementById('webcam-content');
+      if(wc) wc.style.display='';
+      if(wcc) wcc.style.display='';
+      const nwc=document.getElementById('nav-webcam'); if(nwc) nwc.style.display='';
+      const img=document.getElementById('webcam-img');
+      const lnk=document.getElementById('webcam-link');
+      const cap=document.getElementById('webcam-cap');
+      if(img) img.src=url;
+      if(lnk) lnk.href=pageUrl;
+      if(cap) cap.textContent=label;
+    }
   }
 
   // Snow depth

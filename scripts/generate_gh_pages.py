@@ -1164,7 +1164,9 @@ def main():
 
                         # Build the full list of points to label
                         banner_pts = list(cfg.get("map_points", []))  # [lat, lon, label, dy?]
-                        labeled_coords = set()  # deduplicate nearby community dots
+                        # Pre-seed dedup set with all existing map_points so the other-communities
+                        # loop can't re-add a point that's already labelled from map_points
+                        labeled_coords = {(round(float(p[0]), 1), round(float(p[1]), 1)) for p in banner_pts if len(p) >= 2}
                         # Add all other community centre points that fall in this banner
                         for _other_cfg_path in sorted(COMMUNITIES_DIR.glob("*/config.json")):
                             try:

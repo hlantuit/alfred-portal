@@ -50,7 +50,10 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .hdr-right{margin-left:auto;font-size:11px;color:var(--muted)}
 
 /* ── Map ── */
-#map{height:clamp(240px,42vh,520px);width:100%;background:#0d1c2b;position:relative}
+#map{height:clamp(320px,52vh,640px);width:100%;background:#0d1c2b;position:relative}
+/* Layer control — compact on mobile */
+.leaflet-control-layers{font-size:12px!important}
+.leaflet-control-layers-expanded{padding:6px 10px!important}
 
 /* ── Section ── */
 .sec-hd{font-size:12px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);padding:28px 24px 14px}
@@ -115,10 +118,10 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 <div class="sec-hd">Community dashboards</div>
 
 <div class="legend">
-  <div class="leg-item"><div class="leg-dot" style="background:var(--acc)"></div>Coastal</div>
-  <div class="leg-item"><div class="leg-dot" style="background:var(--good)"></div>Riverine</div>
-  <div class="leg-item"><div class="leg-dot" style="background:#7B68EE"></div>Lake</div>
-  <div class="leg-item"><div class="leg-dot" style="background:var(--muted)"></div>Terrestrial</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#3AABFF"></div>Coastal</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#3FD68A"></div>Riverine</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#B8A4FF"></div>Lake</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#C0D0DE"></div>Terrestrial</div>
 </div>
 
 <div class="cards" id="cards"></div>
@@ -146,14 +149,19 @@ const SITES = [
   {id:"ulukhaktok",  name:"Ulukhaktok",       alt:"",                  region:"Victoria Island",        type:"coastal",     lat:70.737,  lon:-117.771},
 ];
 
-const TYPE_COLOR = {coastal:"#005FA3",riverine:"#1A7A52",lake:"#7B68EE",terrestrial:"#6B8499"};
+const TYPE_COLOR = {coastal:"#3AABFF",riverine:"#3FD68A",lake:"#B8A4FF",terrestrial:"#C0D0DE"};
 
-const ALFRED_ICON = L.icon({
-  iconUrl: 'herschel/alfred-logo.png',
-  iconSize: [16, 16],
-  iconAnchor: [8, 8],
-  popupAnchor: [0, -10],
-});
+function makeIcon(type){
+  const col = TYPE_COLOR[type]||'#3AABFF';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"><circle cx="11" cy="11" r="8" fill="${col}" stroke="white" stroke-width="2" opacity="0.92"/></svg>`;
+  return L.divIcon({
+    html: svg,
+    className: '',
+    iconSize: [22,22],
+    iconAnchor: [11,11],
+    popupAnchor: [0,-13],
+  });
+}
 
 // ── Clock ──
 function tick(){
@@ -164,15 +172,45 @@ function tick(){
 tick(); setInterval(tick,10000);
 
 // ── Map ──
-const map = L.map('map',{zoomControl:true,scrollWheelZoom:true}).setView([69.5,-135],3);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
-  maxZoom:13,
-  attribution:'© OpenStreetMap contributors'
-}).addTo(map);
+const map = L.map('map',{zoomControl:true,scrollWheelZoom:true}).setView([70.2,-136],5);
+
+// NASA GIBS MODIS tiles — yesterday's date (GIBS typically 1-day lag)
+const _gibsDate = (d => {
+  d.setUTCDate(d.getUTCDate()-1);
+  return d.toISOString().slice(0,10);
+})(new Date());
+const _gibsUrl = (layer) =>
+  `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/${layer}/default/${_gibsDate}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`;
+
+const modisTerraTile = L.tileLayer(_gibsUrl('MODIS_Terra_CorrectedReflectance_TrueColor'),
+  {maxZoom:9, tileSize:256, attribution:'NASA · MODIS Terra · '+_gibsDate, crossOrigin:true});
+const modisAquaTile  = L.tileLayer(_gibsUrl('MODIS_Aqua_CorrectedReflectance_TrueColor'),
+  {maxZoom:9, tileSize:256, attribution:'NASA · MODIS Aqua · '+_gibsDate,  crossOrigin:true});
+const osmTile        = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  {maxZoom:18, attribution:'© OpenStreetMap contributors'});
+
+// Start with MODIS Terra; fall back to OSM if tiles error out
+let _modisErrorCount = 0;
+modisTerraTile.on('tileerror', () => {
+  _modisErrorCount++;
+  if (_modisErrorCount === 3 && !map.hasLayer(osmTile)) {
+    map.removeLayer(modisTerraTile);
+    osmTile.addTo(map);
+  }
+});
+modisTerraTile.addTo(map);
+
+L.control.layers(
+  {'MODIS Terra · '+_gibsDate: modisTerraTile,
+   'MODIS Aqua · '+_gibsDate:  modisAquaTile,
+   'OpenStreetMap':             osmTile},
+  {},
+  {position:'topright', collapsed:false}
+).addTo(map);
 
 const markers = {};
 SITES.forEach(s=>{
-  const m=L.marker([s.lat,s.lon],{icon:ALFRED_ICON}).addTo(map);
+  const m=L.marker([s.lat,s.lon],{icon:makeIcon(s.type)}).addTo(map);
   const label=s.alt ? `${s.name} · ${s.alt}` : s.name;
   m.bindPopup(
     `<b style="font-size:13px">${label}</b><br>`+

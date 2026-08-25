@@ -522,13 +522,6 @@ svg.sp{width:100%;height:auto;display:block}
       <div class="marine-text" id="marineTxt"><span style="color:var(--muted)">Loading…</span></div>
     </div>
   </div>
-  <div class="img-row-3">
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/wave_forecast.png" alt="Wave forecast chart" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Wave forecast · detailed · click to zoom</div>
-    </div>
-  </div>
-
   <!-- Water levels -->
   <div id="water" class="sec"><div class="sec-hd">Water levels</div></div>
   <!-- Tide charts (hidden for non-coastal communities by JS) -->
@@ -559,25 +552,6 @@ svg.sp{width:100%;height:auto;display:block}
       </div>
       <div class="ch-area"><svg class="sp" id="riverSVG" viewBox="0 0 800 100" preserveAspectRatio="none"></svg></div>
       <div style="font-size:10px;color:var(--muted);margin-top:6px">Water Survey of Canada · 7-day</div>
-    </div>
-  </div>
-  <!-- Pre-rendered water/tide/hydro charts (hidden if image missing) -->
-  <div class="img-row-3">
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/water_level_chart.png" alt="Water level chart" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Total water level · click to zoom</div>
-    </div>
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/tide_chart.png" alt="Tide chart" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Tide prediction · click to zoom</div>
-    </div>
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/hydrometric_chart.png" alt="River level chart" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">River water level · click to zoom</div>
-    </div>
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/hydrometric_clim.png" alt="River level climatology" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">River level · climatology · click to zoom</div>
     </div>
   </div>
 

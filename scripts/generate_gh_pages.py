@@ -679,6 +679,11 @@ def fetch_river(station_id, provterr):
     MSC Datamart hourly CSV."""
 
     # ── Method 1: OGC real-time API (same source as dashboard_lib) ──
+    from datetime import date as _date, timedelta as _td
+    current_m = None
+    realtime_rows = []
+
+    # Method 1a: OGC real-time (last ~7 days hourly) — for current reading + recent series
     try:
         r = get_with_retry(
             "https://api.weather.gc.ca/collections/hydrometric-realtime/items",
@@ -686,21 +691,66 @@ def fetch_river(station_id, provterr):
             timeout=30,
         )
         features = r.json().get("features", [])
-        rows = []
         for f in features:
             props = f.get("properties", {})
             level = props.get("LEVEL")
             ts = props.get("DATETIME")
             if level is not None and ts:
-                rows.append({"t": ts, "m": round(float(level), 3)})
-        if rows:
-            rows.sort(key=lambda x: x["t"])
-            current_m = rows[-1]["m"]
-            print(f"  WSC OGC API: {len(rows)} rows for {station_id}, current={current_m}")
-            return {"current_m": current_m, "series": rows}
-        print(f"  WSC OGC API: 0 features for {station_id}")
+                realtime_rows.append({"t": ts, "m": round(float(level), 3)})
+        if realtime_rows:
+            realtime_rows.sort(key=lambda x: x["t"])
+            current_m = realtime_rows[-1]["m"]
+            print(f"  WSC OGC realtime: {len(realtime_rows)} rows for {station_id}, current={current_m}")
     except Exception as e:
-        print(f"  WSC OGC API failed for {station_id}: {e}")
+        print(f"  WSC OGC realtime failed for {station_id}: {e}")
+
+    # Method 1b: OGC daily-mean for 30-day series
+    daily_rows = []
+    try:
+        date_from = (_date.today() - _td(days=30)).strftime("%Y-%m-%d")
+        date_to = _date.today().strftime("%Y-%m-%d")
+        r2 = get_with_retry(
+            "https://api.weather.gc.ca/collections/hydrometric-daily-mean/items",
+            params={"STATION_NUMBER": station_id, "datetime": f"{date_from}/{date_to}",
+                    "limit": 35, "f": "json"},
+            timeout=30,
+        )
+        for f in r2.json().get("features", []):
+            props = f.get("properties", {})
+            level = props.get("MEAN") or props.get("LEVEL")
+            ts = props.get("DATE") or props.get("DATETIME")
+            if level is not None and ts:
+                daily_rows.append({"t": ts, "m": round(float(level), 3)})
+        if daily_rows:
+            daily_rows.sort(key=lambda x: x["t"])
+            if current_m is None:
+                current_m = daily_rows[-1]["m"]
+            print(f"  WSC OGC daily-mean: {len(daily_rows)} rows for {station_id}")
+    except Exception as e:
+        print(f"  WSC OGC daily-mean failed for {station_id}: {e}")
+
+    # Merge: daily rows for backdrop, then real-time for the recent days
+    # Deduplicate by date prefix — real-time wins for same-day entries
+    if daily_rows or realtime_rows:
+        merged = {}
+        for row in daily_rows:
+            key = row["t"][:10]
+            merged[key] = row
+        for row in realtime_rows:
+            key = row["t"][:10]
+            # Only add real-time if same day or newer than daily data
+            if key >= (list(merged.keys())[0] if merged else ""):
+                merged[key] = row
+        # Build final series: daily for older days, all real-time rows for last week
+        rt_dates = {r["t"][:10] for r in realtime_rows}
+        series = [v for k, v in sorted(merged.items()) if k not in rt_dates]
+        series += realtime_rows
+        series.sort(key=lambda x: x["t"])
+        if current_m is not None:
+            print(f"  WSC merged series: {len(series)} rows for {station_id}")
+            return {"current_m": current_m, "series": series}
+
+    print(f"  WSC OGC: no data for {station_id}, falling back to Datamart")
 
     # ── Method 2: MSC Datamart — try hourly CSV first, then daily fallback ──
     prov = provterr.upper()

@@ -255,7 +255,7 @@ def fetch_weather(lat, lon, tz):
                 "windspeed_10m", "winddirection_10m", "weathercode",
                 "surface_pressure", "cloudcover",
             ]),
-            "hourly": "cloudcover,windspeed_10m,winddirection_10m,pressure_msl,temperature_2m,precipitation,rain,snowfall,snow_depth",
+            "hourly": "cloudcover,windspeed_10m,winddirection_10m,pressure_msl,temperature_2m,precipitation,rain,snowfall,snow_depth,relativehumidity_2m,visibility",
             "daily": ",".join([
                 "temperature_2m_max", "temperature_2m_min",
                 "precipitation_probability_max", "precipitation_sum",
@@ -351,6 +351,51 @@ def fetch_weather(lat, lon, tz):
 
     hourly_times_10d = times_h[start_i::2][:120]  # ISO strings, every 2h
 
+    # ── Fog risk from Open-Meteo visibility (hourly, every 2h, 10 days) ──────
+    def _vis_to_pfog(vis_m):
+        """Piecewise linear visibility → fog probability (0–1)."""
+        if vis_m is None:
+            return None
+        if vis_m >= 10000:
+            return 0.00
+        if vis_m >= 5000:
+            return 0.02 + (10000 - vis_m) / 5000 * 0.03   # 0.02–0.05
+        if vis_m >= 2000:
+            return 0.05 + (5000 - vis_m) / 3000 * 0.10    # 0.05–0.15
+        if vis_m >= 1000:
+            return 0.15 + (2000 - vis_m) / 1000 * 0.15    # 0.15–0.30
+        if vis_m >= 500:
+            return 0.30 + (1000 - vis_m) / 500 * 0.20     # 0.30–0.50
+        if vis_m >= 200:
+            return 0.50 + (500 - vis_m) / 300 * 0.20      # 0.50–0.70
+        return 0.70 + (200 - vis_m) / 200 * 0.30          # 0.70–1.00
+
+    vis_h  = hourly.get("visibility", [])
+    rh_h   = hourly.get("relativehumidity_2m", [])
+    t_h    = hourly.get("temperature_2m", [])
+    ws_h   = hourly.get("windspeed_10m", [])
+    fog_points = []
+    run_time_utc = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0).isoformat()
+    for offset, t_iso in enumerate(times_h[start_i::2][:120]):
+        raw_i = start_i + offset * 2
+        vis_m = vis_h[raw_i] if raw_i < len(vis_h) else None
+        p_fog = _vis_to_pfog(vis_m)
+        if p_fog is None:
+            continue
+        lead_h = offset * 2
+        conf = "high" if lead_h <= 48 else ("medium" if lead_h <= 120 else "low")
+        fog_points.append({
+            "lead_hour": lead_h,
+            "valid_time_utc": t_iso,
+            "p_fog": round(p_fog, 3),
+            "confidence": conf,
+            "source": "gem_seamless",
+            "t2m_c": round(t_h[raw_i], 1) if raw_i < len(t_h) and t_h[raw_i] is not None else None,
+            "rh_pct": round(rh_h[raw_i], 1) if raw_i < len(rh_h) and rh_h[raw_i] is not None else None,
+            "wind_ms": round(ws_h[raw_i] / 3.6, 1) if raw_i < len(ws_h) and ws_h[raw_i] is not None else None,
+            "visibility_m": int(vis_m) if vis_m is not None else None,
+        })
+
     # Daily means from full 10-day hourly (240h)
     def daily_from_hourly(key, n_days=10):
         vals = hourly.get(key, [])
@@ -393,6 +438,11 @@ def fetch_weather(lat, lon, tz):
         "hourly_rain_10d": h_10d("rain", decimals=2),
         "hourly_snow_10d": [round(v * 10, 2) if v is not None else None for v in h_10d("snowfall", decimals=3)],
         "snow_depth_cm": h_10d("snow_depth", decimals=1),
+        "fog": {
+            "generated_at_utc": run_time_utc,
+            "source": "open-meteo gem_seamless · visibility",
+            "points": fog_points,
+        },
     }
 
 

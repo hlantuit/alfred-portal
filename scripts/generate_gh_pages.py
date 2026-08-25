@@ -1197,7 +1197,7 @@ def main():
         return img
 
     # ── VIIRS NOAA-20 true color (EPSG:3413, north-up) ──
-    def fetch_viirs_image(out_path, max_hours_back=36):
+    def fetch_viirs_image(out_path, max_hours_back=72):
         import io as _io, re as _re_v
         from datetime import datetime as _dtv, timedelta as _tdv
         bbox_3413 = cfg.get("modis_bbox_3413")
@@ -1266,7 +1266,7 @@ def main():
                     _candidates.append((_d.strftime("%Y-%m-%d"), _lyr))
 
         # Step 2: try each candidate with exact TIME in GIBS
-        for _viirs_date_str, layer in _candidates[:8]:
+        for _viirs_date_str, layer in _candidates[:12]:
                 try:
                     r = get_with_retry(
                         "https://gibs.earthdata.nasa.gov/wms/epsg3413/best/wms.cgi",
@@ -1394,6 +1394,18 @@ def main():
 
     print("Fetching VIIRS true color…")
     viirs_date = fetch_viirs_image(img_dir / "viirs.png")
+    # If fetch failed but a previous image exists, carry forward the old date
+    if not viirs_date and (img_dir / "viirs.png").exists():
+        try:
+            _prev_dj = out_dir / "data.json"
+            if _prev_dj.exists():
+                import json as _jv
+                _prev = _jv.loads(_prev_dj.read_text(encoding="utf-8"))
+                if _prev.get("viirs_date"):
+                    viirs_date = _prev["viirs_date"]
+                    print(f"  VIIRS: carrying forward previous date {viirs_date}")
+        except Exception:
+            pass
 
     # ── Sentinel-2 true color (Sentinel Hub Copernicus) ──
     def get_sh_token():
@@ -1635,6 +1647,18 @@ def main():
             fetch_s2_image(sh_token, 25_000, img_dir / "s2_50.png")
     else:
         print("  Sentinel-2 skipped (no SH credentials in env)")
+    # Carry forward old S2 date if fetch failed but image exists
+    if not s2_date and (img_dir / "s2_150.png").exists():
+        try:
+            _prev_dj2 = out_dir / "data.json"
+            if _prev_dj2.exists():
+                import json as _js2
+                _prev2 = _js2.loads(_prev_dj2.read_text(encoding="utf-8"))
+                if _prev2.get("s2_date"):
+                    s2_date = _prev2["s2_date"]
+                    print(f"  S2: carrying forward previous date {s2_date}")
+        except Exception:
+            pass
 
     marine = None
     if cfg.get("marine_zone_id"):

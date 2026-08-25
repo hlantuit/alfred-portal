@@ -171,7 +171,78 @@ function tick(){
 }
 tick(); setInterval(tick,10000);
 
-// ── Map ──
+const WMO_ICON={0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',
+  51:'🌦️',53:'🌦️',55:'🌧️',61:'🌧️',63:'🌧️',65:'🌧️',
+  71:'🌨️',73:'🌨️',75:'🌨️',77:'🌨️',80:'🌦️',81:'🌧️',82:'🌧️',
+  85:'❄️',86:'❄️',95:'⛈️',96:'⛈️',99:'⛈️'};
+const WIND_DIRS=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+function wDir(d){return WIND_DIRS[Math.round((d||0)/22.5)%16]}
+
+// ── Community cards — rendered immediately, independent of Leaflet ──
+(function buildCards(){
+  const grid=document.getElementById('cards');
+  if(!grid) return;
+  SITES.forEach(s=>{
+    const card=document.createElement('a');
+    card.className='card';
+    card.href=s.id+'/';
+    card.dataset.id=s.id;
+    card.innerHTML=
+      `<div class="card-type ${s.type}"></div>`+
+      `<div class="card-region">${s.region}</div>`+
+      `<div class="card-name">${s.name}</div>`+
+      `<div class="card-name-alt">${s.alt||'&nbsp;'}</div>`+
+      `<div class="card-wx"><div class="card-icon" id="ci-${s.id}">—</div>`+
+      `<div><div style="display:flex;align-items:baseline;gap:4px">`+
+      `<div class="card-temp" id="ct-${s.id}">—</div><div class="card-unit">°C</div></div>`+
+      `<div class="card-cond" id="cc-${s.id}" style="color:var(--muted);font-size:11px;font-style:italic">Loading…</div></div></div>`+
+      `<div class="card-wind" id="cw-${s.id}"></div>`+
+      `<div class="card-arrow">→</div>`;
+    grid.appendChild(card);
+  });
+})();
+
+// ── Weather data for cards — also independent of Leaflet ──
+const markers = {};
+SITES.forEach(s=>{
+  fetch(s.id+'/data.json?t='+Date.now())
+    .then(r=>r.ok?r.json():null)
+    .catch(()=>null)
+    .then(d=>{
+      const icon=document.getElementById('ci-'+s.id);
+      const temp=document.getElementById('ct-'+s.id);
+      const cond=document.getElementById('cc-'+s.id);
+      const wind=document.getElementById('cw-'+s.id);
+      if(!icon||!temp||!cond||!wind) return;
+      if(!d||!d.weather){
+        cond.textContent='No data yet'; return;
+      }
+      const w=d.weather;
+      const wc=w.weathercode??0;
+      icon.textContent=WMO_ICON[wc]||'—';
+      temp.textContent=typeof w.temperature==='number'?w.temperature.toFixed(1):'—';
+      cond.style.fontStyle='normal'; cond.style.color='';
+      cond.textContent=w.condition||'';
+      wind.textContent=`Wind ${w.wind_speed??'—'} km/h ${wDir(w.wind_direction)} · Humidity ${w.humidity??'—'}%`;
+      // Update map marker popup if map is loaded
+      const mk=markers[s.id];
+      if(mk){
+        mk.setPopupContent(
+          `<b style="font-size:13px">${s.alt?s.name+' · '+s.alt:s.name}</b><br>`+
+          `<span style="font-size:11px;color:#6B8499">${s.region}</span><br>`+
+          `<span style="font-size:18px">${WMO_ICON[wc]||''}</span> `+
+          `<b style="font-size:15px">${typeof w.temperature==='number'?w.temperature.toFixed(1):'—'}°C</b> `+
+          `${w.condition||''}<br>`+
+          `<span style="font-size:11px;color:#6B8499">Wind ${w.wind_speed??'—'} km/h ${wDir(w.wind_direction)}</span><br>`+
+          `<a href="${s.id}/" style="font-size:12px;color:#005FA3;font-weight:700">Open dashboard →</a>`,
+          {maxWidth:220}
+        );
+      }
+    });
+});
+
+// ── Map (Leaflet) — wrapped in try/catch so a tile/CDN error never breaks the cards ──
+try {
 const map = L.map('map',{zoomControl:true,scrollWheelZoom:true}).setView([70.2,-136],5);
 
 // NASA GIBS MODIS tiles — yesterday's date (GIBS typically 1-day lag)
@@ -208,7 +279,6 @@ L.control.layers(
   {position:'topright', collapsed:false}
 ).addTo(map);
 
-const markers = {};
 SITES.forEach(s=>{
   const m=L.marker([s.lat,s.lon],{icon:makeIcon(s.type)}).addTo(map);
   const label=s.alt ? `${s.name} · ${s.alt}` : s.name;
@@ -220,35 +290,6 @@ SITES.forEach(s=>{
   );
   m.on('click',()=>m.openPopup());
   markers[s.id]=m;
-});
-
-// ── Community cards ──
-const WMO_ICON={0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',
-  51:'🌦️',53:'🌦️',55:'🌧️',61:'🌧️',63:'🌧️',65:'🌧️',
-  71:'🌨️',73:'🌨️',75:'🌨️',77:'🌨️',80:'🌦️',81:'🌧️',82:'🌧️',
-  85:'❄️',86:'❄️',95:'⛈️',96:'⛈️',99:'⛈️'};
-const WIND_DIRS=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
-function wDir(d){return WIND_DIRS[Math.round((d||0)/22.5)%16]}
-
-const grid=document.getElementById('cards');
-
-SITES.forEach(s=>{
-  const card=document.createElement('a');
-  card.className='card';
-  card.href=s.id+'/';
-  card.dataset.id=s.id;
-  card.innerHTML=
-    `<div class="card-type ${s.type}"></div>`+
-    `<div class="card-region">${s.region}</div>`+
-    `<div class="card-name">${s.name}</div>`+
-    `<div class="card-name-alt">${s.alt||'&nbsp;'}</div>`+
-    `<div class="card-wx"><div class="card-icon" id="ci-${s.id}">—</div>`+
-    `<div><div style="display:flex;align-items:baseline;gap:4px">`+
-    `<div class="card-temp" id="ct-${s.id}">—</div><div class="card-unit">°C</div></div>`+
-    `<div class="card-cond" id="cc-${s.id}" style="color:var(--muted);font-size:11px;font-style:italic">Loading…</div></div></div>`+
-    `<div class="card-wind" id="cw-${s.id}"></div>`+
-    `<div class="card-arrow">→</div>`;
-  grid.appendChild(card);
 });
 
 // ── Wind particle animation ──────────────────────────────────────────────────
@@ -344,43 +385,7 @@ fetch('data/wind_grid_latest.json?t='+Date.now())
   .then(r=>r.ok?r.json():null).catch(()=>null)
   .then(g=>{ if(g){windGrid=g; initWind();} });
 
-// ── Community cards ──────────────────────────────────────────────────────────
-// Fetch data.json for each site and populate cards
-SITES.forEach(s=>{
-  fetch(s.id+'/data.json?t='+Date.now())
-    .then(r=>r.ok?r.json():null)
-    .catch(()=>null)
-    .then(d=>{
-      const icon=document.getElementById('ci-'+s.id);
-      const temp=document.getElementById('ct-'+s.id);
-      const cond=document.getElementById('cc-'+s.id);
-      const wind=document.getElementById('cw-'+s.id);
-      if(!d||!d.weather){
-        cond.textContent='No data yet'; return;
-      }
-      const w=d.weather;
-      const wc=w.weathercode??0;
-      icon.textContent=WMO_ICON[wc]||'—';
-      temp.textContent=typeof w.temperature==='number'?w.temperature.toFixed(1):'—';
-      cond.style.fontStyle='normal'; cond.style.color='';
-      cond.textContent=w.condition||'';
-      wind.textContent=`Wind ${w.wind_speed??'—'} km/h ${wDir(w.wind_direction)} · Humidity ${w.humidity??'—'}%`;
-      // Pulse map marker with weather icon
-      const mk=markers[s.id];
-      if(mk){
-        mk.setPopupContent(
-          `<b style="font-size:13px">${s.alt?s.name+' · '+s.alt:s.name}</b><br>`+
-          `<span style="font-size:11px;color:#6B8499">${s.region}</span><br>`+
-          `<span style="font-size:18px">${WMO_ICON[wc]||''}</span> `+
-          `<b style="font-size:15px">${typeof w.temperature==='number'?w.temperature.toFixed(1):'—'}°C</b> `+
-          `${w.condition||''}<br>`+
-          `<span style="font-size:11px;color:#6B8499">Wind ${w.wind_speed??'—'} km/h ${wDir(w.wind_direction)}</span><br>`+
-          `<a href="${s.id}/" style="font-size:12px;color:#005FA3;font-weight:700">Open dashboard →</a>`,
-          {maxWidth:220}
-        );
-      }
-    });
-});
+} catch(e) { console.warn('[map init]', e); }
 // ── Add to Home Screen (PWA install prompt) ──
 let _deferredInstall = null;
 window.addEventListener('beforeinstallprompt', e => {

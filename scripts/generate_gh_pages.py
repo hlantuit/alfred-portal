@@ -794,10 +794,12 @@ def fetch_river(station_id, provterr):
                     continue
                 _hdr = [h.strip().strip('"').upper() for h in _lines[0].split(',')]
                 _level_idx = None
-                for _col in ("WATER LEVEL / NIVEAU D'EAU", "LEVEL", "DISCHARGE", "DÉBIT"):
-                    if _col in _hdr:
-                        _level_idx = _hdr.index(_col)
+                for _i, _h in enumerate(_hdr):
+                    if any(k in _h for k in ("WATER LEVEL", "NIVEAU", "LEVEL", "DISCHARGE")):
+                        _level_idx = _i
                         break
+                if _level_idx is None and len(_hdr) > 2:
+                    _level_idx = 2  # Datamart daily: col 2 is always level/discharge
                 if _level_idx is None:
                     continue
                 for _line in _lines[1:]:
@@ -1185,6 +1187,16 @@ def main():
                                 banner_pts.append([_olat, _olon, _olbl])
                             except Exception:
                                 pass
+
+                        # Post-process dedup: remove any coordinate duplicates before drawing
+                        _seen_coords = set()
+                        _deduped = []
+                        for _pt in banner_pts:
+                            _pk = (round(float(_pt[0]), 1), round(float(_pt[1]), 1))
+                            if _pk not in _seen_coords:
+                                _seen_coords.add(_pk)
+                                _deduped.append(_pt)
+                        banner_pts = _deduped
 
                         # Collision-aware label placement
                         placed_boxes = []  # list of (x0,y0,x1,y1) already used

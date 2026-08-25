@@ -218,23 +218,25 @@ SITES.forEach(s=>{
         cond.textContent='No data yet'; return;
       }
       const w=d.weather;
-      const wc=w.weathercode??0;
+      const wc=w.weathercode!=null?w.weathercode:0;
       icon.textContent=WMO_ICON[wc]||'—';
       temp.textContent=typeof w.temperature==='number'?w.temperature.toFixed(1):'—';
       cond.style.fontStyle='normal'; cond.style.color='';
       cond.textContent=w.condition||'';
-      wind.textContent=`Wind ${w.wind_speed??'—'} km/h ${wDir(w.wind_direction)} · Humidity ${w.humidity??'—'}%`;
+      const wspd=w.wind_speed!=null?w.wind_speed:'—';
+      const whum=w.humidity!=null?w.humidity:'—';
+      wind.textContent='Wind '+wspd+' km/h '+wDir(w.wind_direction)+' · Humidity '+whum+'%';
       // Update map marker popup if map is loaded
       const mk=markers[s.id];
       if(mk){
         mk.setPopupContent(
-          `<b style="font-size:13px">${s.alt?s.name+' · '+s.alt:s.name}</b><br>`+
-          `<span style="font-size:11px;color:#6B8499">${s.region}</span><br>`+
-          `<span style="font-size:18px">${WMO_ICON[wc]||''}</span> `+
-          `<b style="font-size:15px">${typeof w.temperature==='number'?w.temperature.toFixed(1):'—'}°C</b> `+
-          `${w.condition||''}<br>`+
-          `<span style="font-size:11px;color:#6B8499">Wind ${w.wind_speed??'—'} km/h ${wDir(w.wind_direction)}</span><br>`+
-          `<a href="${s.id}/" style="font-size:12px;color:#005FA3;font-weight:700">Open dashboard →</a>`,
+          '<b style="font-size:13px">'+(s.alt?s.name+' · '+s.alt:s.name)+'</b><br>'+
+          '<span style="font-size:11px;color:#6B8499">'+s.region+'</span><br>'+
+          '<span style="font-size:18px">'+(WMO_ICON[wc]||'')+'</span> '+
+          '<b style="font-size:15px">'+(typeof w.temperature==='number'?w.temperature.toFixed(1):'—')+'°C</b> '+
+          (w.condition||'')+'<br>'+
+          '<span style="font-size:11px;color:#6B8499">Wind '+wspd+' km/h '+wDir(w.wind_direction)+'</span><br>'+
+          '<a href="'+s.id+'/" style="font-size:12px;color:#005FA3;font-weight:700">Open dashboard →</a>',
           {maxWidth:220}
         );
       }
@@ -272,9 +274,9 @@ modisTerraTile.on('tileerror', () => {
 modisTerraTile.addTo(map);
 
 L.control.layers(
-  {'MODIS Terra · '+_gibsDate: modisTerraTile,
-   'MODIS Aqua · '+_gibsDate:  modisAquaTile,
-   'OpenStreetMap':             osmTile},
+  {['MODIS Terra · '+_gibsDate]: modisTerraTile,
+   ['MODIS Aqua · '+_gibsDate]:  modisAquaTile,
+   'OpenStreetMap':               osmTile},
   {},
   {position:'topright', collapsed:false}
 ).addTo(map);
@@ -394,7 +396,7 @@ window.addEventListener('beforeinstallprompt', e => {
   const btn = document.getElementById('installBtn');
   if (btn) btn.style.display = '';
 });
-document.getElementById('installBtn')?.addEventListener('click', async () => {
+var _installBtn=document.getElementById('installBtn'); if(_installBtn) _installBtn.addEventListener('click', async () => {
   if (!_deferredInstall) return;
   _deferredInstall.prompt();
   const { outcome } = await _deferredInstall.userChoice;

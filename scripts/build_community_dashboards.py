@@ -29,6 +29,10 @@ META = {
         "display_name": "Aklavik", "display_name_alt": "",
         "region": "Northwest Territories", "alerts_prov": "nt",
     },
+    "shingle-point": {
+        "display_name": "Shingle Point", "display_name_alt": "Taqpaq",
+        "region": "Yukon Coast", "alerts_prov": "yt",
+    },
     "barrow": {
         "display_name": "Utqiaġvik", "display_name_alt": "Barrow",
         "region": "Alaska North Slope", "alerts_prov": "",  # US — no EC alerts

@@ -779,6 +779,46 @@ def fetch_river(station_id, provterr):
     except Exception as e:
         print(f"  WSC OGC daily-mean failed for {station_id}: {e}")
 
+    # Method 1c: Datamart daily CSV fallback if OGC daily-mean returned nothing
+    if not daily_rows:
+        prov_up = provterr.upper()
+        cutoff = (_date.today() - _td(days=31)).strftime("%Y-%m-%d")
+        for _url in [
+            f"https://dd.weather.gc.ca/hydrometric/csv/{prov_up}/daily/{prov_up}_{station_id}_daily_hydrometric.csv",
+            f"https://dd.weather.gc.ca/today/hydrometric/csv/{prov_up}/daily/{prov_up}_{station_id}_daily_hydrometric.csv",
+        ]:
+            try:
+                _r3 = get_with_retry(_url, timeout=30)
+                _lines = _r3.text.splitlines()
+                if len(_lines) < 2:
+                    continue
+                _hdr = [h.strip().strip('"').upper() for h in _lines[0].split(',')]
+                _level_idx = None
+                for _col in ("WATER LEVEL / NIVEAU D'EAU", "LEVEL", "DISCHARGE", "DÉBIT"):
+                    if _col in _hdr:
+                        _level_idx = _hdr.index(_col)
+                        break
+                if _level_idx is None:
+                    continue
+                for _line in _lines[1:]:
+                    _parts = _line.split(',')
+                    if len(_parts) > _level_idx and _parts[_level_idx].strip():
+                        try:
+                            _m = float(_parts[_level_idx].strip().strip('"'))
+                            _ts = _parts[1].strip().strip('"') if len(_parts) > 1 else ""
+                            if _ts and _ts[:10] >= cutoff:
+                                daily_rows.append({"t": _ts, "m": round(_m, 3)})
+                        except ValueError:
+                            continue
+                if daily_rows:
+                    daily_rows.sort(key=lambda x: x["t"])
+                    if current_m is None:
+                        current_m = daily_rows[-1]["m"]
+                    print(f"  WSC Datamart daily CSV (30-day fallback): {len(daily_rows)} rows for {station_id}")
+                    break
+            except Exception as _e:
+                print(f"  WSC Datamart daily CSV fallback failed ({_url}): {_e}")
+
     # Merge: daily rows for backdrop, then real-time for the recent days
     # Deduplicate by date prefix — real-time wins for same-day entries
     if daily_rows or realtime_rows:

@@ -37,6 +37,14 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .sidebar{width:210px;flex-shrink:0;background:var(--surf);border-right:1px solid var(--bdr);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
 .main{flex:1;min-width:0;padding-bottom:40px;max-width:1600px}
 
+/* ── Sidebar portal nav ── */
+.sb-portal-nav{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--bdr2);background:var(--surf)}
+.sb-portal-link{display:flex;align-items:center;gap:6px;text-decoration:none;color:var(--txt2);font-size:12px;font-weight:600;flex-shrink:0;transition:color .15s}
+.sb-portal-link:hover{color:var(--acc)}
+.sb-portal-logo{width:22px;height:22px;object-fit:contain}
+.sb-switcher-wrap{flex:1;min-width:0}
+.sb-switcher{width:100%;font-size:12px;padding:4px 6px;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg);color:var(--txt);cursor:pointer;outline:none}
+.sb-switcher:focus{border-color:var(--acc)}
 /* ── Sidebar ── */
 .sb-head{padding:20px 16px 14px;border-bottom:1px solid var(--bdr2)}
 .sb-eyebrow{font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--acc);margin-bottom:4px}
@@ -63,6 +71,8 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 .tb-title{font-size:15px;font-weight:800}
 .tb-sub{font-size:10px;color:var(--muted)}
 .tb-time{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tb-back{display:flex;align-items:center;gap:4px;text-decoration:none;color:var(--txt2);font-size:13px;font-weight:700;flex-shrink:0;padding:4px 2px;white-space:nowrap}
+.tb-back:hover{color:var(--acc)}
 
 /* ── Alert banner ── */
 .alert-banner{background:var(--warn-l);border-left:4px solid var(--warn);padding:10px 18px;font-size:13px;font-weight:600;color:var(--warn);display:none}
@@ -252,6 +262,31 @@ svg.sp{width:100%;height:auto;display:block}
 
 <!-- ══ Sidebar ══ -->
 <aside class="sidebar">
+  <!-- Portal nav bar -->
+  <div class="sb-portal-nav">
+    <a href="../" class="sb-portal-link" title="Back to ALFRED Portal">
+      <img src="alfred-logo.png" alt="ALFRED" class="sb-portal-logo">
+      <span>All sites</span>
+    </a>
+    <div class="sb-switcher-wrap">
+      <select id="commSwitcher" class="sb-switcher" onchange="if(this.value)window.location='../'+this.value+'/'">
+        <option value="">Switch site…</option>
+        <option value="herschel">Qikiqtaruk · Herschel</option>
+        <option value="shingle-point">Shingle Point</option>
+        <option value="aklavik">Aklavik</option>
+        <option value="barrow">Utqiaġvik · Barrow</option>
+        <option value="hendrickson-island">Hendrickson Island</option>
+        <option value="inuvik">Inuvik</option>
+        <option value="paulatuk">Paulatuk</option>
+        <option value="police-cabin">Police Cabin</option>
+        <option value="prudhoe-bay">Prudhoe Bay</option>
+        <option value="sachs-harbour">Sachs Harbour</option>
+        <option value="trail-valley">Trail Valley Creek</option>
+        <option value="tuktoyaktuk">Tuktoyaktuk</option>
+        <option value="ulukhaktok">Ulukhaktok</option>
+      </select>
+    </div>
+  </div>
   <div class="sb-head">
     <div class="sb-eyebrow">Mackenzie Delta</div>
     <div class="sb-name">Tuktoyaktuk</div>
@@ -298,8 +333,26 @@ svg.sp{width:100%;height:auto;display:block}
 <div class="main">
 
   <div class="topbar">
-    <div><div class="tb-title">Tuktoyaktuk</div><div class="tb-sub">69.454°N · 133.037°W</div></div>
-    <div class="tb-time" id="tb-time"></div>
+    <a href="../" class="tb-back" title="Back to portal">
+      <img src="alfred-logo.png" alt="" style="width:20px;height:20px;object-fit:contain;vertical-align:middle"> ←
+    </a>
+    <div style="flex:1;min-width:0;padding:0 8px"><div class="tb-title">Tuktoyaktuk</div><div class="tb-sub">69.454°N · 133.037°W</div></div>
+    <select class="sb-switcher" style="max-width:120px;font-size:11px" onchange="if(this.value)window.location='../'+this.value+'/'">
+      <option value="">Sites…</option>
+      <option value="herschel">Herschel</option>
+      <option value="shingle-point">Shingle Pt</option>
+      <option value="aklavik">Aklavik</option>
+      <option value="barrow">Barrow</option>
+      <option value="hendrickson-island">Hendrickson</option>
+      <option value="inuvik">Inuvik</option>
+      <option value="paulatuk">Paulatuk</option>
+      <option value="police-cabin">Police Cabin</option>
+      <option value="prudhoe-bay">Prudhoe Bay</option>
+      <option value="sachs-harbour">Sachs Harbour</option>
+      <option value="trail-valley">Trail Valley</option>
+      <option value="tuktoyaktuk">Tuktoyaktuk</option>
+      <option value="ulukhaktok">Ulukhaktok</option>
+    </select>
   </div>
 
   <!-- Alert banner — shown only when active -->
@@ -1791,6 +1844,9 @@ function renderFogBlock(feed,siteKey){
     g.addEventListener('blur',()=>{tip.style.opacity=0;});
   });
 }
+// Pre-select current community in switcher dropdowns
+(()=>{const _cid=location.pathname.split('/').filter(Boolean).pop()||'';document.querySelectorAll('.sb-switcher').forEach(s=>{const o=[...s.options].find(o=>o.value===_cid);if(o)o.selected=true;});})();
+
 fetch('../data/fog_feed_10day.json?t='+Date.now())
   .then(r=>r.json())
   .then(feed=>{

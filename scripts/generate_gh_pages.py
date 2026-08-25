@@ -1172,20 +1172,76 @@ def main():
         return img
 
     # ── VIIRS NOAA-20 true color (EPSG:3413, north-up) ──
-    def fetch_viirs_image(out_path, max_days_back=10):
-        import io as _io
+    def fetch_viirs_image(out_path, max_hours_back=36):
+        import io as _io, re as _re_v
+        from datetime import datetime as _dtv, timedelta as _tdv
         bbox_3413 = cfg.get("modis_bbox_3413")
         rot = cfg.get("modis_rotation_deg", 0)
         if not bbox_3413:
             print("  VIIRS: no modis_bbox_3413 in config, skipping")
             return None
-        from datetime import timedelta, date as _date
-        for delta in range(0, max_days_back + 1):
-            d = _date.today() - timedelta(days=delta)
-            for layer in ["VIIRS_NOAA20_CorrectedReflectance_TrueColor_NRT",
-                          "VIIRS_SNPP_CorrectedReflectance_TrueColor_NRT",
-                          "VIIRS_NOAA20_CorrectedReflectance_TrueColor",
-                          "VIIRS_SNPP_CorrectedReflectance_TrueColor"]:
+        _lon_v = cfg.get("lon", -140)
+        _lat_v = cfg.get("lat", 69)
+        _now_v = _dtv.utcnow()
+        _start_v = _now_v - _tdv(hours=max_hours_back)
+
+        # Step 1: find the most recent granules covering the site via CMR
+        _cmr_map = [
+            ("VJ109GA_NRT", "VIIRS_NOAA20_CorrectedReflectance_TrueColor_NRT"),
+            ("VNP09GA_NRT", "VIIRS_SNPP_CorrectedReflectance_TrueColor_NRT"),
+            ("VJ109GA",     "VIIRS_NOAA20_CorrectedReflectance_TrueColor"),
+            ("VNP09GA",     "VIIRS_SNPP_CorrectedReflectance_TrueColor"),
+        ]
+        _candidates = []  # [(time_start_iso, gibs_layer), ...]
+        for _short, _gibs_layer in _cmr_map:
+            try:
+                _cr = requests.get(
+                    "https://cmr.earthdata.nasa.gov/search/granules.json",
+                    params={
+                        "short_name": _short,
+                        "temporal": (f"{_start_v.strftime('%Y-%m-%dT%H:%M:%SZ')},"
+                                     f"{_now_v.strftime('%Y-%m-%dT%H:%M:%SZ')}"),
+                        "bounding_box": f"{_lon_v-5},{_lat_v-3},{_lon_v+5},{_lat_v+3}",
+                        "sort_key": "-start_date",
+                        "page_size": "5",
+                    },
+                    timeout=20,
+                )
+                for _e in _cr.json().get("feed", {}).get("entry", []):
+                    _ts = _e.get("time_start", "")
+                    if not _ts:
+                        _pgid = _e.get("producer_granule_id", "")
+                        _gm = _re_v.search(r'\.A(\d{4})(\d{3})\.(\d{2})(\d{2})\.', _pgid)
+                        if _gm:
+                            _gd = _dtv(_gm.group(1).__class__(int(_gm.group(1))), 1, 1) + _tdv(days=int(_gm.group(2))-1)
+                            _ts = f"{_gd.strftime('%Y-%m-%d')}T{_gm.group(3)}:{_gm.group(4)}:00Z"
+                    if _ts:
+                        _candidates.append((_ts, _gibs_layer))
+            except Exception as _ce:
+                print(f"  VIIRS CMR {_short} failed: {_ce}")
+
+        # Sort most-recent first, deduplicate by timestamp
+        _candidates.sort(key=lambda x: x[0], reverse=True)
+        _seen_ts, _dedup = set(), []
+        for _c in _candidates:
+            if _c[0] not in _seen_ts:
+                _seen_ts.add(_c[0]); _dedup.append(_c)
+        _candidates = _dedup
+
+        # Fall back to day-by-day date list if CMR returned nothing
+        if not _candidates:
+            print("  VIIRS: CMR returned no granules, falling back to daily dates")
+            from datetime import date as _ddate
+            for _delta in range(0, 5):
+                _d = _ddate.today() - _tdv(days=_delta)
+                for _lyr in ["VIIRS_NOAA20_CorrectedReflectance_TrueColor_NRT",
+                             "VIIRS_SNPP_CorrectedReflectance_TrueColor_NRT",
+                             "VIIRS_NOAA20_CorrectedReflectance_TrueColor",
+                             "VIIRS_SNPP_CorrectedReflectance_TrueColor"]:
+                    _candidates.append((_d.strftime("%Y-%m-%d"), _lyr))
+
+        # Step 2: try each candidate with exact TIME in GIBS
+        for _viirs_date_str, layer in _candidates[:8]:
                 try:
                     r = get_with_retry(
                         "https://gibs.earthdata.nasa.gov/wms/epsg3413/best/wms.cgi",
@@ -1198,7 +1254,7 @@ def main():
                             "SRS": "EPSG:3413",
                             "BBOX": bbox_3413,
                             "WIDTH": "1500", "HEIGHT": "1500",
-                            "TIME": d.strftime("%Y-%m-%d"),
+                            "TIME": _viirs_date_str,
                         },
                         timeout=30,
                     )
@@ -1218,9 +1274,9 @@ def main():
                         _pure_black = (_carr.max(axis=2) == 0)  # pixels where all channels = 0
                         _nodata_frac = _pure_black.mean()
                         if _nodata_frac > 0.6:
-                            print(f"  VIIRS {layer} day -{delta}: centre {_nodata_frac:.0%} no-data, site not covered, skipping")
+                            print(f"  VIIRS {layer} {_viirs_date_str}: centre {_nodata_frac:.0%} no-data, site not covered, skipping")
                             continue
-                        print(f"  VIIRS {layer} day -{delta}: centre {_nodata_frac:.0%} no-data — using")
+                        print(f"  VIIRS {layer} {_viirs_date_str}: centre {_nodata_frac:.0%} no-data — using")
                         # Compute metres per pixel from bbox
                         try:
                             _bparts = [float(x) for x in bbox_3413.split(",")]
@@ -1299,47 +1355,15 @@ def main():
                                         _draw_lbl.text((_cx+12,_cy-14),_lbl,font=_font_pt,fill=(255,255,255))
                             except Exception as _le:
                                 print(f"  VIIRS place labels failed: {_le}")
-                        # Try to get exact acquisition time from NASA CMR
-                        _viirs_date_str = d.strftime("%Y-%m-%d")
-                        try:
-                            _is_nrt = "NRT" in layer
-                            _cmr_short = ("VJ109GA" if "NOAA20" in layer else "VNP09GA") + ("_NRT" if _is_nrt else "")
-                            _cmr_r = requests.get(
-                                "https://cmr.earthdata.nasa.gov/search/granules.json",
-                                params={
-                                    "short_name": _cmr_short,
-                                    "temporal": f"{d.strftime('%Y-%m-%d')}T00:00:00Z,{d.strftime('%Y-%m-%d')}T23:59:59Z",
-                                    "bounding_box": f"{cfg.get('lon', -140)-5},{cfg.get('lat', 69)-3},{cfg.get('lon', -140)+5},{cfg.get('lat', 69)+3}",
-                                    "page_size": "5",
-                                    "sort_key": "-start_date",
-                                },
-                                timeout=20,
-                            )
-                            _cmr_entries = _cmr_r.json().get("feed", {}).get("entry", [])
-                            if _cmr_entries:
-                                _ts = _cmr_entries[0].get("time_start", "")
-                                if _ts:
-                                    _viirs_date_str = _ts
-                                    print(f"  VIIRS CMR time: {_viirs_date_str}")
-                                else:
-                                    # Fallback: parse HHMM from producer_granule_id (e.g. VJ109GA.A2024234.1800.002...)
-                                    _pgid = _cmr_entries[0].get("producer_granule_id", "")
-                                    import re as _re_cmr
-                                    _m = _re_cmr.search(r'\.A\d{7}\.(\d{2})(\d{2})\.', _pgid)
-                                    if _m:
-                                        _viirs_date_str = f"{d.strftime('%Y-%m-%d')}T{_m.group(1)}:{_m.group(2)}:00Z"
-                                        print(f"  VIIRS CMR time from granule id: {_viirs_date_str}")
-                        except Exception as _cmre:
-                            print(f"  VIIRS CMR lookup failed: {_cmre}")
                         cropped = _annotate_img(cropped, _viirs_date_str, _mpp)
                         buf = _io.BytesIO()
                         cropped.save(buf, "PNG", optimize=True)
                         out_path.write_bytes(buf.getvalue())
                         src = "NOAA-20" if "NOAA20" in layer else "SNPP"
-                        print(f"  VIIRS ({src}): {d} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
+                        print(f"  VIIRS ({src}): {_viirs_date_str} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
                         return _viirs_date_str  # full ISO datetime if CMR succeeded
                 except Exception as e:
-                    print(f"  VIIRS {layer} day -{delta} failed: {e}")
+                    print(f"  VIIRS {layer} {_viirs_date_str} failed: {e}")
         print("  VIIRS unavailable")
         return None
 

@@ -109,10 +109,10 @@ body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'
 /* ── Forecast strip ── */
 .fc-wrap{padding:14px 20px 0}
 .fc-scroll{}
-.fc-row{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid var(--bdr);border-radius:8px;overflow:hidden;background:var(--surf)}
-.fc-cell{padding:10px 14px;text-align:center;border-right:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);cursor:pointer;transition:background .1s;user-select:none}
-.fc-cell:nth-child(5n){border-right:none}
-@media (max-width:650px){.fc-row{grid-template-columns:repeat(5,1fr)}}
+.fc-row{display:grid;grid-template-columns:repeat(10,1fr);border:1px solid var(--bdr);border-radius:8px;overflow:hidden;background:var(--surf)}
+.fc-cell{padding:10px 8px;text-align:center;border-right:1px solid var(--bdr2);border-bottom:1px solid var(--bdr2);cursor:pointer;transition:background .1s;user-select:none}
+.fc-cell:last-child{border-right:none}
+@media (max-width:780px){.fc-row{grid-template-columns:repeat(5,1fr)}.fc-cell:nth-child(5n){border-right:none}.fc-cell:last-child{border-right:1px solid var(--bdr2)}}
 .fc-cell.today{background:var(--acc-l)}
 .fc-cell:hover{background:var(--surf2)}
 .fc-cell.today:hover{background:#d4e8f6}
@@ -247,9 +247,6 @@ svg.sp{width:100%;height:auto;display:block}
 @media (min-width:1400px){
   .cond-row{grid-template-columns:repeat(3,1fr)}
 }
-</style>
-<style>
-#marine,#marine-content,#water,#cc-tide,#tide-row{display:none!important}
 </style>
 </head>
 <body>

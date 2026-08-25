@@ -682,7 +682,7 @@ def fetch_river(station_id, provterr):
     try:
         r = get_with_retry(
             "https://api.weather.gc.ca/collections/hydrometric-realtime/items",
-            params={"station_number": station_id, "limit": 200},
+            params={"station_number": station_id, "limit": 720},
             timeout=30,
         )
         features = r.json().get("features", [])
@@ -696,24 +696,21 @@ def fetch_river(station_id, provterr):
         if rows:
             rows.sort(key=lambda x: x["t"])
             current_m = rows[-1]["m"]
-            step = max(1, len(rows) // 48)
             print(f"  WSC OGC API: {len(rows)} rows for {station_id}, current={current_m}")
-            return {"current_m": current_m, "series": rows[::step]}
+            return {"current_m": current_m, "series": rows}
         print(f"  WSC OGC API: 0 features for {station_id}")
     except Exception as e:
         print(f"  WSC OGC API failed for {station_id}: {e}")
 
-    # ── Method 2: MSC Datamart daily CSV (hourly is not available for all stations) ──
+    # ── Method 2: MSC Datamart — try hourly CSV first, then daily fallback ──
     prov = provterr.upper()
-    url_daily = (
-        f"https://dd.weather.gc.ca/hydrometric/csv/{prov}/daily/"
-        f"{prov}_{station_id}_daily_hydrometric.csv"
-    )
-    url_today = (
-        f"https://dd.weather.gc.ca/today/hydrometric/csv/{prov}/daily/"
-        f"{prov}_{station_id}_daily_hydrometric.csv"
-    )
-    for url in (url_daily, url_today):
+    urls_to_try = [
+        f"https://dd.weather.gc.ca/hydrometric/csv/{prov}/hourly/{prov}_{station_id}_hourly_hydrometric.csv",
+        f"https://dd.weather.gc.ca/today/hydrometric/csv/{prov}/hourly/{prov}_{station_id}_hourly_hydrometric.csv",
+        f"https://dd.weather.gc.ca/hydrometric/csv/{prov}/daily/{prov}_{station_id}_daily_hydrometric.csv",
+        f"https://dd.weather.gc.ca/today/hydrometric/csv/{prov}/daily/{prov}_{station_id}_daily_hydrometric.csv",
+    ]
+    for url in urls_to_try:
       try:
         r = get_with_retry(url, timeout=30)
         lines = [l for l in r.text.strip().splitlines() if l.strip()]
@@ -733,12 +730,12 @@ def fetch_river(station_id, provterr):
                 except ValueError:
                     continue
         if not rows:
-            print(f"  WSC Datamart: no valid rows for {station_id}")
-            return None
+            print(f"  WSC Datamart: no valid rows for {station_id} ({url})")
+            continue
         current_m = rows[-1]["m"]
-        step = max(1, len(rows) // 48)
-        print(f"  WSC Datamart CSV: {len(rows)} rows, current={current_m}")
-        return {"current_m": current_m, "series": rows[::step]}
+        is_hourly = "hourly" in url
+        print(f"  WSC Datamart {'hourly' if is_hourly else 'daily'} CSV: {len(rows)} rows, current={current_m}")
+        return {"current_m": current_m, "series": rows}
       except Exception as e:
         print(f"  WSC Datamart failed ({url}): {e}")
         continue
@@ -1340,9 +1337,6 @@ def main():
                         _carr = _np.array(cropped.crop((350, 350, 650, 650)))
                         _pure_black = (_carr.max(axis=2) == 0)  # pixels where all channels = 0
                         _nodata_frac = _pure_black.mean()
-                        if _nodata_frac > 0.6:
-                            print(f"  VIIRS {layer} {_viirs_date_str}: centre {_nodata_frac:.0%} no-data, site not covered, skipping")
-                            continue
                         print(f"  VIIRS {layer} {_viirs_date_str}: centre {_nodata_frac:.0%} no-data — using")
                         # Compute metres per pixel from bbox
                         try:
@@ -1592,39 +1586,41 @@ def main():
             # Coastline overlay from local OSM GeoJSON
             import json as _json_s2, math as _math_s2
             from PIL import ImageDraw as _Draw_s2, ImageFont as _Font_s2
+            # Define _ll_to_utm unconditionally so place labels can use it even
+            # when there is no coastline GeoJSON to draw
+            try:
+                from pyproj import Transformer as _Tr
+                _proj_s2 = _Tr.from_crs("EPSG:4326", f"EPSG:{utm_epsg}", always_xy=True)
+                def _ll_to_utm(plat, plon):
+                    return _proj_s2.transform(plon, plat)
+            except Exception:
+                import math as _pm
+                _K0, _E, _a = 0.9996, 0.0818191908426215, 6378137.0
+                _zone = int(utm_epsg) - 32600
+                _lon0 = _pm.radians((_zone - 1) * 6 - 180 + 3)
+                def _ll_to_utm(plat, plon):
+                    lat_r, lon_r = _pm.radians(plat), _pm.radians(plon)
+                    N = _a / _pm.sqrt(1 - (_E*_pm.sin(lat_r))**2)
+                    T = _pm.tan(lat_r)**2; C = (_E**2/(1-_E**2))*_pm.cos(lat_r)**2
+                    A = _pm.cos(lat_r)*(lon_r - _lon0)
+                    M = _a*(lat_r*(1-_E**2/4-3*_E**4/64)-_pm.sin(2*lat_r)*(3*_E**2/8+3*_E**4/32)+_pm.sin(4*lat_r)*(15*_E**4/256))
+                    x = _K0*N*(A+(1-T+C)*A**3/6) + 500000
+                    y = _K0*(M+N*_pm.tan(lat_r)*(A**2/2+(5-T+9*C)*A**4/24))
+                    if plat < 0: y += 10000000
+                    return x, y
+            _mpp_s2 = (2 * half_width_m) / 1200.0
+            _cx_s2 = cfg.get("utm_center_x", cx)
+            _cy_s2 = cfg.get("utm_center_y", cy)
+            def _utm_to_px(ux, uy):
+                _px = 600 + (ux - _cx_s2) / _mpp_s2
+                _py = 600 - (uy - _cy_s2) / _mpp_s2
+                return _px, _py
             _coast_path_s2 = COMMUNITIES_DIR / cid / cfg.get("coastline_geojson_path", "coastline_data.geojson")
             if _coast_path_s2.exists():
                 try:
                     with open(_coast_path_s2) as _cf2:
                         _coast2 = _json_s2.load(_cf2)
-                    try:
-                        from pyproj import Transformer as _Tr
-                        _proj_s2 = _Tr.from_crs("EPSG:4326", f"EPSG:{utm_epsg}", always_xy=True)
-                        def _ll_to_utm(plat, plon):
-                            return _proj_s2.transform(plon, plat)
-                    except Exception:
-                        import math as _pm
-                        _K0, _E, _a = 0.9996, 0.0818191908426215, 6378137.0
-                        _zone = int(utm_epsg) - 32600
-                        _lon0 = _pm.radians((_zone - 1) * 6 - 180 + 3)
-                        def _ll_to_utm(plat, plon):
-                            lat_r, lon_r = _pm.radians(plat), _pm.radians(plon)
-                            N = _a / _pm.sqrt(1 - (_E*_pm.sin(lat_r))**2)
-                            T = _pm.tan(lat_r)**2; C = (_E**2/(1-_E**2))*_pm.cos(lat_r)**2
-                            A = _pm.cos(lat_r)*(lon_r - _lon0)
-                            M = _a*(lat_r*(1-_E**2/4-3*_E**4/64)-_pm.sin(2*lat_r)*(3*_E**2/8+3*_E**4/32)+_pm.sin(4*lat_r)*(15*_E**4/256))
-                            x = _K0*N*(A+(1-T+C)*A**3/6) + 500000
-                            y = _K0*(M+N*_pm.tan(lat_r)*(A**2/2+(5-T+9*C)*A**4/24))
-                            if plat < 0: y += 10000000
-                            return x, y
                     _draw_cs = _Draw_s2.Draw(s2_img)
-                    _mpp_s2 = (2 * half_width_m) / 1200.0
-                    _cx_s2 = cfg.get("utm_center_x", cx)
-                    _cy_s2 = cfg.get("utm_center_y", cy)
-                    def _utm_to_px(ux, uy):
-                        px = 600 + (ux - _cx_s2) / _mpp_s2
-                        py = 600 - (uy - _cy_s2) / _mpp_s2
-                        return px, py
                     for _feat2 in _coast2.get("features", []):
                         _geom2 = _feat2.get("geometry", {})
                         if _geom2.get("type") != "LineString":

@@ -291,7 +291,7 @@ def build_dashboard(cid):
         mf["short_name"] = disp
         mf_path.write_text(json.dumps(mf, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    print(f"  ✓ {cid} → docs/{cid}/index.html")
+    print(f"  OK {cid} -> docs/{cid}/index.html")
 
 
 def main():

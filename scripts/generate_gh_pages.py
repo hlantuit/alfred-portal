@@ -1047,6 +1047,43 @@ def main():
                             except Exception:
                                 pass
 
+                        # Collision-aware label placement
+                        placed_boxes = []  # list of (x0,y0,x1,y1) already used
+
+                        def _boxes_overlap(a, b, pad=6):
+                            return not (a[2]+pad < b[0] or b[2]+pad < a[0] or
+                                        a[3]+pad < b[1] or b[3]+pad < a[1])
+
+                        def _find_label_pos(draw, lbl, font, dot_x, dot_y, iw, ih, placed):
+                            # Candidate offsets: right, left, above, below, diagonals
+                            pad_t = 4
+                            try:
+                                tw = draw.textlength(lbl, font=font)
+                            except Exception:
+                                tw = len(lbl) * 12
+                            th = 22
+                            r_dot = 9
+                            candidates = [
+                                (dot_x + r_dot + 6,  dot_y - th // 2),   # right
+                                (dot_x - r_dot - tw - 6, dot_y - th // 2), # left
+                                (dot_x - tw // 2,    dot_y - r_dot - th - 4),  # above
+                                (dot_x - tw // 2,    dot_y + r_dot + 4),  # below
+                                (dot_x + r_dot + 4,  dot_y - r_dot - th - 4),  # upper-right
+                                (dot_x - tw - r_dot, dot_y - r_dot - th - 4),  # upper-left
+                                (dot_x + r_dot + 4,  dot_y + r_dot + 4),  # lower-right
+                                (dot_x - tw - r_dot, dot_y + r_dot + 4),  # lower-left
+                            ]
+                            for lx, ly in candidates:
+                                box = (lx - pad_t, ly - pad_t, lx + tw + pad_t, ly + th + pad_t)
+                                # Keep within image
+                                if box[0] < 4 or box[1] < 4 or box[2] > iw - 4 or box[3] > ih - 4:
+                                    continue
+                                if all(not _boxes_overlap(box, pb) for pb in placed):
+                                    return lx, ly, box
+                            # Fall back to right offset even if overlapping
+                            lx, ly = dot_x + r_dot + 6, dot_y - th // 2
+                            return lx, ly, (lx - pad_t, ly - pad_t, lx + tw + pad_t, ly + th + pad_t)
+
                         for pt in banner_pts:
                             pt_lat, pt_lon, pt_label = pt[0], pt[1], pt[2]
                             if not (lon_w < pt_lon < lon_e and lat_s < pt_lat < lat_n):
@@ -1062,8 +1099,13 @@ def main():
                             r_dot = 7
                             draw.ellipse([px_x-r_dot, px_y-r_dot, px_x+r_dot, px_y+r_dot],
                                          fill=(220, 60, 60), outline="white", width=2)
+                            placed_boxes.append((px_x - r_dot, px_y - r_dot,
+                                                 px_x + r_dot, px_y + r_dot))
+                            # Find non-overlapping label position
+                            lx, ly, lbox = _find_label_pos(
+                                draw, pt_label, font_sm, px_x, px_y, iw, ih, placed_boxes)
+                            placed_boxes.append(lbox)
                             # Label with dark background pill for readability against clouds
-                            lx, ly = px_x + 12, px_y - 16
                             try:
                                 tb = draw.textbbox((lx, ly), pt_label, font=font_sm)
                                 pad = 4

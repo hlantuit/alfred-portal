@@ -235,10 +235,10 @@ def build_dashboard(cid):
         "Sentinel-1 SAR · VV polarisation · Herschel Island area",
         f"Sentinel-1 SAR · VV polarisation · {disp} area",
     )
-    # Fog block community ID
+    # Fog block community ID (in both the key literal and the replace() call)
     html = html.replace(
-        "renderFogBlock(feed,'herschel')",
-        f"renderFogBlock(feed,'{cid}')",
+        "const _fogKey = 'herschel'.replace(/-/g,'_');",
+        f"const _fogKey = '{cid}'.replace(/-/g,'_');",
     )
     # Links grid — replace the entire static fallback block
     lk_html = links_html(build_links(cfg, meta, blocks))
@@ -251,7 +251,7 @@ def build_dashboard(cid):
 
     # ── Section visibility ──────────────────────────────────────────────────
     hide = []
-    if "marine" not in blocks:
+    if "marine" not in blocks and "wave_forecast" not in blocks:
         hide.append("#marine")
     if "sea_ice" not in blocks and "lake_river_ice" not in blocks:
         hide.append("#ice")

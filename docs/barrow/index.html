@@ -238,9 +238,6 @@ svg.sp{width:100%;height:auto;display:block}
   .cond-row{grid-template-columns:repeat(3,1fr)}
 }
 </style>
-<style>
-#marine{display:none!important}
-</style>
 </head>
 <body>
 
@@ -1784,8 +1781,22 @@ function renderFogBlock(feed,siteKey){
 }
 fetch('../data/fog_feed_10day.json?t='+Date.now())
   .then(r=>r.json())
-  .then(feed=>renderFogBlock(feed,'barrow'))
-  .catch(()=>{document.getElementById('fogDays').textContent='Fog forecast unavailable';});
+  .then(feed=>{
+    // fog feed uses underscores; community ids use hyphens
+    const _fogKey = 'barrow'.replace(/-/g,'_');
+    if(!feed.sites||!feed.sites[_fogKey]){
+      // Community not in fog feed — hide section and nav link
+      const fs=document.getElementById('fog'); if(fs) fs.style.display='none';
+      const fc=fs?.nextElementSibling; if(fc&&fc.classList.contains('chart-1')) fc.style.display='none';
+      const fn=document.querySelector('a[href="#fog"]'); if(fn) fn.style.display='none';
+      return;
+    }
+    renderFogBlock(feed,_fogKey);
+  })
+  .catch(()=>{
+    const fs=document.getElementById('fog'); if(fs) fs.style.display='none';
+    const fn=document.querySelector('a[href="#fog"]'); if(fn) fn.style.display='none';
+  });
 </script>
 </body>
 </html>

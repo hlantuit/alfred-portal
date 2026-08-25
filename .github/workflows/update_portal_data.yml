@@ -32,12 +32,13 @@ jobs:
           cp data/wind_grid_latest.json docs/data/wind_grid_latest.json
 
       # Satellite blocks only — fast blocks are updated hourly by the other workflow
-      - name: Update Notion dashboards (satellite blocks)
-        env:
-          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-          SENTINEL_HUB_CLIENT_ID: ${{ secrets.SENTINEL_HUB_CLIENT_ID }}
-          SENTINEL_HUB_CLIENT_SECRET: ${{ secrets.SENTINEL_HUB_CLIENT_SECRET }}
-        run: python scripts/generate_dashboards.py
+      # Notion push disabled — GitHub Pages dashboards are now the primary output
+      # - name: Update Notion dashboards (satellite blocks)
+      #   env:
+      #     NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+      #     SENTINEL_HUB_CLIENT_ID: ${{ secrets.SENTINEL_HUB_CLIENT_ID }}
+      #     SENTINEL_HUB_CLIENT_SECRET: ${{ secrets.SENTINEL_HUB_CLIENT_SECRET }}
+      #   run: python scripts/generate_dashboards.py
 
       - name: Commit and push
         run: |

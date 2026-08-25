@@ -249,7 +249,7 @@ svg.sp{width:100%;height:auto;display:block}
 }
 </style>
 <style>
-#marine,#marine-content,#water,#cc-tide,#tide-row{display:none!important}
+#marine,#marine-content,#water,#tide-row{display:none!important}
 </style>
 </head>
 <body>
@@ -396,9 +396,9 @@ svg.sp{width:100%;height:auto;display:block}
       <div class="cc-sub" id="c-wind-sub"></div>
       <div class="cc-pill" id="c-wind-pill"></div>
     </div>
-    <div class="cc" id="cc-tide">
-      <div class="cc-lbl">Total water level</div>
-      <div class="cc-val" id="c-tide">—<span class="cc-unit"> m</span></div>
+    <div class="cc" id="cc-tide" style="display:none">
+      <div class="cc-lbl" id="cc-tide-lbl">Total water level</div>
+      <div class="cc-val" id="c-tide">—<span class="cc-unit" id="c-tide-unit"> m</span></div>
       <div class="cc-sub" id="c-tide-sub"></div>
       <div class="cc-pill" id="c-tide-pill"></div>
     </div>
@@ -493,20 +493,14 @@ svg.sp{width:100%;height:auto;display:block}
 
   <!-- Snow depth (shown only for communities with snow_depth block) -->
   <div id="snow" class="sec" style="display:none"><div class="sec-hd">Snow depth</div></div>
-  <div class="chart-row" id="snow-content" style="display:none">
-    <div class="ch" style="flex:2">
+  <div class="chart-1" id="snow-content" style="display:none">
+    <div class="ch">
       <div class="ch-hd">
         <div class="ch-title">Snow depth — Open-Meteo · 10-day</div>
         <div><span class="ch-val" id="cv-snow">—</span><span class="ch-unit"> cm now</span></div>
       </div>
       <div class="ch-area"><svg class="sp" id="snowSVG" viewBox="0 0 800 100" preserveAspectRatio="none"></svg></div>
       <div style="font-size:10px;color:var(--muted);margin-top:6px">Open-Meteo ERA5 reanalysis blend · GEM seamless</div>
-    </div>
-    <div class="ch" style="flex:2">
-      <div class="img-card" onclick="openLb(this.querySelector('img'))">
-        <img src="img/snow_depth_chart.png" alt="Snow depth chart" onerror="this.closest('.img-card').style.display='none'" style="width:100%">
-        <div class="img-cap">Snow depth · detailed · click to zoom</div>
-      </div>
     </div>
   </div>
 
@@ -1660,18 +1654,47 @@ async function loadData(){
     document.getElementById('c-wind-pill').innerHTML=`<span class="pill ${bfClass(w.wind_speed)}">${beaufort(w.wind_speed)}</span>`;
   }
   {
+    const _tideCard=document.getElementById('cc-tide');
+    const _tideLbl=document.getElementById('cc-tide-lbl');
+    const _tideVal=document.getElementById('c-tide');
+    const _tideUnit=document.getElementById('c-tide-unit');
+    const _tideSub=document.getElementById('c-tide-sub');
+    const _tidePill=document.getElementById('c-tide-pill');
+    const _show=()=>{if(_tideCard) _tideCard.style.display='';};
     const _wlCur=twl?.topaz?.current_m??twl?.gdsps?.current_m;
     if(_wlCur!=null){
-      document.getElementById('c-tide').innerHTML=`${sign(_wlCur)}${parseFloat(_wlCur).toFixed(2)}<span class="cc-unit"> m</span>`;
-      document.getElementById('c-tide-sub').textContent=(twl?.topaz?'TOPAZ6':'GDSPS')+' · above yearly mean';
-      document.getElementById('c-tide-pill').innerHTML='';
+      _show();
+      if(_tideLbl) _tideLbl.textContent='Total water level';
+      if(_tideVal) _tideVal.innerHTML=`${sign(_wlCur)}${parseFloat(_wlCur).toFixed(2)}<span class="cc-unit" id="c-tide-unit"> m</span>`;
+      if(_tideSub) _tideSub.textContent=(twl?.topaz?'TOPAZ6':'GDSPS')+' · above yearly mean';
+      if(_tidePill) _tidePill.innerHTML='';
     } else if(tide?.current_m!=null){
-      document.getElementById('c-tide').innerHTML=`${sign(tide.current_m)}${parseFloat(tide.current_m).toFixed(2)}<span class="cc-unit"> m</span>`;
+      _show();
+      if(_tideLbl) _tideLbl.textContent='Total water level';
+      if(_tideVal) _tideVal.innerHTML=`${sign(tide.current_m)}${parseFloat(tide.current_m).toFixed(2)}<span class="cc-unit" id="c-tide-unit"> m</span>`;
       let sub=tide.trend?tide.trend[0].toUpperCase()+tide.trend.slice(1):'';
       if(tide.next_high) sub+=` · High at ${fmtTime(tide.next_high.time_utc,tz)} (${sign(tide.next_high.m)}${tide.next_high.m} m)`;
-      document.getElementById('c-tide-sub').textContent=sub;
-      const trendCls=tide.trend==='rising'?'pill-good':tide.trend==='falling'?'pill-blue':'pill-blue';
-      document.getElementById('c-tide-pill').innerHTML=`<span class="pill ${trendCls}">${tide.trend||''}</span>`;
+      if(_tideSub) _tideSub.textContent=sub;
+      const trendCls=tide.trend==='rising'?'pill-good':'pill-blue';
+      if(_tidePill) _tidePill.innerHTML=`<span class="pill ${trendCls}">${tide.trend||''}</span>`;
+    } else if(rivers.length>0 && rivers[0].current_m!=null){
+      // Terrestrial hydrometric — show river level
+      const rv=rivers[0];
+      _show();
+      if(_tideLbl) _tideLbl.textContent=rv.river_name||'River level';
+      if(_tideVal) _tideVal.innerHTML=`${parseFloat(rv.current_m).toFixed(2)}<span class="cc-unit" id="c-tide-unit"> m</span>`;
+      if(_tideSub) _tideSub.textContent='Water Survey of Canada · real-time';
+      if(_tidePill) _tidePill.innerHTML='';
+    } else if(w.snow_depth_cm?.length){
+      // No river — show snow depth
+      const snowNow=w.snow_depth_cm[0];
+      if(snowNow!=null){
+        _show();
+        if(_tideLbl) _tideLbl.textContent='Snow depth';
+        if(_tideVal) _tideVal.innerHTML=`${parseFloat(snowNow).toFixed(1)}<span class="cc-unit" id="c-tide-unit"> cm</span>`;
+        if(_tideSub) _tideSub.textContent='Open-Meteo ERA5';
+        if(_tidePill) _tidePill.innerHTML='';
+      }
     }
   }
 

@@ -258,9 +258,9 @@ def build_dashboard(cid):
         hide.append("#ice")
     if "water_level" not in blocks and "hydrometric" not in blocks:
         hide.append("#water")
-    # Hide tide charts and condition card for non-coastal (no DFO/TOPAZ data)
+    # Hide tide charts for non-coastal (no DFO/TOPAZ data)
+    # Note: #cc-tide condition card is hidden by default in HTML and shown by JS
     if "water_level" not in blocks:
-        hide.append("#cc-tide")
         hide.append("#tide-row")
 
     if hide:

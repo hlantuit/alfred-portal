@@ -1052,34 +1052,35 @@ def main():
                                         a[3]+pad < b[1] or b[3]+pad < a[1])
 
                         def _find_label_pos(draw, lbl, font, dot_x, dot_y, iw, ih, placed):
-                            # Candidate offsets: right, left, above, below, diagonals
                             pad_t = 4
+                            r_dot = 8
                             try:
-                                tw = draw.textlength(lbl, font=font)
+                                tb0 = draw.textbbox((0, 0), lbl, font=font)
+                                tw = tb0[2] - tb0[0]
+                                th = tb0[3] - tb0[1]
                             except Exception:
-                                tw = len(lbl) * 12
-                            th = 22
-                            r_dot = 9
-                            candidates = [
-                                (dot_x + r_dot + 6,  dot_y - th // 2),   # right
-                                (dot_x - r_dot - tw - 6, dot_y - th // 2), # left
-                                (dot_x - tw // 2,    dot_y - r_dot - th - 4),  # above
-                                (dot_x - tw // 2,    dot_y + r_dot + 4),  # below
-                                (dot_x + r_dot + 4,  dot_y - r_dot - th - 4),  # upper-right
-                                (dot_x - tw - r_dot, dot_y - r_dot - th - 4),  # upper-left
-                                (dot_x + r_dot + 4,  dot_y + r_dot + 4),  # lower-right
-                                (dot_x - tw - r_dot, dot_y + r_dot + 4),  # lower-left
-                            ]
-                            for lx, ly in candidates:
+                                tw, th = len(lbl) * 12, 20
+                            # Try candidates at increasing distances so close pairs can spread
+                            base_candidates = []
+                            for gap in (8, 18, 30, 46):
+                                base_candidates += [
+                                    (dot_x + r_dot + gap,  dot_y - th // 2),        # right
+                                    (dot_x - r_dot - tw - gap, dot_y - th // 2),    # left
+                                    (dot_x - tw // 2,    dot_y - r_dot - th - gap), # above
+                                    (dot_x - tw // 2,    dot_y + r_dot + gap),       # below
+                                    (dot_x + r_dot + gap, dot_y - r_dot - th - gap),# upper-right
+                                    (dot_x - tw - r_dot - gap, dot_y - r_dot - th - gap), # upper-left
+                                    (dot_x + r_dot + gap, dot_y + r_dot + gap),     # lower-right
+                                    (dot_x - tw - r_dot - gap, dot_y + r_dot + gap),# lower-left
+                                ]
+                            for lx, ly in base_candidates:
                                 box = (lx - pad_t, ly - pad_t, lx + tw + pad_t, ly + th + pad_t)
-                                # Keep within image
                                 if box[0] < 4 or box[1] < 4 or box[2] > iw - 4 or box[3] > ih - 4:
                                     continue
                                 if all(not _boxes_overlap(box, pb) for pb in placed):
                                     return lx, ly, box
-                            # Fall back to right offset even if overlapping
-                            lx, ly = dot_x + r_dot + 6, dot_y - th // 2
-                            return lx, ly, (lx - pad_t, ly - pad_t, lx + tw + pad_t, ly + th + pad_t)
+                            # No clean spot found — return None to signal skip
+                            return None, None, None
 
                         for pt in banner_pts:
                             pt_lat, pt_lon, pt_label = pt[0], pt[1], pt[2]
@@ -1101,6 +1102,9 @@ def main():
                             # Find non-overlapping label position
                             lx, ly, lbox = _find_label_pos(
                                 draw, pt_label, font_sm, px_x, px_y, iw, ih, placed_boxes)
+                            if lx is None:
+                                # No non-overlapping position found — skip label to avoid overlap
+                                continue
                             placed_boxes.append(lbox)
                             # Label with dark background pill for readability against clouds
                             try:

@@ -199,11 +199,11 @@ SITES.forEach(s=>{
   card.className='card';
   card.href=s.id+'/';
   card.dataset.id=s.id;
-  const nameAlt=s.alt?`<div class="card-name-alt">${s.alt}</div>`:'';
   card.innerHTML=
     `<div class="card-type ${s.type}"></div>`+
     `<div class="card-region">${s.region}</div>`+
-    `<div class="card-name">${s.name}</div>${nameAlt}`+
+    `<div class="card-name">${s.name}</div>`+
+    `<div class="card-name-alt">${s.alt||'&nbsp;'}</div>`+
     `<div class="card-wx"><div class="card-icon" id="ci-${s.id}">—</div>`+
     `<div><div style="display:flex;align-items:baseline;gap:4px">`+
     `<div class="card-temp" id="ct-${s.id}">—</div><div class="card-unit">°C</div></div>`+

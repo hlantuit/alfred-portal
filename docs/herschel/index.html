@@ -996,30 +996,18 @@ function renderChart(containerId, vals, opts){
   const xh=svg.querySelector(`#xh_${uid}`);
   const dot=svg.querySelector(`#dot_${uid}`);
 
-  // crosshair-only update — called both locally and by _chartSync from other charts
+  // full update (crosshair + dot + tooltip) — called by sync and locally
   function showAtIdx(idx){
     if(idx<0){xh.setAttribute('x1','-2');xh.setAttribute('x2','-2');dot.setAttribute('visibility','hidden');tip.style.display='none';return;}
     const v=vals[idx];if(v==null)return;
     const cx=px(idx).toFixed(1),cy=py(v).toFixed(1);
     xh.setAttribute('x1',cx);xh.setAttribute('x2',cx);
     dot.setAttribute('cx',cx);dot.setAttribute('cy',cy);dot.setAttribute('visibility','visible');
-  }
-  _chartSync.reg(showAtIdx);
-
-  svg.addEventListener('mousemove',e=>{
-    const rect=svg.getBoundingClientRect();
-    const svgX=(e.clientX-rect.left)/rect.width*W;
-    const idx=Math.max(0,Math.min(n-1,Math.round((svgX-ML)/cW*(n-1))));
-    const v=vals[idx];
-    if(v==null) return;
-    showAtIdx(idx);
     const valLabel=typeof v==='number'&&!Number.isInteger(v)?v.toFixed(1):v;
     let txt=`<b>${valLabel}${unit}</b>`;
     if(dirs&&dirs[idx]!=null){
-      const d=dirs[idx];
-      const sector=Math.round((d%360+22.5)/45)%8;
-      const arrow=DIR_CHARS[sector];
-      const cardinals=['N','NE','E','SE','S','SW','W','NW'];
+      const d=dirs[idx];const sector=Math.round((d%360+22.5)/45)%8;
+      const arrow=DIR_CHARS[sector];const cardinals=['N','NE','E','SE','S','SW','W','NW'];
       txt+=` <span style="color:var(--muted);font-size:10px">${arrow} ${cardinals[sector]} (${Math.round(d)}°)</span>`;
     }
     if(times[idx]){
@@ -1027,12 +1015,25 @@ function renderChart(containerId, vals, opts){
       txt+=` <span style="color:var(--muted);font-size:10px">${dt.toLocaleString('en-CA',{timeZone:tz,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})}</span>`;
     }
     tip.innerHTML=txt;tip.style.display='block';
+    // position tooltip at SVG-proportional x (used when called from sync)
+    const elW=el.offsetWidth;
+    tip.style.left=Math.min(px(idx)/W*elW+14,elW-165)+'px';
+    tip.style.top='4px';
+  }
+  _chartSync.reg(showAtIdx);
+
+  svg.addEventListener('mousemove',e=>{
+    const rect=svg.getBoundingClientRect();
+    const svgX=(e.clientX-rect.left)/rect.width*W;
+    const idx=Math.max(0,Math.min(n-1,Math.round((svgX-ML)/cW*(n-1))));
+    if(vals[idx]==null) return;
+    showAtIdx(idx);
+    // override tooltip position to follow the mouse on the hovered chart
     tip.style.left=Math.min(e.clientX-rect.left+14,rect.width-165)+'px';
     tip.style.top=Math.max(0,e.clientY-rect.top-34)+'px';
     _chartSync.fire(idx,showAtIdx);
   });
   svg.addEventListener('mouseleave',()=>{
-    tip.style.display='none';
     showAtIdx(-1);
     _chartSync.fire(-1,showAtIdx);
   });
@@ -1114,6 +1115,16 @@ function renderPrecipChart(containerId, rain, snow, times, tz){
     if(idx<0){pxh.setAttribute('x1','-2');pxh.setAttribute('x2','-2');tip.style.display='none';return;}
     const xx=(ML+cW*idx/(n-1)).toFixed(1);
     pxh.setAttribute('x1',xx);pxh.setAttribute('x2',xx);
+    const r=rain[idx]||0,s=snow[idx]||0;
+    let txt=`<b>Rain: ${r.toFixed(2)} mm${hasSnow?` · Snow: ${s.toFixed(2)} cm`:''}</b>`;
+    if(times&&times[idx]){
+      const dt=new Date(times[idx]);
+      txt+=` <span style="color:var(--muted);font-size:10px">${dt.toLocaleString('en-CA',{timeZone:tz,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})}</span>`;
+    }
+    tip.innerHTML=txt;tip.style.display='block';
+    const elW=el.offsetWidth;
+    tip.style.left=Math.min((ML+cW*idx/(n-1))/W*elW+14,elW-220)+'px';
+    tip.style.top='4px';
   }
   _chartSync.reg(showPrecipAtIdx);
 
@@ -1122,13 +1133,6 @@ function renderPrecipChart(containerId, rain, snow, times, tz){
     const svgX=(e.clientX-rect.left)/rect.width*W;
     const idx=Math.max(0,Math.min(n-1,Math.round((svgX-ML)/cW*(n-1))));
     showPrecipAtIdx(idx);
-    const r=rain[idx]||0,s=snow[idx]||0;
-    let txt=`<b>Rain: ${r.toFixed(2)} mm${hasSnow?` · Snow: ${s.toFixed(2)} cm`:''}</b>`;
-    if(times&&times[idx]){
-      const dt=new Date(times[idx]);
-      txt+=` <span style="color:var(--muted);font-size:10px">${dt.toLocaleString('en-CA',{timeZone:tz,month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false})}</span>`;
-    }
-    tip.innerHTML=txt;tip.style.display='block';
     tip.style.left=Math.min(e.clientX-rect.left+14,rect.width-220)+'px';
     tip.style.top=Math.max(0,e.clientY-rect.top-34)+'px';
     _chartSync.fire(idx,showPrecipAtIdx);

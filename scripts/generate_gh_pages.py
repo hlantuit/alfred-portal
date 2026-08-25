@@ -255,7 +255,7 @@ def fetch_weather(lat, lon, tz):
                 "windspeed_10m", "winddirection_10m", "weathercode",
                 "surface_pressure", "cloudcover",
             ]),
-            "hourly": "cloudcover,windspeed_10m,winddirection_10m,pressure_msl,temperature_2m,precipitation,rain,snowfall",
+            "hourly": "cloudcover,windspeed_10m,winddirection_10m,pressure_msl,temperature_2m,precipitation,rain,snowfall,snow_depth",
             "daily": ",".join([
                 "temperature_2m_max", "temperature_2m_min",
                 "precipitation_probability_max", "precipitation_sum",
@@ -392,6 +392,7 @@ def fetch_weather(lat, lon, tz):
         "hourly_precip_10d": h_10d("precipitation", decimals=2),
         "hourly_rain_10d": h_10d("rain", decimals=2),
         "hourly_snow_10d": [round(v * 10, 2) if v is not None else None for v in h_10d("snowfall", decimals=3)],
+        "snow_depth_cm": h_10d("snow_depth", decimals=1),
     }
 
 
@@ -1632,6 +1633,10 @@ def main():
             "lon": lon,
             "tz": tz,
             "institution": cfg.get("institution_text", ""),
+            "blocks": cfg.get("blocks", []),
+            "webcam_url": cfg.get("webcam_url", ""),
+            "webcam_label": cfg.get("webcam_label", ""),
+            "webcam_page_url": cfg.get("webcam_page_url", ""),
         },
         "updated_utc": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "modis_date": modis_date,

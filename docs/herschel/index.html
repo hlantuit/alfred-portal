@@ -272,6 +272,8 @@ svg.sp{width:100%;height:auto;display:block}
     <div class="nav-grp">Forecast</div>
     <a class="nav-a" href="#forecast"><span class="nav-i">📅</span>10-day</a>
     <a class="nav-a" href="#fog"><span class="nav-i">🌫️</span>Fog risk</a>
+    <a class="nav-a" href="#webcam" id="nav-webcam" style="display:none"><span class="nav-i">📷</span>Webcam</a>
+    <a class="nav-a" href="#snow" id="nav-snow" style="display:none"><span class="nav-i">❄️</span>Snow depth</a>
     <a class="nav-a" href="#marine"><span class="nav-i">🌊</span>Waves · Marine</a>
     <div class="nav-grp">Water</div>
     <a class="nav-a" href="#water"><span class="nav-i">📈</span>Water level</a>
@@ -417,6 +419,32 @@ svg.sp{width:100%;height:auto;display:block}
       </div>
       <div class="ffw-scroll"><div class="ffw-days" id="fogDays"><span style="color:var(--muted);font-size:12px">Loading…</span></div></div>
       <div style="font-size:10px;color:var(--muted);margin-top:8px">⚠️ <strong>This model historically underestimates fog risk</strong> — field comparisons show confirmed fog events scoring as low as P(fog)&nbsp;=&nbsp;0.05. Even "Possible" represents a real, non-trivial risk. Thresholds adjusted 2026-08-20 to compensate; underlying probabilities are unchanged. · CAPS/GDPS · XGBoost · Generated <span id="fogGenTime">—</span> MDT</div>
+    </div>
+  </div>
+
+  <!-- Webcam (shown only when community has webcam_url) -->
+  <div id="webcam" class="sec" style="display:none"><div class="sec-hd">Webcam</div></div>
+  <div id="webcam-content" style="display:none">
+    <div class="img-row-3">
+      <div class="img-card" id="webcam-card">
+        <a id="webcam-link" href="#" target="_blank" rel="noopener">
+          <img id="webcam-img" src="" alt="Webcam" style="width:100%;border-radius:6px" onerror="document.getElementById('webcam-card').style.display='none'">
+        </a>
+        <div class="img-cap" id="webcam-cap">Webcam</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Snow depth (shown only for communities with snow_depth block) -->
+  <div id="snow" class="sec" style="display:none"><div class="sec-hd">Snow depth</div></div>
+  <div class="chart-row" id="snow-content" style="display:none">
+    <div class="ch" style="flex:2">
+      <div class="ch-hd">
+        <div class="ch-title">Snow depth — Open-Meteo · 10-day</div>
+        <div><span class="ch-val" id="cv-snow">—</span><span class="ch-unit"> cm now</span></div>
+      </div>
+      <div class="ch-area"><svg class="sp" id="snowSVG" viewBox="0 0 800 100" preserveAspectRatio="none"></svg></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px">Open-Meteo ERA5 reanalysis blend · GEM seamless</div>
     </div>
   </div>
 
@@ -1536,6 +1564,36 @@ async function loadData(){
   if(tide?.series?.length){
     sparkline('tideSparklSVG', tide.series.map(p=>p.m), STEEL, tide.series.map(p=>p.t), 240, 2);
     if(tide.current_m!=null) document.getElementById('cv-tide-sp').textContent=(tide.current_m>0?'+':'')+parseFloat(tide.current_m).toFixed(2);
+  }
+
+  // Webcam
+  const blocks=d.community?.blocks||[];
+  if(d.community?.webcam_url && blocks.includes('webcam')){
+    const wc=document.getElementById('webcam');
+    const wcc=document.getElementById('webcam-content');
+    if(wc) wc.style.display='';
+    if(wcc) wcc.style.display='';
+    const nwc=document.getElementById('nav-webcam'); if(nwc) nwc.style.display='';
+    const img=document.getElementById('webcam-img');
+    const lnk=document.getElementById('webcam-link');
+    const cap=document.getElementById('webcam-cap');
+    if(img) img.src=d.community.webcam_url+'?t='+Date.now();
+    if(lnk) lnk.href=d.community.webcam_page_url||d.community.webcam_url;
+    if(cap) cap.textContent=d.community.webcam_label||'Webcam';
+  }
+
+  // Snow depth
+  const snowDepth=w.snow_depth_cm||[];
+  if(blocks.includes('snow_depth') && snowDepth.length){
+    const ss=document.getElementById('snow');
+    const sc=document.getElementById('snow-content');
+    if(ss) ss.style.display='';
+    if(sc) sc.style.display='';
+    const nsn=document.getElementById('nav-snow'); if(nsn) nsn.style.display='';
+    const cur=snowDepth.find(v=>v!=null);
+    if(cur!=null) document.getElementById('cv-snow').textContent=cur.toFixed(1);
+    const SNOW_BLUE='#A8D4F5';
+    sparkline('snowSVG', snowDepth, SNOW_BLUE, w.hourly_times_10d||[], 240, 1);
   }
 
   // River sparkline

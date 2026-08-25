@@ -25,7 +25,11 @@ jobs:
 
       # Regenerate sites.json + conditions + wind grid from communities/
       - name: Generate portal data
-        run: python scripts/generate_portal_data.py --out-dir data
+        run: |
+          python scripts/generate_portal_data.py --out-dir data
+          # Mirror wind grid to docs/data/ so the new GitHub Pages portal can fetch it
+          mkdir -p docs/data
+          cp data/wind_grid_latest.json docs/data/wind_grid_latest.json
 
       # Satellite blocks only — fast blocks are updated hourly by the other workflow
       - name: Update Notion dashboards (satellite blocks)
@@ -40,6 +44,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/sites.json data/conditions_latest.json data/wind_grid_latest.json
+          git add docs/data/wind_grid_latest.json 2>/dev/null || true
           git add cache/ 2>/dev/null || true
 
           # Chart images — use find to avoid silent glob-expansion failures

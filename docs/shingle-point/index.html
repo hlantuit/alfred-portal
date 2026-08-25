@@ -1514,7 +1514,8 @@ async function loadData(){
     const md=new Date(d.modis_date+'T12:00:00Z').toLocaleDateString('en-CA',{year:'numeric',month:'short',day:'numeric'});
     document.getElementById('modis-date-label').innerHTML=`Acquired ${md} · click to zoom · <a href="#sar-card" style="color:rgba(255,255,255,.55);text-decoration:underline">↓ SAR image below</a>`;
   }
-  const _fmtDate=s=>{if(!s)return'—';const hasTime=s.includes('T');const dt=hasTime?new Date(s):new Date(s+'T12:00:00Z');const base=dt.toLocaleDateString('en-CA',{month:'short',day:'numeric'});return hasTime?base+' '+dt.toLocaleTimeString('en-CA',{hour:'2-digit',minute:'2-digit',timeZoneName:'short'}):base;};
+  const _tz=d.community&&d.community.tz?d.community.tz:'UTC';
+  const _fmtDate=s=>{if(!s)return'—';const hasTime=s.includes('T');if(!hasTime)return new Date(s+'T12:00:00Z').toLocaleDateString('en-CA',{month:'short',day:'numeric',timeZone:'UTC'});const dt=new Date(s);return dt.toLocaleDateString('en-CA',{month:'short',day:'numeric',timeZone:_tz})+' '+dt.toLocaleTimeString('en-CA',{hour:'2-digit',minute:'2-digit',timeZoneName:'short',timeZone:_tz});};
   document.getElementById('viirs-date').textContent=_fmtDate(d.viirs_date);
   document.getElementById('s2-date').textContent=_fmtDate(d.s2_date);
   document.getElementById('s2-date-zoom').textContent=_fmtDate(d.s2_date);

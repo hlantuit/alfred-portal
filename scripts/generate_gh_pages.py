@@ -1077,9 +1077,10 @@ def main():
         import io as _io2, math as _math, datetime as _dt2
         draw = _Draw2.Draw(img)
         iw, ih = img.size
+        _fs = max(16, int(20 * iw / 1000))  # scale so label looks same size across different native resolutions
         try:
-            font_lg = _Font2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
-            font_sm = _Font2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 18)
+            font_lg = _Font2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", _fs)
+            font_sm = _Font2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", max(14, _fs - 2))
         except Exception:
             font_lg = font_sm = _Font2.load_default()
         # Date label (with time if a full ISO datetime is provided)
@@ -1254,7 +1255,7 @@ def main():
                             "SRS": "EPSG:3413",
                             "BBOX": bbox_3413,
                             "WIDTH": "1500", "HEIGHT": "1500",
-                            "TIME": _viirs_date_str,
+                            "TIME": _viirs_date_str[:10],  # GIBS WMS accepts YYYY-MM-DD
                         },
                         timeout=30,
                     )

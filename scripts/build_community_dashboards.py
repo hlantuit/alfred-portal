@@ -224,6 +224,12 @@ def build_dashboard(cid):
         "DFO IWLS · Herschel Island station 06525",
         f"DFO IWLS · {cfg.get('tide_station_name', disp)} station {cfg.get('tide_station_code', '—')}",
     )
+    # Ice section heading — sea ice for coastal, lake/river ice for inland
+    if "sea_ice" not in blocks and "lake_river_ice" in blocks:
+        html = html.replace(
+            '<div id="ice" class="sec"><div class="sec-hd">Sea ice · Sentinel-1 SAR</div></div>',
+            '<div id="ice" class="sec"><div class="sec-hd">Lake · River ice · Sentinel-1 SAR</div></div>',
+        )
     # SAR caption
     html = html.replace(
         "Sentinel-1 SAR · VV polarisation · Herschel Island area",
@@ -249,7 +255,7 @@ def build_dashboard(cid):
         hide.append("#marine")
     if "sea_ice" not in blocks and "lake_river_ice" not in blocks:
         hide.append("#ice")
-    if "water_level" not in blocks:
+    if "water_level" not in blocks and "hydrometric" not in blocks:
         hide.append("#water")
 
     if hide:

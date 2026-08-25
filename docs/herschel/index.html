@@ -438,7 +438,8 @@ svg.sp{width:100%;height:auto;display:block}
 
   <!-- Water levels -->
   <div id="water" class="sec"><div class="sec-hd">Water levels</div></div>
-  <div class="chart-row">
+  <!-- Tide charts (hidden for non-coastal communities by JS) -->
+  <div class="chart-row" id="tide-row">
     <div class="ch">
       <div class="ch-hd">
         <div class="ch-title" id="twl-title">Total water level</div>
@@ -454,6 +455,17 @@ svg.sp{width:100%;height:auto;display:block}
       </div>
       <div class="ch-area"><svg class="sp" id="tideSparklSVG" viewBox="0 0 800 100" preserveAspectRatio="none"></svg></div>
       <div style="font-size:10px;color:var(--muted);margin-top:6px">DFO IWLS · Herschel Island station 06525</div>
+    </div>
+  </div>
+  <!-- River level chart (shown for hydrometric communities) -->
+  <div class="chart-row" id="river-row" style="display:none">
+    <div class="ch" style="flex:2">
+      <div class="ch-hd">
+        <div class="ch-title" id="river-title">River water level</div>
+        <div><span class="ch-val" id="cv-river">—</span><span class="ch-unit"> m</span></div>
+      </div>
+      <div class="ch-area"><svg class="sp" id="riverSVG" viewBox="0 0 800 100" preserveAspectRatio="none"></svg></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px">Water Survey of Canada · 7-day</div>
     </div>
   </div>
 
@@ -1529,6 +1541,10 @@ async function loadData(){
   // River sparkline
   if(rivers.length){
     const rv=rivers[0];
+    const rrow=document.getElementById('river-row');
+    if(rrow) rrow.style.display='';
+    // Hide tide row if no tide data
+    if(!tide&&!twl){const tr=document.getElementById('tide-row');if(tr)tr.style.display='none';}
     if(rv.series?.length) sparkline('riverSVG', rv.series.map(p=>p.m), GREEN, rv.series.map(p=>p.t), 240, 2);
     if(rv.current_m!=null) document.getElementById('cv-river').textContent=rv.current_m;
     const short=(rv.river_name||'River').split(',')[0];

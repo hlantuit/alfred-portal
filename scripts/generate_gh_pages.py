@@ -1016,7 +1016,8 @@ def main():
                             img = img.crop((0, top, iw, top + target_h))
                         iw, ih = img.size
 
-                        # Draw place labels from config map_points
+                        # Draw place labels — current community's map_points PLUS
+                        # all other communities whose lat/lon falls in the banner extent
                         draw = _Draw.Draw(img)
                         try:
                             font = _Font.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 28)
@@ -1024,7 +1025,29 @@ def main():
                         except Exception:
                             font = font_sm = _Font.load_default()
 
-                        for pt in cfg.get("map_points", []):
+                        # Build the full list of points to label
+                        banner_pts = list(cfg.get("map_points", []))  # [lat, lon, label, dy?]
+                        labeled_coords = set()  # deduplicate nearby community dots
+                        # Add all other community centre points that fall in this banner
+                        for _other_cfg_path in sorted(COMMUNITIES_DIR.glob("*/config.json")):
+                            try:
+                                import json as _json
+                                _oc = _json.loads(_other_cfg_path.read_text(encoding="utf-8"))
+                                _olat = float(_oc.get("lat", 0))
+                                _olon = float(_oc.get("lon", 0))
+                                if not (lon_w < _olon < lon_e and lat_s < _olat < lat_n):
+                                    continue
+                                _olbl = _oc.get("site_display_name") or _oc.get("name", "")
+                                # Deduplicate if very close to an existing map_point
+                                _key = (round(_olat, 1), round(_olon, 1))
+                                if _key in labeled_coords:
+                                    continue
+                                labeled_coords.add(_key)
+                                banner_pts.append([_olat, _olon, _olbl])
+                            except Exception:
+                                pass
+
+                        for pt in banner_pts:
                             pt_lat, pt_lon, pt_label = pt[0], pt[1], pt[2]
                             if not (lon_w < pt_lon < lon_e and lat_s < pt_lat < lat_n):
                                 continue

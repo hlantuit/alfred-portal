@@ -257,6 +257,9 @@ def build_dashboard(cid):
         hide.append("#ice")
     if "water_level" not in blocks and "hydrometric" not in blocks:
         hide.append("#water")
+    # Hide Total water level condition card for non-coastal communities
+    if "water_level" not in blocks:
+        hide.append("#cc-tide")
 
     if hide:
         hide_css = (

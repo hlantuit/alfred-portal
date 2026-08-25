@@ -393,7 +393,7 @@ svg.sp{width:100%;height:auto;display:block}
       <div class="cc-sub" id="c-wind-sub"></div>
       <div class="cc-pill" id="c-wind-pill"></div>
     </div>
-    <div class="cc">
+    <div class="cc" id="cc-tide">
       <div class="cc-lbl">Total water level</div>
       <div class="cc-val" id="c-tide">—<span class="cc-unit"> m</span></div>
       <div class="cc-sub" id="c-tide-sub"></div>
@@ -1595,9 +1595,14 @@ async function loadData(){
   const precip0=w.hourly_precip_10d?.[0];
   if(precip0!=null) document.getElementById('cv-precip').textContent=precip0;
 
-  // Wave chart
-  renderWaveChart('waveChartEl', d.wave, tz);
-  if(d.wave?.length){const _wNow=Date.now();const _wPt=d.wave.reduce((a,b)=>Math.abs(new Date(b.t)-_wNow)<Math.abs(new Date(a.t)-_wNow)?b:a);if(_wPt?.h!=null)document.getElementById('cv-wave').textContent=parseFloat(_wPt.h).toFixed(1);}
+  // Wave chart — hide entire marine section if no wave data AND no marine text
+  if(!d.wave?.length && !marine.length){
+    const ms=document.getElementById('marine'); if(ms) ms.style.display='none';
+    const mn=document.querySelector('a[href="#marine"]'); if(mn) mn.style.display='none';
+  } else {
+    renderWaveChart('waveChartEl', d.wave, tz);
+    if(d.wave?.length){const _wNow=Date.now();const _wPt=d.wave.reduce((a,b)=>Math.abs(new Date(b.t)-_wNow)<Math.abs(new Date(a.t)-_wNow)?b:a);if(_wPt?.h!=null)document.getElementById('cv-wave').textContent=parseFloat(_wPt.h).toFixed(1);}
+  }
 
   // Total water level — dual TOPAZ6+GDSPS curves (or IWLS tide fallback)
   renderWaterLevel('tideSVG', twl?.topaz||null, twl?.gdsps||null, tide);

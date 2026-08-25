@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ALFRED Portal</title>
+<meta name="description" content="Pan-Arctic environmental dashboard portal — Alfred Wegener Institute">
+<meta name="theme-color" content="#005FA3">
+<link rel="icon" type="image/png" href="herschel/alfred-logo.png">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+:root {
+  --bg:    #EEF3F8;
+  --surf:  #FFFFFF;
+  --surf2: #F3F8FC;
+  --bdr:   #D4E2EE;
+  --txt:   #0E1C2A;
+  --txt2:  #3A5570;
+  --muted: #6B8499;
+  --acc:   #005FA3;
+  --acc-l: #E0EDF8;
+  --good:  #1A7A52;
+  --warn:  #B86F00;
+  --dan:   #B82020;
+}
+@media(prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1C2A;--surf:#182536;--surf2:#1E2F42;--bdr:#263D54;
+    --txt:#E8F0F8;--txt2:#96B4CC;--muted:#5E7E98;--acc:#4DA6FF;
+    --acc-l:#1A2F45;--good:#2FAF72;--warn:#E89020;--dan:#E04040;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1C2A;--surf:#182536;--surf2:#1E2F42;--bdr:#263D54;
+  --txt:#E8F0F8;--txt2:#96B4CC;--muted:#5E7E98;--acc:#4DA6FF;
+  --acc-l:#1A2F45;--good:#2FAF72;--warn:#E89020;--dan:#E04040;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;font-size:15px;line-height:1.5;min-height:100vh}
+
+/* ── Header ── */
+.hdr{background:var(--surf);border-bottom:1px solid var(--bdr);padding:0 24px;display:flex;align-items:center;gap:16px;height:58px;position:sticky;top:0;z-index:1000}
+.hdr-logo{height:32px;opacity:.85;filter:grayscale(.2)}
+.hdr-title{font-size:18px;font-weight:800;color:var(--acc);letter-spacing:-.3px}
+.hdr-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.hdr-right{margin-left:auto;font-size:11px;color:var(--muted)}
+
+/* ── Map ── */
+#map{height:clamp(240px,42vh,520px);width:100%;background:#0d1c2b}
+
+/* ── Section ── */
+.sec-hd{font-size:12px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);padding:28px 24px 14px}
+
+/* ── Community cards grid ── */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;padding:0 24px 40px}
+.card{background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:16px 18px;text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:6px;transition:box-shadow .15s,border-color .15s;position:relative;overflow:hidden}
+.card:hover{border-color:var(--acc);box-shadow:0 2px 12px rgba(0,95,163,.12)}
+.card-type{position:absolute;top:0;right:0;width:4px;height:100%;border-radius:0 10px 10px 0}
+.card-type.coastal{background:var(--acc)}
+.card-type.riverine{background:var(--good)}
+.card-type.lake{background:#7B68EE}
+.card-type.terrestrial{background:var(--muted)}
+.card-region{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted)}
+.card-name{font-size:17px;font-weight:800;line-height:1.2;color:var(--txt)}
+.card-name-alt{font-size:12px;color:var(--muted);margin-top:1px}
+.card-wx{display:flex;align-items:baseline;gap:8px;margin-top:4px}
+.card-icon{font-size:26px;line-height:1}
+.card-temp{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:-1px;line-height:1;color:var(--txt)}
+.card-unit{font-size:14px;color:var(--muted)}
+.card-cond{font-size:12px;color:var(--txt2);margin-top:2px}
+.card-wind{font-size:11px;color:var(--muted);margin-top:2px}
+.card-loading{color:var(--muted);font-size:12px;font-style:italic}
+.card-err{color:var(--dan);font-size:11px}
+.card-arrow{position:absolute;bottom:14px;right:16px;font-size:18px;color:var(--bdr);transition:color .15s}
+.card:hover .card-arrow{color:var(--acc)}
+
+/* ── Legend ── */
+.legend{display:flex;gap:18px;flex-wrap:wrap;padding:0 24px 20px;font-size:11px;color:var(--muted)}
+.leg-item{display:flex;align-items:center;gap:5px}
+.leg-dot{width:10px;height:10px;border-radius:50%}
+
+/* ── Footer ── */
+.foot{text-align:center;padding:20px 24px 40px;font-size:11px;color:var(--muted);border-top:1px solid var(--bdr)}
+.foot a{color:var(--muted)}
+
+@media(max-width:600px){
+  .hdr{padding:0 14px;gap:10px}
+  .hdr-title{font-size:15px}
+  .cards{padding:0 12px 30px;gap:10px}
+  .sec-hd{padding:20px 12px 10px}
+  .legend{padding:0 12px 14px}
+}
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <img src="herschel/alfred-logo.png" alt="ALFRED" class="hdr-logo">
+  <div>
+    <div class="hdr-title">ALFRED Portal</div>
+    <div class="hdr-sub">Arctic Coastal Dynamics · Alfred Wegener Institute</div>
+  </div>
+  <div class="hdr-right" id="hdr-time"></div>
+</header>
+
+<div id="map"></div>
+
+<div class="sec-hd">Community dashboards</div>
+
+<div class="legend">
+  <div class="leg-item"><div class="leg-dot" style="background:var(--acc)"></div>Coastal</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--good)"></div>Riverine</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#7B68EE"></div>Lake</div>
+  <div class="leg-item"><div class="leg-dot" style="background:var(--muted)"></div>Terrestrial</div>
+</div>
+
+<div class="cards" id="cards"></div>
+
+<div class="foot">
+  Alfred Wegener Institute · ALFRED Portal · Weather data fetched live ·
+  <a href="https://github.com/hlantuit/alfred-portal" target="_blank" rel="noopener">GitHub</a>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const SITES = [
+  {id:"herschel",    name:"Qikiqtaruk",       alt:"Herschel Island",   region:"Yukon Coast",            type:"coastal",     lat:69.590,  lon:-139.099},
+  {id:"shingle-point",name:"Shingle Point",   alt:"Taqpaq",            region:"Yukon Coast",            type:"coastal",     lat:68.994,  lon:-137.390},
+  {id:"aklavik",     name:"Aklavik",          alt:"",                  region:"Northwest Territories",  type:"riverine",    lat:68.224,  lon:-135.013},
+  {id:"barrow",      name:"Utqiaġvik",   alt:"Barrow",            region:"Alaska North Slope",     type:"coastal",     lat:71.291,  lon:-156.789},
+  {id:"hendrickson-island",name:"Hendrickson Island",alt:"",           region:"Mackenzie Delta",        type:"coastal",     lat:69.479,  lon:-133.616},
+  {id:"inuvik",      name:"Inuvik",           alt:"",                  region:"Northwest Territories",  type:"riverine",    lat:68.361,  lon:-133.723},
+  {id:"paulatuk",    name:"Paulatuk",         alt:"",                  region:"Mackenzie Coast",        type:"coastal",     lat:69.351,  lon:-124.071},
+  {id:"police-cabin",name:"Police Cabin",     alt:"Police Cabin Lake", region:"Northwest Territories",  type:"lake",        lat:68.749,  lon:-136.485},
+  {id:"prudhoe-bay", name:"Prudhoe Bay",      alt:"",                  region:"Alaska North Slope",     type:"coastal",     lat:70.255,  lon:-148.337},
+  {id:"sachs-harbour",name:"Sachs Harbour",   alt:"",                  region:"Banks Island",           type:"coastal",     lat:71.988,  lon:-125.255},
+  {id:"trail-valley",name:"Trail Valley Creek",alt:"",                 region:"Northwest Territories",  type:"terrestrial", lat:68.740,  lon:-133.500},
+  {id:"tuktoyaktuk", name:"Tuktoyaktuk",      alt:"",                  region:"Mackenzie Delta",        type:"coastal",     lat:69.454,  lon:-133.037},
+  {id:"ulukhaktok",  name:"Ulukhaktok",       alt:"",                  region:"Victoria Island",        type:"coastal",     lat:70.737,  lon:-117.771},
+];
+
+const TYPE_COLOR = {coastal:"#005FA3",riverine:"#1A7A52",lake:"#7B68EE",terrestrial:"#6B8499"};
+
+// ── Clock ──
+function tick(){
+  const d=new Date();
+  document.getElementById('hdr-time').textContent=
+    d.toUTCString().replace(/.*,\s/,'').replace(/\s\w+$/,' UTC');
+}
+tick(); setInterval(tick,10000);
+
+// ── Map ──
+const map = L.map('map',{zoomControl:true,scrollWheelZoom:false}).setView([69.5,-135],3);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  maxZoom:13,
+  attribution:'© OpenStreetMap contributors'
+}).addTo(map);
+
+function makeIcon(type){
+  const c=TYPE_COLOR[type]||'#6B8499';
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="22" height="28" viewBox="0 0 22 28">
+    <path d="M11 0C4.9 0 0 4.9 0 11c0 8.3 11 17 11 17s11-8.7 11-17C22 4.9 17.1 0 11 0z" fill="${c}" stroke="white" stroke-width="1.5"/>
+    <circle cx="11" cy="11" r="4.5" fill="white" opacity=".9"/>
+  </svg>`;
+  return L.divIcon({
+    html:svg,iconSize:[22,28],iconAnchor:[11,28],popupAnchor:[0,-30],className:'',
+  });
+}
+
+const markers = {};
+SITES.forEach(s=>{
+  const icon=makeIcon(s.type);
+  const m=L.marker([s.lat,s.lon],{icon}).addTo(map);
+  const label=s.alt ? `${s.name} · ${s.alt}` : s.name;
+  m.bindPopup(
+    `<b style="font-size:13px">${label}</b><br>`+
+    `<span style="font-size:11px;color:#6B8499">${s.region}</span><br>`+
+    `<a href="${s.id}/" style="font-size:12px;color:#005FA3;font-weight:700">Open dashboard →</a>`,
+    {maxWidth:200}
+  );
+  m.on('click',()=>m.openPopup());
+  markers[s.id]=m;
+});
+
+// ── Community cards ──
+const WMO_ICON={0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',
+  51:'🌦️',53:'🌦️',55:'🌧️',61:'🌧️',63:'🌧️',65:'🌧️',
+  71:'🌨️',73:'🌨️',75:'🌨️',77:'🌨️',80:'🌦️',81:'🌧️',82:'🌧️',
+  85:'❄️',86:'❄️',95:'⛈️',96:'⛈️',99:'⛈️'};
+const WIND_DIRS=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+function wDir(d){return WIND_DIRS[Math.round((d||0)/22.5)%16]}
+
+const grid=document.getElementById('cards');
+
+SITES.forEach(s=>{
+  const card=document.createElement('a');
+  card.className='card';
+  card.href=s.id+'/';
+  card.dataset.id=s.id;
+  const nameAlt=s.alt?`<div class="card-name-alt">${s.alt}</div>`:'';
+  card.innerHTML=
+    `<div class="card-type ${s.type}"></div>`+
+    `<div class="card-region">${s.region}</div>`+
+    `<div class="card-name">${s.name}</div>${nameAlt}`+
+    `<div class="card-wx"><div class="card-icon" id="ci-${s.id}">—</div>`+
+    `<div><div style="display:flex;align-items:baseline;gap:4px">`+
+    `<div class="card-temp" id="ct-${s.id}">—</div><div class="card-unit">°C</div></div>`+
+    `<div class="card-cond" id="cc-${s.id}" style="color:var(--muted);font-size:11px;font-style:italic">Loading…</div></div></div>`+
+    `<div class="card-wind" id="cw-${s.id}"></div>`+
+    `<div class="card-arrow">→</div>`;
+  grid.appendChild(card);
+});
+
+// Fetch data.json for each site and populate cards
+SITES.forEach(s=>{
+  fetch(s.id+'/data.json?t='+Date.now())
+    .then(r=>r.ok?r.json():null)
+    .catch(()=>null)
+    .then(d=>{
+      const icon=document.getElementById('ci-'+s.id);
+      const temp=document.getElementById('ct-'+s.id);
+      const cond=document.getElementById('cc-'+s.id);
+      const wind=document.getElementById('cw-'+s.id);
+      if(!d||!d.weather){
+        cond.textContent='No data yet'; return;
+      }
+      const w=d.weather;
+      const wc=w.weathercode??0;
+      icon.textContent=WMO_ICON[wc]||'—';
+      temp.textContent=typeof w.temperature==='number'?w.temperature.toFixed(1):'—';
+      cond.style.fontStyle='normal'; cond.style.color='';
+      cond.textContent=w.condition||'';
+      wind.textContent=`Wind ${w.wind_speed??'—'} km/h ${wDir(w.wind_direction)} · Humidity ${w.humidity??'—'}%`;
+      // Pulse map marker with weather icon
+      const mk=markers[s.id];
+      if(mk){
+        mk.setPopupContent(
+          `<b style="font-size:13px">${s.alt?s.name+' · '+s.alt:s.name}</b><br>`+
+          `<span style="font-size:11px;color:#6B8499">${s.region}</span><br>`+
+          `<span style="font-size:18px">${WMO_ICON[wc]||''}</span> `+
+          `<b style="font-size:15px">${typeof w.temperature==='number'?w.temperature.toFixed(1):'—'}°C</b> `+
+          `${w.condition||''}<br>`+
+          `<span style="font-size:11px;color:#6B8499">Wind ${w.wind_speed??'—'} km/h ${wDir(w.wind_direction)}</span><br>`+
+          `<a href="${s.id}/" style="font-size:12px;color:#005FA3;font-weight:700">Open dashboard →</a>`,
+          {maxWidth:220}
+        );
+      }
+    });
+});
+</script>
+</body>
+</html>

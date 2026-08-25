@@ -1,0 +1,70 @@
+name: GitHub Pages — All communities
+
+on:
+  schedule:
+    - cron: "45 * * * *"   # hourly
+  workflow_dispatch:
+
+concurrency:
+  group: gh-pages-${{ matrix.community }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: update (${{ matrix.community }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        community:
+          - herschel
+          - shingle-point
+          - aklavik
+          - barrow
+          - hendrickson-island
+          - inuvik
+          - paulatuk
+          - police-cabin
+          - prudhoe-bay
+          - sachs-harbour
+          - trail-valley
+          - tuktoyaktuk
+          - ulukhaktok
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests Pillow xarray netcdf4 scipy numpy
+
+      - name: Generate data.json and images
+        run: python scripts/generate_gh_pages.py --community ${{ matrix.community }}
+        env:
+          SENTINEL_HUB_CLIENT_ID: ${{ secrets.SENTINEL_HUB_CLIENT_ID }}
+          SENTINEL_HUB_CLIENT_SECRET: ${{ secrets.SENTINEL_HUB_CLIENT_SECRET }}
+
+      - name: Commit and push docs/
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update gh-pages ${{ matrix.community }} [skip ci]"
+            for i in 1 2 3 4 5; do
+              git pull --rebase origin main && git push && break
+              echo "Push attempt $i failed, retrying in 10s..."
+              sleep 10
+            done
+          fi

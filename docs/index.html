@@ -153,13 +153,13 @@ const TYPE_COLOR = {coastal:"#3AABFF",riverine:"#3FD68A",lake:"#B8A4FF",terrestr
 
 function makeIcon(type){
   const col = TYPE_COLOR[type]||'#3AABFF';
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"><circle cx="11" cy="11" r="8" fill="${col}" stroke="white" stroke-width="2" opacity="0.92"/></svg>`;
+  const html = `<div style="width:30px;height:30px;border-radius:50%;background:#fff;border:2.5px solid ${col};box-shadow:0 1px 5px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;overflow:hidden"><img src="herschel/alfred-logo.png" style="width:22px;height:22px;object-fit:contain"></div>`;
   return L.divIcon({
-    html: svg,
+    html,
     className: '',
-    iconSize: [22,22],
-    iconAnchor: [11,11],
-    popupAnchor: [0,-13],
+    iconSize: [30,30],
+    iconAnchor: [15,15],
+    popupAnchor: [0,-17],
   });
 }
 
@@ -261,6 +261,9 @@ const modisAquaTile  = L.tileLayer(_gibsUrl('MODIS_Aqua_CorrectedReflectance_Tru
   {maxZoom:9, tileSize:256, attribution:'NASA · MODIS Aqua · '+_gibsDate,  crossOrigin:true});
 const osmTile        = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
   {maxZoom:18, attribution:'© OpenStreetMap contributors'});
+const coastlineTile  = L.tileLayer(
+  'https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/Coastlines_15m/default/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.png',
+  {maxZoom:8, tileSize:256, attribution:'NASA GIBS · Coastlines', crossOrigin:true, opacity:1});
 
 // Start with MODIS Terra; fall back to OSM if tiles error out
 let _modisErrorCount = 0;
@@ -272,12 +275,13 @@ modisTerraTile.on('tileerror', () => {
   }
 });
 modisTerraTile.addTo(map);
+coastlineTile.addTo(map);
 
 L.control.layers(
   {['MODIS Terra · '+_gibsDate]: modisTerraTile,
    ['MODIS Aqua · '+_gibsDate]:  modisAquaTile,
    'OpenStreetMap':               osmTile},
-  {},
+  {'Coastlines': coastlineTile},
   {position:'topright', collapsed:false}
 ).addTo(map);
 

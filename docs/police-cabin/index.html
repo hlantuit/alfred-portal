@@ -367,10 +367,9 @@ svg.sp{width:100%;height:auto;display:block}
       <!-- MODIS banner: pre-cropped to 4:1, displays at natural ratio on all screens -->
       <div class="sat-no-img" id="satPlaceholder">Loading imagery…</div>
       <img id="satImg" src="img/modis_banner.jpg" alt="MODIS satellite"
-           onclick="openLb(document.getElementById('modisZoomImg'))"
+           onclick="openLb(this)"
            onload="this.classList.remove('hidden');document.getElementById('satPlaceholder').style.display='none'"
-           onerror="this.src='img/modis.png'">
-      <img id="modisZoomImg" src="img/viirs.png" alt="VIIRS true colour 150km" style="display:none">
+           onerror="this.style.display='none'">
     </div>
     <div class="sat-bar">
       <div class="sat-info">

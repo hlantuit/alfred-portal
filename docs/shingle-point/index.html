@@ -512,7 +512,7 @@ svg.sp{width:100%;height:auto;display:block}
         <div class="ch-title" id="twl-title">Total water level</div>
         <div><span class="ch-val" id="cv-tide">—</span><span class="ch-unit"> m</span></div>
       </div>
-      <div class="ch-area"><svg class="sp" id="tideSVG" viewBox="0 0 800 64" preserveAspectRatio="none"></svg></div>
+      <div class="ch-area"><svg class="sp" id="tideSVG" viewBox="0 0 1000 300"></svg></div>
       <div style="font-size:10px;color:var(--muted);margin-top:6px">DFO IWLS tide prediction · 7-day</div>
     </div>
     <div class="ch">
@@ -520,7 +520,7 @@ svg.sp{width:100%;height:auto;display:block}
         <div class="ch-title">Tide prediction</div>
         <div><span class="ch-val" id="cv-tide-sp">—</span><span class="ch-unit"> m</span></div>
       </div>
-      <div class="ch-area"><svg class="sp" id="tideSparklSVG" viewBox="0 0 800 100" preserveAspectRatio="none"></svg></div>
+      <div class="ch-area"><svg class="sp" id="tideSparklSVG" viewBox="0 0 1000 200"></svg></div>
       <div style="font-size:10px;color:var(--muted);margin-top:6px">DFO IWLS · Shingle Point station 06505</div>
     </div>
   </div>
@@ -544,7 +544,7 @@ svg.sp{width:100%;height:auto;display:block}
           <div class="ch-title" id="river-title">River water level</div>
           <div><span class="ch-val" id="cv-river">—</span><span class="ch-unit"> m</span></div>
         </div>
-        <div class="ch-area"><svg class="sp" id="riverSVG" viewBox="0 0 800 100" preserveAspectRatio="none"></svg></div>
+        <div class="ch-area"><svg class="sp" id="riverSVG" viewBox="0 0 1000 200"></svg></div>
         <div style="font-size:10px;color:var(--muted);margin-top:6px">Water Survey of Canada · 30-day</div>
       </div>
       <!-- Webcam card injected here by JS when community has webcam + river -->
@@ -731,7 +731,7 @@ function sparkline(svgId, data, stroke, times, chartH, decPlaces, bigFont){
   if(vals.length<2) return;
   const hasTimes=times&&times.length===data.length;
   const min=Math.min(...vals),max=Math.max(...vals),rng=max-min||1;
-  const W=800,H=chartH||160,ML=70,MR=6,MT=10,MB=hasTimes?40:10;
+  const W=1000,H=chartH||200,ML=88,MR=8,MT=10,MB=hasTimes?40:10;
   const cW=W-ML-MR,cH=H-MT-MB;
   const px=i=>ML+(cW)*i/(vals.length-1);
   const py=v=>MT+cH*(1-(v-min)/rng);
@@ -759,7 +759,7 @@ function sparkline(svgId, data, stroke, times, chartH, decPlaces, bigFont){
       if(!t) return;
       const dt=new Date(t);
       const dk=dt.toLocaleDateString('en',{timeZone:'UTC',month:'short',day:'numeric'});
-      if(dk!==lastDay){lastDay=dk;const xx=px(i);if(xx>ML+12&&xx<ML+cW-12&&xx-lastXX>=minSep){xl+=`<line x1="${xx.toFixed(1)}" y1="${(MT+cH).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(MT+cH+4).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.35"/><text x="${xx.toFixed(1)}" y="${(H-2).toFixed(1)}" text-anchor="middle" font-size="${12*fs}" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${dk}</text>`;lastXX=xx;}}
+      if(dk!==lastDay){lastDay=dk;const xx=px(i);if(xx>ML+12&&xx<ML+cW-12&&xx-lastXX>=minSep){xl+=`<line x1="${xx.toFixed(1)}" y1="${(MT+cH).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(MT+cH+8).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.35"/><text x="${xx.toFixed(1)}" y="${(H-2).toFixed(1)}" text-anchor="middle" font-size="${12*fs}" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${dk}</text>`;lastXX=xx;}}
     });
     return xl;
   }
@@ -767,8 +767,8 @@ function sparkline(svgId, data, stroke, times, chartH, decPlaces, bigFont){
     svg.innerHTML=`<defs><linearGradient id="g${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${stroke}" stop-opacity="0.18"/><stop offset="100%" stop-color="${stroke}" stop-opacity="0.01"/></linearGradient><clipPath id="spclip_${svgId}"><rect x="${ML}" y="${MT}" width="${cW}" height="${cH}"/></clipPath></defs>${yLabels}${genSpXlabels(cPx)}<path d="${dF}" fill="url(#g${svgId})"/><path d="${dL}" fill="none" stroke="${stroke}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="4" fill="${stroke}" stroke="white" stroke-width="1.5"/><line id="${spXhId}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="${stroke}" stroke-width="1" stroke-dasharray="3,2" opacity="0.45"/><circle id="${spDotId}" cx="0" cy="0" r="4" fill="${stroke}" stroke="white" stroke-width="1.5" visibility="hidden" clip-path="url(#spclip_${svgId})"/>`;
   }
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-  svg.setAttribute('preserveAspectRatio','none');
-  svg.style.cssText='width:100%;display:block;cursor:crosshair;overflow:visible';
+  svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+  svg.style.cssText='width:100%;height:auto;display:block;cursor:crosshair;overflow:visible';
   renderSpInner(svg.parentElement?svg.parentElement.getBoundingClientRect().width:0);
   if(window.ResizeObserver&&svg.parentElement){const _ro=new ResizeObserver(es=>renderSpInner(es[0].contentRect.width));_ro.observe(svg.parentElement);}
   svg.parentElement.style.position='relative';
@@ -803,7 +803,7 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback, bigFont){
   const fs=bigFont?2:1;
   const primary = topaz || gdsps || tide_fallback;
   if(!primary?.series?.length) return;
-  const W=800,H=240,ML=52,MR=8,MT=8,MB=30;
+  const W=1000,H=300,ML=65,MR=10,MT=8,MB=30;
   const cW=W-ML-MR,cH=H-MT-MB;
   const allVals=[...(topaz?.series||[]),...(gdsps?.series||[]),...(primary===tide_fallback?tide_fallback.series:[])].map(p=>p.m).filter(v=>v!=null);
   if(!allVals.length) return;
@@ -839,14 +839,15 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback, bigFont){
   // X date labels
   const primSeries=(topaz||gdsps||tide_fallback).series;
   let xlabels='';
-  {let lastDay='';primSeries.forEach((p,i)=>{if(!p.t)return;const dt=new Date(p.t);const dk=dt.toLocaleDateString('en',{timeZone:'UTC',month:'short',day:'numeric'});if(dk!==lastDay){lastDay=dk;const xx=ML+cW*i/(primSeries.length-1);if(xx>ML+12&&xx<ML+cW-12){xlabels+=`<line x1="${xx.toFixed(1)}" y1="${(MT+cH).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(MT+cH+4).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.35"/><text x="${xx.toFixed(1)}" y="${(H-4).toFixed(1)}" text-anchor="middle" font-size="${12*fs}" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${dk}</text>`;}}});}
+  {let lastDay='';primSeries.forEach((p,i)=>{if(!p.t)return;const dt=new Date(p.t);const dk=dt.toLocaleDateString('en',{timeZone:'UTC',month:'short',day:'numeric'});if(dk!==lastDay){lastDay=dk;const xx=ML+cW*i/(primSeries.length-1);if(xx>ML+12&&xx<ML+cW-12){xlabels+=`<line x1="${xx.toFixed(1)}" y1="${(MT+cH).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(MT+cH+8).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.35"/><text x="${xx.toFixed(1)}" y="${(H-4).toFixed(1)}" text-anchor="middle" font-size="${12*fs}" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${dk}</text>`;}}});}
   const xhId=`wlxh_${svgId}`,wlDotId=`wldot_${svgId}`;
   const _tsArr=primSeries.map(p=>new Date(p.t).getTime());
   const _nowFrac=(Date.now()-_tsArr[0])/(_tsArr[_tsArr.length-1]-_tsArr[0]);
   const _nowX=(ML+cW*Math.max(0,Math.min(1,_nowFrac))).toFixed(1);
   const wlNowMark=(_nowFrac>=-0.01&&_nowFrac<=1.01)?`<line x1="${_nowX}" y1="${MT}" x2="${_nowX}" y2="${MT+cH}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/><text x="${(parseFloat(_nowX)+5).toFixed(1)}" y="${(MT+18).toFixed(1)}" font-size="${16*fs}" fill="#C0392B" font-weight="700" font-family="system-ui,sans-serif">now</text>`:'';
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
-  svg.style.cssText='width:100%;display:block;cursor:crosshair;overflow:visible';
+  svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+  svg.style.cssText='width:100%;height:auto;display:block;cursor:crosshair;overflow:visible';
   svg.innerHTML=`<defs><clipPath id="wlclip_${svgId}"><rect x="${ML}" y="${MT}" width="${cW}" height="${cH}"/></clipPath></defs>${yLabels}${refLine}${curves}${legend}${xlabels}${wlNowMark}<line id="${xhId}" x1="-2" y1="${MT}" x2="-2" y2="${MT+cH}" stroke="#3B2A8C" stroke-width="1" stroke-dasharray="3,2" opacity="0.4"/><circle id="${wlDotId}" cx="0" cy="0" r="4" fill="${TOPAZ_COLOR}" stroke="white" stroke-width="1.5" visibility="hidden" clip-path="url(#wlclip_${svgId})"/>`;
   svg.parentElement.style.position='relative';
   const tip2=Object.assign(document.createElement('div'),{});
@@ -954,7 +955,7 @@ function renderChart(containerId, vals, opts){
         lastDay=dayKey;
         const xx=px(i);
         if(xx>ML+12&&xx<ML+cW-12){
-          xlabels+=`<line x1="${xx.toFixed(1)}" y1="${(MT+cH).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(MT+cH+4).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.2"/>`;
+          xlabels+=`<line x1="${xx.toFixed(1)}" y1="${(MT+cH).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(MT+cH+8).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.2"/>`;
           xlabels+=`<text x="${xx.toFixed(1)}" y="${(H-5).toFixed(1)}" text-anchor="middle" font-size="${12*fs}" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${dayKey}</text>`;
         }
       }
@@ -1096,7 +1097,7 @@ function renderPrecipChart(containerId, rain, snow, times, tz, bigFont){
         lastDay=dayKey;
         const xx=ML+cW*i/(n-1);
         if(xx>ML+15&&xx<ML+cW-15){
-          xlabels+=`<line x1="${xx.toFixed(1)}" y1="${(MT+cH).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(MT+cH+4).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.2"/>`;
+          xlabels+=`<line x1="${xx.toFixed(1)}" y1="${(MT+cH).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(MT+cH+8).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.2"/>`;
           xlabels+=`<text x="${xx.toFixed(1)}" y="${(H-5).toFixed(1)}" text-anchor="middle" font-size="${12*fs}" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${dayKey}</text>`;
         }
       }
@@ -1176,7 +1177,7 @@ function renderWaveChart(containerId, series, tz, bigFont){
     const xx=px(d.getTime());
     if(xx>ML+15&&xx<ML+cW-15){
       const lbl=d.toLocaleDateString('en',{timeZone:tz,month:'short',day:'numeric'});
-      xlabels+=`<line x1="${xx.toFixed(1)}" y1="${MT}" x2="${xx.toFixed(1)}" y2="${(MT+cH+4).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.25"/>`;
+      xlabels+=`<line x1="${xx.toFixed(1)}" y1="${MT}" x2="${xx.toFixed(1)}" y2="${(MT+cH+8).toFixed(1)}" stroke="currentColor" stroke-width="1" opacity="0.25"/>`;
       xlabels+=`<text x="${xx.toFixed(1)}" y="${(H-MB+20).toFixed(1)}" text-anchor="middle" font-size="${12*fs}" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${lbl}</text>`;
     }
     d=new Date(d.getTime()+dayMs);

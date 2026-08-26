@@ -371,6 +371,25 @@ def fetch_weather(lat, lon, tz):
         return 0.70 + (200 - vis_m) / 200 * 0.30          # 0.70–1.00
 
     vis_h  = hourly.get("visibility", [])
+    # gem_seamless sometimes drops visibility — fall back to best_match
+    if not vis_h or all(v is None for v in vis_h):
+        try:
+            _r_vis = get_with_retry(
+                "https://api.open-meteo.com/v1/forecast",
+                params={
+                    "latitude": lat, "longitude": lon,
+                    "hourly": "visibility",
+                    "timezone": tz,
+                    "forecast_days": 10,
+                },
+                timeout=20,
+            )
+            _vis2 = _r_vis.json().get("hourly", {}).get("visibility", [])
+            if _vis2:
+                vis_h = _vis2
+                print(f"  Visibility from best_match: {len(vis_h)} points")
+        except Exception as _ve:
+            print(f"  Visibility best_match fallback failed: {_ve}")
     rh_h   = hourly.get("relativehumidity_2m", [])
     t_h    = hourly.get("temperature_2m", [])
     ws_h   = hourly.get("windspeed_10m", [])
@@ -779,10 +798,12 @@ def fetch_river(station_id, provterr):
     except Exception as e:
         print(f"  WSC OGC daily-mean failed for {station_id}: {e}")
 
-    # Method 1c: Datamart daily CSV fallback if OGC daily-mean returned nothing
-    if not daily_rows:
+    # Method 1c: Datamart daily CSV — always run when OGC has < 25 days; adds missing dates
+    if len(daily_rows) < 25:
         prov_up = provterr.upper()
         cutoff = (_date.today() - _td(days=31)).strftime("%Y-%m-%d")
+        _ogc_dates = {r["t"][:10] for r in daily_rows}
+        _added = 0
         for _url in [
             f"https://dd.weather.gc.ca/hydrometric/csv/{prov_up}/daily/{prov_up}_{station_id}_daily_hydrometric.csv",
             f"https://dd.weather.gc.ca/today/hydrometric/csv/{prov_up}/daily/{prov_up}_{station_id}_daily_hydrometric.csv",
@@ -808,18 +829,25 @@ def fetch_river(station_id, provterr):
                         try:
                             _m = float(_parts[_level_idx].strip().strip('"'))
                             _ts = _parts[1].strip().strip('"') if len(_parts) > 1 else ""
-                            if _ts and _ts[:10] >= cutoff:
-                                daily_rows.append({"t": _ts, "m": round(_m, 3)})
+                            _d = _ts[:10] if _ts else ""
+                            # Only add dates not already covered by OGC
+                            if _d and _d >= cutoff and _d not in _ogc_dates:
+                                daily_rows.append({"t": _d, "m": round(_m, 3)})
+                                _ogc_dates.add(_d)
+                                _added += 1
                         except ValueError:
                             continue
-                if daily_rows:
+                if _added:
                     daily_rows.sort(key=lambda x: x["t"])
-                    if current_m is None:
+                    if current_m is None and daily_rows:
                         current_m = daily_rows[-1]["m"]
-                    print(f"  WSC Datamart daily CSV (30-day fallback): {len(daily_rows)} rows for {station_id}")
+                    print(f"  WSC Datamart daily CSV: +{_added} rows for {station_id} (total {len(daily_rows)})")
+                    break
+                elif len(_lines) > 2:
+                    print(f"  WSC Datamart daily CSV: fetched but no new dates for {station_id}")
                     break
             except Exception as _e:
-                print(f"  WSC Datamart daily CSV fallback failed ({_url}): {_e}")
+                print(f"  WSC Datamart daily CSV failed ({_url}): {_e}")
 
     # Merge: daily rows for backdrop, then real-time for the recent days
     # Deduplicate by date prefix — real-time wins for same-day entries
@@ -1166,10 +1194,16 @@ def main():
 
                         # Build the full list of points to label
                         banner_pts = list(cfg.get("map_points", []))  # [lat, lon, label, dy?]
-                        # Pre-seed dedup set with all existing map_points so the other-communities
-                        # loop can't re-add a point that's already labelled from map_points
-                        labeled_coords = {(round(float(p[0]), 1), round(float(p[1]), 1)) for p in banner_pts if len(p) >= 2}
+
+                        def _pt_near(la, lo, tol_lat=0.25, tol_lon=0.4):
+                            """True if (la,lo) is within tolerance of any existing banner_pt."""
+                            return any(
+                                abs(float(p[0])-la) < tol_lat and abs(float(p[1])-lo) < tol_lon
+                                for p in banner_pts if len(p) >= 2
+                            )
+
                         # Add all other community centre points that fall in this banner
+                        # Skip any whose center is already near an existing map_point
                         for _other_cfg_path in sorted(COMMUNITIES_DIR.glob("*/config.json")):
                             try:
                                 import json as _json
@@ -1179,24 +1213,11 @@ def main():
                                 if not (lon_w < _olon < lon_e and lat_s < _olat < lat_n):
                                     continue
                                 _olbl = _oc.get("site_display_name") or _oc.get("name", "")
-                                # Deduplicate if very close to an existing map_point
-                                _key = (round(_olat, 1), round(_olon, 1))
-                                if _key in labeled_coords:
+                                if _pt_near(_olat, _olon):
                                     continue
-                                labeled_coords.add(_key)
                                 banner_pts.append([_olat, _olon, _olbl])
                             except Exception:
                                 pass
-
-                        # Post-process dedup: remove any coordinate duplicates before drawing
-                        _seen_coords = set()
-                        _deduped = []
-                        for _pt in banner_pts:
-                            _pk = (round(float(_pt[0]), 1), round(float(_pt[1]), 1))
-                            if _pk not in _seen_coords:
-                                _seen_coords.add(_pk)
-                                _deduped.append(_pt)
-                        banner_pts = _deduped
 
                         # Collision-aware label placement
                         placed_boxes = []  # list of (x0,y0,x1,y1) already used
@@ -1394,7 +1415,7 @@ def main():
         return img
 
     # ── VIIRS NOAA-20 true color (EPSG:3413, north-up) ──
-    def fetch_viirs_image(out_path, max_hours_back=72):
+    def fetch_viirs_image(out_path, max_hours_back=168):
         import io as _io, re as _re_v
         from datetime import datetime as _dtv, timedelta as _tdv
         bbox_3413 = cfg.get("modis_bbox_3413")
@@ -1495,6 +1516,9 @@ def main():
                         _carr = _np.array(cropped.crop((350, 350, 650, 650)))
                         _pure_black = (_carr.max(axis=2) == 0)  # pixels where all channels = 0
                         _nodata_frac = _pure_black.mean()
+                        if _nodata_frac > 0.80:
+                            print(f"  VIIRS {layer} {_viirs_date_str}: centre {_nodata_frac:.0%} no-data — skipping (no satellite pass)")
+                            continue
                         print(f"  VIIRS {layer} {_viirs_date_str}: centre {_nodata_frac:.0%} no-data — using")
                         # Compute metres per pixel from bbox
                         try:

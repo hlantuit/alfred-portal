@@ -1463,12 +1463,15 @@ def main():
             except Exception as _ce:
                 print(f"  VIIRS CMR {_short} failed: {_ce}")
 
-        # Sort most-recent first, deduplicate by timestamp
+        # Sort most-recent first, deduplicate by (layer, date) — GIBS accepts one
+        # granule per layer per day; multiple CMR timestamps on the same date would
+        # produce identical GIBS requests, so keep only the most-recent per layer+date.
         _candidates.sort(key=lambda x: x[0], reverse=True)
-        _seen_ts, _dedup = set(), []
+        _seen_ld, _dedup = set(), []
         for _c in _candidates:
-            if _c[0] not in _seen_ts:
-                _seen_ts.add(_c[0]); _dedup.append(_c)
+            _key = (_c[1], _c[0][:10])
+            if _key not in _seen_ld:
+                _seen_ld.add(_key); _dedup.append(_c)
         _candidates = _dedup
 
         # Fall back to day-by-day date list if CMR returned nothing
@@ -1497,7 +1500,7 @@ def main():
                             "SRS": "EPSG:3413",
                             "BBOX": bbox_3413,
                             "WIDTH": "1500", "HEIGHT": "1500",
-                            "TIME": _viirs_date_str[:10],  # GIBS WMS accepts YYYY-MM-DD
+                            "TIME": _viirs_date_str,  # full ISO datetime → GIBS picks exact granule
                         },
                         timeout=30,
                     )

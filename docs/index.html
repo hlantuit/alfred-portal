@@ -153,7 +153,7 @@ const TYPE_COLOR = {coastal:"#3AABFF",riverine:"#3FD68A",lake:"#B8A4FF",terrestr
 
 function makeIcon(type){
   const col = TYPE_COLOR[type]||'#3AABFF';
-  const html = `<div style="width:30px;height:30px;border-radius:50%;background:#fff;border:2.5px solid ${col};box-shadow:0 1px 5px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;overflow:hidden"><img src="herschel/alfred-logo.png" style="width:22px;height:22px;object-fit:contain"></div>`;
+  const html = `<div style="width:30px;height:30px;border-radius:7px;background:#fff;border:2.5px solid ${col};box-shadow:0 1px 5px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;overflow:hidden"><img src="herschel/alfred-logo.png" style="width:22px;height:22px;object-fit:contain"></div>`;
   return L.divIcon({
     html,
     className: '',

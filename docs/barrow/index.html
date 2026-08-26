@@ -817,7 +817,7 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback, bigFont){
   for(let _v=Math.ceil(minV/_wlS-0.0001)*_wlS;_v<=maxV+_wlS*0.001;_v=Math.round((_v+_wlS)*100000)/100000){
     const _gy=MT+cH*(1-(_v-minV)/span);
     if(_gy<MT-2||_gy>MT+cH+2) continue;
-    wlGrids+=`<line x1="${ML}" y1="${_gy.toFixed(1)}" x2="${ML+cW}" y2="${_gy.toFixed(1)}" stroke="currentColor" stroke-width="1.5" opacity="0.25"/><text x="${(ML-5).toFixed(1)}" y="${(_gy+5).toFixed(1)}" text-anchor="end" font-size="${16*fs}" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${fmtY(_v)}</text>`;
+    wlGrids+=`<line x1="${ML}" y1="${_gy.toFixed(1)}" x2="${ML+cW}" y2="${_gy.toFixed(1)}" stroke="currentColor" stroke-width="1.5" opacity="0.25"/><text x="${(ML-5).toFixed(1)}" y="${(_gy+5).toFixed(1)}" text-anchor="end" font-size="${13*fs}" fill="currentColor" opacity="0.80" font-family="system-ui,sans-serif">${fmtY(_v)}</text>`;
   }
   const yLabels=wlGrids;
   const TOPAZ_COLOR='#3B2A8C',GDSPS_COLOR='#9B8FD8';
@@ -827,7 +827,7 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback, bigFont){
   if(t.dL) curves+=`<defs><linearGradient id="gT_${svgId}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${TOPAZ_COLOR}" stop-opacity="0.18"/><stop offset="100%" stop-color="${TOPAZ_COLOR}" stop-opacity="0.01"/></linearGradient></defs><path d="${t.dF}" fill="url(#gT_${svgId})"/><path d="${t.dL}" fill="none" stroke="${TOPAZ_COLOR}" stroke-width="2.5" stroke-linejoin="round"/>`;
   if(fb.dL) curves+=`<path d="${fb.dL}" fill="none" stroke="#1B6CA8" stroke-width="2" stroke-linejoin="round"/>`;
   const _legX=(ML+cW*0.38).toFixed(1);
-  const legend=(t.dL&&g.dL)?`<text x="${_legX}" y="${(MT+18).toFixed(1)}" text-anchor="start" font-size="${16*fs}" fill="${TOPAZ_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ TOPAZ6</text><text x="${_legX}" y="${(MT+18+20*fs).toFixed(1)}" text-anchor="start" font-size="${16*fs}" fill="${GDSPS_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ GDSPS</text>`:'';
+  const legend=(t.dL&&g.dL)?`<text x="${_legX}" y="${(MT+18).toFixed(1)}" text-anchor="start" font-size="${13*fs}" fill="${TOPAZ_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ TOPAZ6</text><text x="${_legX}" y="${(MT+18+16*fs).toFixed(1)}" text-anchor="start" font-size="${13*fs}" fill="${GDSPS_COLOR}" font-family="system-ui,sans-serif" opacity="0.85">■ GDSPS</text>`:'';
   // X date labels
   const primSeries=(topaz||gdsps||tide_fallback).series;
   let xlabels='';
@@ -836,7 +836,7 @@ function renderWaterLevel(svgId, topaz, gdsps, tide_fallback, bigFont){
   const _tsArr=primSeries.map(p=>new Date(p.t).getTime());
   const _nowFrac=(Date.now()-_tsArr[0])/(_tsArr[_tsArr.length-1]-_tsArr[0]);
   const _nowX=(ML+cW*Math.max(0,Math.min(1,_nowFrac))).toFixed(1);
-  const wlNowMark=(_nowFrac>=-0.01&&_nowFrac<=1.01)?`<line x1="${_nowX}" y1="${MT}" x2="${_nowX}" y2="${MT+cH}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/><text x="${(parseFloat(_nowX)+5).toFixed(1)}" y="${(MT+18).toFixed(1)}" font-size="${16*fs}" fill="#C0392B" font-weight="700" font-family="system-ui,sans-serif">now</text>`:'';
+  const wlNowMark=(_nowFrac>=-0.01&&_nowFrac<=1.01)?`<line x1="${_nowX}" y1="${MT}" x2="${_nowX}" y2="${MT+cH}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="4,2"/><text x="${(parseFloat(_nowX)+5).toFixed(1)}" y="${(MT+18).toFixed(1)}" font-size="${13*fs}" fill="#C0392B" font-weight="700" font-family="system-ui,sans-serif">now</text>`:'';
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
   svg.setAttribute('preserveAspectRatio','xMidYMid meet');
   svg.style.cssText='width:100%;height:auto;display:block;cursor:crosshair;overflow:visible';

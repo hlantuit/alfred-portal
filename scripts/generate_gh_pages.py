@@ -1513,13 +1513,13 @@ def main():
                         # No-data in GIBS VIIRS is pure black (0,0,0). Dark ocean/water
                         # has small but non-zero channel values and must NOT be rejected.
                         import numpy as _np
-                        _carr = _np.array(cropped.crop((350, 350, 650, 650)))
-                        _pure_black = (_carr.max(axis=2) == 0)  # pixels where all channels = 0
+                        _carr = _np.array(cropped)
+                        _pure_black = (_carr.max(axis=2) == 0)  # pixels where all RGB channels = 0
                         _nodata_frac = _pure_black.mean()
-                        if _nodata_frac > 0.80:
-                            print(f"  VIIRS {layer} {_viirs_date_str}: centre {_nodata_frac:.0%} no-data — skipping (no satellite pass)")
+                        if _nodata_frac > 0.95:
+                            print(f"  VIIRS {layer} {_viirs_date_str}: {_nodata_frac:.0%} no-data — skipping (no satellite pass)")
                             continue
-                        print(f"  VIIRS {layer} {_viirs_date_str}: centre {_nodata_frac:.0%} no-data — using")
+                        print(f"  VIIRS {layer} {_viirs_date_str}: {_nodata_frac:.0%} no-data — using")
                         # Compute metres per pixel from bbox
                         try:
                             _bparts = [float(x) for x in bbox_3413.split(",")]

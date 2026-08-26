@@ -1788,7 +1788,7 @@ async function loadData(){
 
   // Tide sparkline (standalone — shows predicted tide curve)
   if(tide?.series?.length){
-    sparkline('tideSparklSVG', tide.series.map(p=>p.m), STEEL, tide.series.map(p=>p.t), 240, 2);
+    sparkline('tideSparklSVG', tide.series.map(p=>p.m), STEEL, tide.series.map(p=>p.t), 240, 2, true);
     if(tide.current_m!=null) document.getElementById('cv-tide-sp').textContent=(tide.current_m>0?'+':'')+parseFloat(tide.current_m).toFixed(2);
   }
 

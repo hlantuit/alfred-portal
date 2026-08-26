@@ -585,6 +585,72 @@ def fetch_tide(station_code, station_name, now_utc):
     }
 
 
+def fetch_tide_noaa(station_id, now_utc):
+    """Tide predictions from NOAA CO-OPS API (for US communities)."""
+    from datetime import timedelta
+    try:
+        begin = now_utc - timedelta(hours=6)
+        end = now_utc + timedelta(days=7)
+        r = get_with_retry(
+            "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter",
+            params={
+                "station": station_id,
+                "product": "predictions",
+                "datum": "MLLW",
+                "time_zone": "gmt",
+                "interval": "h",
+                "format": "json",
+                "begin_date": begin.strftime("%Y%m%d"),
+                "end_date": end.strftime("%Y%m%d"),
+                "units": "metric",
+            },
+            timeout=30,
+        )
+        data = r.json()
+        predictions = data.get("predictions", [])
+        if not predictions:
+            print(f"  NOAA tide: no predictions for station {station_id}")
+            return None
+        points = [{"t": p["t"].replace(" ", "T") + "Z", "v": float(p["v"])} for p in predictions if p.get("v") not in (None, "")]
+        if not points:
+            return None
+        now_ts = now_utc.timestamp()
+        best = min(points, key=lambda p: abs(datetime.fromisoformat(p["t"].replace("Z", "+00:00")).timestamp() - now_ts))
+        current_m = round(best["v"], 3)
+        idx_now = points.index(best)
+        trend = "steady"
+        if idx_now >= 6:
+            delta = best["v"] - points[idx_now - 6]["v"]
+            if delta > 0.03:
+                trend = "rising"
+            elif delta < -0.03:
+                trend = "falling"
+        future = [p for p in points if datetime.fromisoformat(p["t"].replace("Z", "+00:00")).timestamp() > now_ts]
+        highs, lows = [], []
+        for i in range(1, len(future) - 1):
+            v = future[i]["v"]
+            if v > future[i-1]["v"] and v > future[i+1]["v"]:
+                highs.append(future[i])
+            elif v < future[i-1]["v"] and v < future[i+1]["v"]:
+                lows.append(future[i])
+        def fmt_extreme(lst):
+            if not lst:
+                return None
+            return {"time_utc": lst[0]["t"], "m": round(lst[0]["v"], 2)}
+        series = [{"t": p["t"], "m": round(p["v"], 3)} for p in points]
+        print(f"  NOAA tide: {len(series)} pts, current={current_m} m MLLW, station {station_id}")
+        return {
+            "current_m": current_m,
+            "trend": trend,
+            "next_high": fmt_extreme(highs),
+            "next_low": fmt_extreme(lows),
+            "series": series,
+        }
+    except Exception as e:
+        print(f"  NOAA tide fetch failed for station {station_id}: {e}")
+        return None
+
+
 # ── Total water level: TOPAZ6 (Copernicus) + GDSPS (MSC) ────────────────
 
 def _latlon_to_topaz6(lat_deg, lon_deg):
@@ -868,7 +934,11 @@ def fetch_river(station_id, provterr):
         series.sort(key=lambda x: x["t"])
         if current_m is not None:
             print(f"  WSC merged series: {len(series)} rows for {station_id}")
-            return {"current_m": current_m, "series": series}
+            return {
+                "current_m": current_m,
+                "series": series,
+                "realtime_series": realtime_rows if realtime_rows else None,
+            }
 
     print(f"  WSC OGC: no data for {station_id}, falling back to Datamart")
 
@@ -1109,6 +1179,9 @@ def main():
         if cfg.get("tide_station_code"):
             print(f"Fetching tides (IWLS {cfg['tide_station_code']})…")
             tide = fetch_tide(cfg["tide_station_code"], cfg.get("tide_station_name", ""), now_utc)
+        if not tide and cfg.get("noaa_tide_station_id"):
+            print(f"Fetching tides (NOAA CO-OPS {cfg['noaa_tide_station_id']})…")
+            tide = fetch_tide_noaa(cfg["noaa_tide_station_id"], now_utc)
 
     rivers = []
     for stn in cfg.get("hydrometric_stations", []):
@@ -1145,7 +1218,10 @@ def main():
             print(f"  River fetch failed for {sid}")
 
     print("Fetching wave height…")
-    wave = fetch_wave(lat, lon, tz)
+    wave_lat = cfg.get("wave_lat") or lat
+    wave_lon_val = cfg.get("wave_lon")
+    wave_lon = wave_lon_val if (wave_lon_val is not None and wave_lon_val != "") else lon
+    wave = fetch_wave(wave_lat, wave_lon, tz)
 
     # Fetch wide MODIS banner image from NASA GIBS (landscape, centred on site)
     def fetch_modis_banner(lat, lon, out_path):

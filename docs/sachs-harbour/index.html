@@ -545,7 +545,7 @@ svg.sp{width:100%;height:auto;display:block}
           <div><span class="ch-val" id="cv-river">—</span><span class="ch-unit"> m</span></div>
         </div>
         <div class="ch-area"><svg class="sp" id="riverSVG" viewBox="0 0 1000 200"></svg></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:6px">Water Survey of Canada · 30-day</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">Water Survey of Canada · hourly · 7-day</div>
       </div>
       <!-- Webcam card injected here by JS when community has webcam + river -->
       <div id="river-webcam-slot" style="display:none">
@@ -630,6 +630,10 @@ svg.sp{width:100%;height:auto;display:block}
     <a class="lk" href="https://www.tides.gc.ca/en/stations/06424" target="_blank" rel="noopener">
       <span class="lk-ico">🌊</span>
       <div><div class="lk-label">Tide gauge — Sachs Harbour</div><div class="lk-src">Fisheries & Oceans Canada · Stn 06424</div></div>
+    </a>
+    <a class="lk" href="https://weather.gc.ca/marine/region_e.html?id=MID" target="_blank" rel="noopener">
+      <span class="lk-ico">⛅</span>
+      <div><div class="lk-label">Banks Island marine forecast</div><div class="lk-src">Environment Canada · Zone 00800</div></div>
     </a>
     <a class="lk" href="https://weather.gc.ca/warnings/index_e.html?prov=nt" target="_blank" rel="noopener">
       <span class="lk-ico">⚠️</span>
@@ -1860,7 +1864,8 @@ async function loadData(){
     if(sro) sro.style.display='';
     // Hide tide row if no tide data
     if(!tide&&!twl){const tr=document.getElementById('tide-row');if(tr)tr.style.display='none';}
-    if(rv.series?.length) sparkline('riverSVG', rv.series.map(p=>p.m), GREEN, rv.series.map(p=>p.t), 240, 2, true);
+    const _rvSeries = rv.realtime_series?.length ? rv.realtime_series : rv.series;
+    if(_rvSeries?.length) sparkline('riverSVG', _rvSeries.map(p=>p.m), GREEN, _rvSeries.map(p=>p.t), 240, 1, true);
     if(rv.current_m!=null) document.getElementById('cv-river').textContent=rv.current_m;
     const short=(rv.river_name||'River').split(',')[0];
     document.getElementById('river-title').textContent=short;

@@ -1504,10 +1504,13 @@ def main():
         _now_v = _dtv.utcnow()
         _start_v = _now_v - _tdv(hours=max_hours_back)
 
-        # Step 1: find the most recent granules covering the site via CMR
+        # Step 1: find the most recent granules covering the site via CMR.
+        # GIBS retired the *_NRT layer names (LayerNotDefined since ~Aug 2026);
+        # the "best" endpoint serves NRT imagery under the standard layer names,
+        # so NRT CMR collections map to the standard GIBS layers too.
         _cmr_map = [
-            ("VJ109GA_NRT", "VIIRS_NOAA20_CorrectedReflectance_TrueColor_NRT"),
-            ("VNP09GA_NRT", "VIIRS_SNPP_CorrectedReflectance_TrueColor_NRT"),
+            ("VJ109GA_NRT", "VIIRS_NOAA20_CorrectedReflectance_TrueColor"),
+            ("VNP09GA_NRT", "VIIRS_SNPP_CorrectedReflectance_TrueColor"),
             ("VJ109GA",     "VIIRS_NOAA20_CorrectedReflectance_TrueColor"),
             ("VNP09GA",     "VIIRS_SNPP_CorrectedReflectance_TrueColor"),
         ]
@@ -1535,6 +1538,14 @@ def main():
                             _gd = _dtv(_gm.group(1).__class__(int(_gm.group(1))), 1, 1) + _tdv(days=int(_gm.group(2))-1)
                             _ts = f"{_gd.strftime('%Y-%m-%d')}T{_gm.group(3)}:{_gm.group(4)}:00Z"
                     if _ts:
+                        # GIBS rejects fractional seconds in TIME (400 Invalid
+                        # time format); CMR time_start carries ".000Z" — strip it.
+                        _ts = _re_v.sub(r'\.\d+Z$', 'Z', _ts)
+                        # 09GA daily composites are timestamped midnight UTC — a
+                        # placeholder, not an overpass time. Reduce to date-only
+                        # so labels don't show a fake local time (and shift the
+                        # date back a day in western timezones).
+                        _ts = _re_v.sub(r'T00:00:00Z$', '', _ts)
                         _candidates.append((_ts, _gibs_layer))
             except Exception as _ce:
                 print(f"  VIIRS CMR {_short} failed: {_ce}")
@@ -1556,11 +1567,21 @@ def main():
             from datetime import date as _ddate
             for _delta in range(0, 5):
                 _d = _ddate.today() - _tdv(days=_delta)
-                for _lyr in ["VIIRS_NOAA20_CorrectedReflectance_TrueColor_NRT",
-                             "VIIRS_SNPP_CorrectedReflectance_TrueColor_NRT",
-                             "VIIRS_NOAA20_CorrectedReflectance_TrueColor",
+                for _lyr in ["VIIRS_NOAA20_CorrectedReflectance_TrueColor",
                              "VIIRS_SNPP_CorrectedReflectance_TrueColor"]:
                     _candidates.append((_d.strftime("%Y-%m-%d"), _lyr))
+
+        # CMR indexing of the daily 09GA composites lags GIBS ingest by ~1 day,
+        # so probe today/yesterday date-only first; the no-data check skips
+        # dates GIBS hasn't ingested yet.
+        _fresh = []
+        for _delta in (0, 1):
+            _d_str = (_now_v - _tdv(days=_delta)).strftime("%Y-%m-%d")
+            for _lyr in ["VIIRS_NOAA20_CorrectedReflectance_TrueColor",
+                         "VIIRS_SNPP_CorrectedReflectance_TrueColor"]:
+                if all(not (c[0].startswith(_d_str) and c[1] == _lyr) for c in _candidates):
+                    _fresh.append((_d_str, _lyr))
+        _candidates = _fresh + _candidates
 
         # Step 2: try each candidate with exact TIME in GIBS
         for _viirs_date_str, layer in _candidates[:12]:
@@ -1576,7 +1597,7 @@ def main():
                             "SRS": "EPSG:3413",
                             "BBOX": bbox_3413,
                             "WIDTH": "1500", "HEIGHT": "1500",
-                            "TIME": _viirs_date_str,  # full ISO datetime → GIBS picks exact granule
+                            "TIME": _viirs_date_str,  # date-only for daily composites; ISO datetime kept if CMR gave a real overpass time
                         },
                         timeout=30,
                     )
@@ -1684,6 +1705,9 @@ def main():
                         src = "NOAA-20" if "NOAA20" in layer else "SNPP"
                         print(f"  VIIRS ({src}): {_viirs_date_str} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
                         return _viirs_date_str  # full ISO datetime if CMR succeeded
+                    else:
+                        _err = r.content[:200].decode("utf-8", "replace").replace("\n", " ")
+                        print(f"  VIIRS {layer} {_viirs_date_str}: non-PNG response ({r.status_code}) {_err}")
                 except Exception as e:
                     print(f"  VIIRS {layer} {_viirs_date_str} failed: {e}")
         print("  VIIRS unavailable")

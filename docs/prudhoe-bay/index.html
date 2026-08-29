@@ -564,7 +564,7 @@ svg.sp{width:100%;height:auto;display:block}
   <div class="img-row-3">
     <div class="img-card" onclick="openLb(this.querySelector('img'))">
       <img src="img/viirs.png" alt="VIIRS true color" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">VIIRS NOAA-20 · true color · 150 km · <span id="viirs-date">—</span></div>
+      <div class="img-cap">VIIRS <span id="viirs-sat">NOAA-20</span> · true color · 150 km · <span id="viirs-date">—</span></div>
     </div>
     <div class="img-card" onclick="openLb(this.querySelector('img'))">
       <img src="img/s2_150.png" alt="Sentinel-2 true color 150 km" onerror="this.closest('.img-card').style.display='none'">
@@ -1657,6 +1657,7 @@ async function loadData(){
   const _tz=d.community&&d.community.tz?d.community.tz:'UTC';
   const _fmtDate=s=>{if(!s)return'—';const hasTime=s.includes('T');if(!hasTime)return new Date(s+'T12:00:00Z').toLocaleDateString('en-CA',{month:'short',day:'numeric',timeZone:'UTC'});const dt=new Date(s);return dt.toLocaleDateString('en-CA',{month:'short',day:'numeric',timeZone:_tz})+' '+dt.toLocaleTimeString('en-CA',{hour:'2-digit',minute:'2-digit',timeZoneName:'short',timeZone:_tz});};
   document.getElementById('viirs-date').textContent=_fmtDate(d.viirs_date);
+  if(d.viirs_sat) document.getElementById('viirs-sat').textContent=d.viirs_sat;
   document.getElementById('s2-date').textContent=_fmtDate(d.s2_date);
   document.getElementById('s2-date-zoom').textContent=_fmtDate(d.s2_date);
 

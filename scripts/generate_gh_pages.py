@@ -1503,8 +1503,220 @@ def main():
         _lat_v = cfg.get("lat", 69)
         _now_v = _dtv.utcnow()
         _start_v = _now_v - _tdv(hours=max_hours_back)
+        _png_magic = b"\x89PNG\r\n\x1a\n"
 
-        # Step 1: find the most recent granules covering the site via CMR.
+        def _gibs_getmap(_layer, _time_str):
+            """One GIBS WMS GetMap; returns an RGB PIL image or None."""
+            from PIL import Image as _Img
+            r = get_with_retry(
+                "https://gibs.earthdata.nasa.gov/wms/epsg3413/best/wms.cgi",
+                params={
+                    "SERVICE": "WMS", "REQUEST": "GetMap", "VERSION": "1.1.1",
+                    "LAYERS": _layer,
+                    "STYLES": "",
+                    "FORMAT": "image/png",
+                    "TRANSPARENT": "false",
+                    "SRS": "EPSG:3413",
+                    "BBOX": bbox_3413,
+                    "WIDTH": "1500", "HEIGHT": "1500",
+                    "TIME": _time_str,
+                },
+                timeout=30,
+            )
+            if r.status_code == 200 and r.content[:8] == _png_magic:
+                return _Img.open(_io.BytesIO(r.content)).convert("RGB")
+            _err = r.content[:200].decode("utf-8", "replace").replace("\n", " ")
+            print(f"  VIIRS {_layer} {_time_str}: non-PNG response ({r.status_code}) {_err}")
+            return None
+
+        def _crop_and_check(img):
+            """Rotate per config, centre-crop to 1000 px, return (crop, no-data fraction).
+            No-data in GIBS VIIRS is pure black (0,0,0); dark ocean/water has small
+            but non-zero channel values and must NOT be counted as no-data."""
+            from PIL import Image as _Img
+            import numpy as _np
+            rotated = img.rotate(rot, resample=_Img.BICUBIC, expand=False)
+            w, h = rotated.size
+            sz = 1000
+            left, top = (w - sz) // 2, (h - sz) // 2
+            cropped = rotated.crop((left, top, left + sz, top + sz))
+            _carr = _np.array(cropped)
+            return cropped, float((_carr.max(axis=2) == 0).mean())
+
+        def _decorate_and_save(cropped, _ts_label, _src):
+            """Coastline overlay, place labels, date/scale annotation; write out_path."""
+            from PIL import Image as _Img, ImageDraw as _Draw, ImageFont as _Font
+            import math as _m
+            try:
+                _bparts = [float(x) for x in bbox_3413.split(",")]
+                _mpp = (_bparts[2] - _bparts[0]) / 1500.0
+            except Exception:
+                _bparts = None
+                _mpp = 400.0
+            if _bparts:
+                def _ll_to_ps3413(phi_d, lam_d):
+                    a, e = 6378137.0, 0.0818191908
+                    phi0, lam0 = _m.radians(70.0), _m.radians(-45.0)
+                    phi, lam = _m.radians(phi_d), _m.radians(lam_d)
+                    def _t(p):
+                        es = e * _m.sin(p)
+                        return _m.tan(_m.pi/4 - p/2) / ((1-es)/(1+es))**(e/2)
+                    m0 = _m.cos(phi0) / _m.sqrt(1-(e*_m.sin(phi0))**2)
+                    rho = a * m0 * _t(phi) / _t(phi0)
+                    return rho*_m.sin(lam-lam0), -rho*_m.cos(lam-lam0)
+                # Coastline overlay from local OSM GeoJSON
+                _coast_path = COMMUNITIES_DIR / cid / cfg.get("coastline_geojson_path", "coastline_data.geojson")
+                if _coast_path.exists():
+                    try:
+                        import json as _json2
+                        with open(_coast_path) as _cf:
+                            _coast = _json2.load(_cf)
+                        _draw_coast = _Draw.Draw(cropped)
+                        for _feat in _coast.get("features", []):
+                            _geom = _feat.get("geometry", {})
+                            if _geom.get("type") != "LineString":
+                                continue
+                            _prev = None
+                            for _clon, _clat in _geom.get("coordinates", []):
+                                _cx3, _cy3 = _ll_to_ps3413(_clat, _clon)
+                                _cpx = (_cx3 - _bparts[0]) / (_bparts[2]-_bparts[0]) * 1500
+                                _cpy = (_bparts[3]-_cy3) / (_bparts[3]-_bparts[1]) * 1500
+                                _th2 = _m.radians(-rot)
+                                _crx = 750 + (_cpx-750)*_m.cos(_th2) - (_cpy-750)*_m.sin(_th2)
+                                _cry = 750 + (_cpx-750)*_m.sin(_th2) + (_cpy-750)*_m.cos(_th2)
+                                _cpxc, _cpyc = _crx-250, _cry-250
+                                if _prev is not None:
+                                    _draw_coast.line([_prev, (_cpxc, _cpyc)], fill=(40, 40, 40), width=4)
+                                    _draw_coast.line([_prev, (_cpxc, _cpyc)], fill=(255, 255, 255), width=2)
+                                _prev = (_cpxc, _cpyc)
+                    except Exception as _ce:
+                        print(f"  VIIRS coastline overlay failed: {_ce}")
+                try:
+                    _draw_lbl = _Draw.Draw(cropped)
+                    _font_pt = _Font.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26) if hasattr(_Font,'truetype') else _Font.load_default()
+                    for _pt in cfg.get("map_points",[]):
+                        _px3, _py3 = _ll_to_ps3413(_pt[0], _pt[1])
+                        # Map to 1500×1500 pixels
+                        _px15 = (_px3 - _bparts[0]) / (_bparts[2]-_bparts[0]) * 1500
+                        _py15 = (_bparts[3] - _py3) / (_bparts[3]-_bparts[1]) * 1500
+                        # Rotate around centre (750,750)
+                        _th = _m.radians(-rot)
+                        _rx = 750 + (_px15-750)*_m.cos(_th) - (_py15-750)*_m.sin(_th)
+                        _ry = 750 + (_px15-750)*_m.sin(_th) + (_py15-750)*_m.cos(_th)
+                        # To 1000×1000 crop (offset 250)
+                        _cx, _cy = int(_rx-250), int(_ry-250)
+                        if not (8 <= _cx <= 992 and 8 <= _cy <= 992):
+                            continue
+                        r_dot = 7
+                        _draw_lbl.ellipse([_cx-r_dot,_cy-r_dot,_cx+r_dot,_cy+r_dot], fill=(220,60,60), outline="white", width=2)
+                        _lbl = _pt[2] if len(_pt)>2 else ""
+                        if _lbl:
+                            try:
+                                _tb = _draw_lbl.textbbox((_cx+12,_cy-14),_lbl,font=_font_pt)
+                                _ov = _Img.new("RGBA",cropped.size,(0,0,0,0))
+                                _Draw.Draw(_ov).rounded_rectangle([_tb[0]-3,_tb[1]-3,_tb[2]+3,_tb[3]+3],radius=3,fill=(0,0,0,160))
+                                cropped = _Img.alpha_composite(cropped.convert("RGBA"),_ov).convert("RGB")
+                                _draw_lbl = _Draw.Draw(cropped)
+                            except Exception:
+                                pass
+                            _draw_lbl.text((_cx+12,_cy-14),_lbl,font=_font_pt,fill=(255,255,255))
+                except Exception as _le:
+                    print(f"  VIIRS place labels failed: {_le}")
+            cropped = _annotate_img(cropped, _ts_label, _mpp)
+            buf = _io.BytesIO()
+            cropped.save(buf, "PNG", optimize=True)
+            out_path.write_bytes(buf.getvalue())
+            print(f"  VIIRS ({_src}): {_ts_label} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
+
+        # ── Step 1: latest individual overpass via GIBS granule layers ──
+        # The *_Granule layers serve each 6-minute swath granule at its real
+        # overpass time (~1.5-2.5 h NRT latency, ~90-day rolling archive). CMR
+        # swath geolocation products carry the same 6-min timestamps and let us
+        # filter to granules whose footprint contains the site, so the newest
+        # daylight pass over the site is found directly. VIIRS passes the Arctic
+        # coast every 1-3 h in daylight — this is what keeps the image current.
+        _granule_map = [
+            ("VJ103IMG_NRT", "VIIRS_NOAA20_CorrectedReflectance_TrueColor_Granule", "NOAA-20"),
+            ("VNP03IMG_NRT", "VIIRS_SNPP_CorrectedReflectance_TrueColor_Granule", "SNPP"),
+        ]
+        _passes = []  # [(datetime, gibs_layer, sat_label), ...]
+        for _short, _glayer, _gsrc in _granule_map:
+            try:
+                _cr = requests.get(
+                    "https://cmr.earthdata.nasa.gov/search/granules.json",
+                    params={
+                        "short_name": _short,
+                        "temporal": (f"{(_now_v - _tdv(hours=48)).strftime('%Y-%m-%dT%H:%M:%SZ')},"
+                                     f"{_now_v.strftime('%Y-%m-%dT%H:%M:%SZ')}"),
+                        "point": f"{_lon_v},{_lat_v}",
+                        "sort_key": "-start_date",
+                        "page_size": "40",
+                    },
+                    timeout=20,
+                )
+                for _e in _cr.json().get("feed", {}).get("entry", []):
+                    if _e.get("day_night_flag", "").upper() == "NIGHT":
+                        continue  # true color needs sunlight
+                    _ts = _re_v.sub(r"\.\d+Z$", "Z", _e.get("time_start", ""))
+                    try:
+                        _gdt = _dtv.strptime(_ts, "%Y-%m-%dT%H:%M:%SZ")
+                    except ValueError:
+                        continue
+                    _passes.append((_gdt, _glayer, _gsrc))
+            except Exception as _ce:
+                print(f"  VIIRS CMR {_short} failed: {_ce}")
+        _uniq_p = {}
+        for _p in _passes:
+            _uniq_p.setdefault((_p[2], _p[0]), _p)
+        _passes = list(_uniq_p.values())
+        _passes.sort(key=lambda x: (x[0], x[2]), reverse=True)
+
+        # Group consecutive 6-min granules of one satellite into a single
+        # overpass: a pass over the site can straddle a granule boundary, in
+        # which case each granule covers only part of the crop and they must
+        # be mosaicked together.
+        _groups = []
+        for _p in _passes:
+            if (_groups and _groups[-1][-1][2] == _p[2]
+                    and (_groups[-1][-1][0] - _p[0]) <= _tdv(minutes=7)
+                    and len(_groups[-1]) < 3):
+                _groups[-1].append(_p)
+            else:
+                _groups.append([_p])
+
+        for _grp in _groups[:6]:
+            _newest_dt, _glayer, _gsrc = _grp[0]
+            _ts_str = _newest_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+            try:
+                _imgs = []  # [(datetime, image)], newest first
+                for _gdt, _, _ in _grp:
+                    _im = _gibs_getmap(_glayer, _gdt.strftime("%Y-%m-%dT%H:%M:%SZ"))
+                    if _im is not None:
+                        _imgs.append((_gdt, _im))
+                if not _imgs:
+                    continue
+                # Label with the newest granule that actually fetched — the
+                # newest slot of the group can fail while older slots succeed.
+                _ts_str = _imgs[0][0].strftime("%Y-%m-%dT%H:%M:%SZ")
+                import numpy as _np
+                from PIL import Image as _Img
+                _base = _np.array(_imgs[-1][1])  # oldest granule as base
+                for _, _im in reversed(_imgs[:-1]):  # newer granules on top
+                    _arr = _np.array(_im)
+                    _mask = _arr.max(axis=2) > 0
+                    _base[_mask] = _arr[_mask]
+                cropped, _frac = _crop_and_check(_Img.fromarray(_base))
+                if _frac > 0.35:
+                    print(f"  VIIRS granule {_gsrc} {_ts_str}: {_frac:.0%} no-data — pass clips the site, trying earlier pass")
+                    continue
+                print(f"  VIIRS granule {_gsrc} {_ts_str}: {_frac:.0%} no-data — using latest overpass")
+                _decorate_and_save(cropped, _ts_str, _gsrc)
+                return _ts_str, _gsrc
+            except Exception as e:
+                print(f"  VIIRS granule {_gsrc} {_ts_str} failed: {e}")
+        print("  VIIRS: no usable granule overpass, falling back to daily composite")
+
+        # ── Step 2 (fallback): daily composite via CMR daily products ──
         # GIBS retired the *_NRT layer names (LayerNotDefined since ~Aug 2026);
         # the "best" endpoint serves NRT imagery under the standard layer names,
         # so NRT CMR collections map to the standard GIBS layers too.
@@ -1583,138 +1795,28 @@ def main():
                     _fresh.append((_d_str, _lyr))
         _candidates = _fresh + _candidates
 
-        # Step 2: try each candidate with exact TIME in GIBS
+        # Try each daily-composite candidate
         for _viirs_date_str, layer in _candidates[:12]:
                 try:
-                    r = get_with_retry(
-                        "https://gibs.earthdata.nasa.gov/wms/epsg3413/best/wms.cgi",
-                        params={
-                            "SERVICE": "WMS", "REQUEST": "GetMap", "VERSION": "1.1.1",
-                            "LAYERS": f"{layer}",
-                            "STYLES": "",
-                            "FORMAT": "image/png",
-                            "TRANSPARENT": "false",
-                            "SRS": "EPSG:3413",
-                            "BBOX": bbox_3413,
-                            "WIDTH": "1500", "HEIGHT": "1500",
-                            "TIME": _viirs_date_str,  # date-only for daily composites; ISO datetime kept if CMR gave a real overpass time
-                        },
-                        timeout=30,
-                    )
-                    if r.status_code == 200 and r.content[:8] == b"\x89PNG\r\n\x1a\n":
-                        from PIL import Image as _Img, ImageDraw as _Draw, ImageFont as _Font
-                        img = _Img.open(_io.BytesIO(r.content)).convert("RGB")
-                        rotated = img.rotate(rot, resample=_Img.BICUBIC, expand=False)
-                        w, h = rotated.size
-                        sz = 1000
-                        left, top = (w - sz) // 2, (h - sz) // 2
-                        cropped = rotated.crop((left, top, left + sz, top + sz))
-                        # Skip scenes where the centre (site location) has no-data.
-                        # No-data in GIBS VIIRS is pure black (0,0,0). Dark ocean/water
-                        # has small but non-zero channel values and must NOT be rejected.
-                        import numpy as _np
-                        _carr = _np.array(cropped)
-                        _pure_black = (_carr.max(axis=2) == 0)  # pixels where all RGB channels = 0
-                        _nodata_frac = _pure_black.mean()
-                        if _nodata_frac > 0.95:
-                            print(f"  VIIRS {layer} {_viirs_date_str}: {_nodata_frac:.0%} no-data — skipping (no satellite pass)")
-                            continue
-                        print(f"  VIIRS {layer} {_viirs_date_str}: {_nodata_frac:.0%} no-data — using")
-                        # Compute metres per pixel from bbox
-                        try:
-                            _bparts = [float(x) for x in bbox_3413.split(",")]
-                            _mpp = (_bparts[2] - _bparts[0]) / 1500.0
-                        except Exception:
-                            _bparts = None
-                            _mpp = 400.0
-                        # Polar-stereo projection (needed for both coastline and labels)
-                        if _bparts:
-                            import math as _m
-                            def _ll_to_ps3413(phi_d, lam_d):
-                                a, e = 6378137.0, 0.0818191908
-                                phi0, lam0 = _m.radians(70.0), _m.radians(-45.0)
-                                phi, lam = _m.radians(phi_d), _m.radians(lam_d)
-                                def _t(p):
-                                    es = e * _m.sin(p)
-                                    return _m.tan(_m.pi/4 - p/2) / ((1-es)/(1+es))**(e/2)
-                                m0 = _m.cos(phi0) / _m.sqrt(1-(e*_m.sin(phi0))**2)
-                                rho = a * m0 * _t(phi) / _t(phi0)
-                                return rho*_m.sin(lam-lam0), -rho*_m.cos(lam-lam0)
-                            # Coastline overlay from local OSM GeoJSON
-                            _coast_path = COMMUNITIES_DIR / cid / cfg.get("coastline_geojson_path", "coastline_data.geojson")
-                            if _coast_path.exists():
-                                try:
-                                    import json as _json2
-                                    with open(_coast_path) as _cf:
-                                        _coast = _json2.load(_cf)
-                                    _draw_coast = _Draw.Draw(cropped)
-                                    for _feat in _coast.get("features", []):
-                                        _geom = _feat.get("geometry", {})
-                                        if _geom.get("type") != "LineString":
-                                            continue
-                                        _prev = None
-                                        for _clon, _clat in _geom.get("coordinates", []):
-                                            _cx3, _cy3 = _ll_to_ps3413(_clat, _clon)
-                                            _cpx = (_cx3 - _bparts[0]) / (_bparts[2]-_bparts[0]) * 1500
-                                            _cpy = (_bparts[3]-_cy3) / (_bparts[3]-_bparts[1]) * 1500
-                                            _th2 = _m.radians(-rot)
-                                            _crx = 750 + (_cpx-750)*_m.cos(_th2) - (_cpy-750)*_m.sin(_th2)
-                                            _cry = 750 + (_cpx-750)*_m.sin(_th2) + (_cpy-750)*_m.cos(_th2)
-                                            _cpxc, _cpyc = _crx-250, _cry-250
-                                            if _prev is not None:
-                                                _draw_coast.line([_prev, (_cpxc, _cpyc)], fill=(40, 40, 40), width=4)
-                                                _draw_coast.line([_prev, (_cpxc, _cpyc)], fill=(255, 255, 255), width=2)
-                                            _prev = (_cpxc, _cpyc)
-                                except Exception as _ce:
-                                    print(f"  VIIRS coastline overlay failed: {_ce}")
-                            try:
-                                _draw_lbl = _Draw.Draw(cropped)
-                                _font_pt = _Font.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26) if hasattr(_Font,'truetype') else _Font.load_default()
-                                for _pt in cfg.get("map_points",[]):
-                                    _px3, _py3 = _ll_to_ps3413(_pt[0], _pt[1])
-                                    # Map to 1500×1500 pixels
-                                    _px15 = (_px3 - _bparts[0]) / (_bparts[2]-_bparts[0]) * 1500
-                                    _py15 = (_bparts[3] - _py3) / (_bparts[3]-_bparts[1]) * 1500
-                                    # Rotate around centre (750,750)
-                                    _th = _m.radians(-rot)
-                                    _rx = 750 + (_px15-750)*_m.cos(_th) - (_py15-750)*_m.sin(_th)
-                                    _ry = 750 + (_px15-750)*_m.sin(_th) + (_py15-750)*_m.cos(_th)
-                                    # To 1000×1000 crop (offset 250)
-                                    _cx, _cy = int(_rx-250), int(_ry-250)
-                                    if not (8 <= _cx <= 992 and 8 <= _cy <= 992):
-                                        continue
-                                    r_dot = 7
-                                    _draw_lbl.ellipse([_cx-r_dot,_cy-r_dot,_cx+r_dot,_cy+r_dot], fill=(220,60,60), outline="white", width=2)
-                                    _lbl = _pt[2] if len(_pt)>2 else ""
-                                    if _lbl:
-                                        try:
-                                            _tb = _draw_lbl.textbbox((_cx+12,_cy-14),_lbl,font=_font_pt)
-                                            _ov = _Img.new("RGBA",cropped.size,(0,0,0,0))
-                                            _Draw.Draw(_ov).rounded_rectangle([_tb[0]-3,_tb[1]-3,_tb[2]+3,_tb[3]+3],radius=3,fill=(0,0,0,160))
-                                            cropped = _Img.alpha_composite(cropped.convert("RGBA"),_ov).convert("RGB")
-                                            _draw_lbl = _Draw.Draw(cropped)
-                                        except Exception:
-                                            pass
-                                        _draw_lbl.text((_cx+12,_cy-14),_lbl,font=_font_pt,fill=(255,255,255))
-                            except Exception as _le:
-                                print(f"  VIIRS place labels failed: {_le}")
-                        cropped = _annotate_img(cropped, _viirs_date_str, _mpp)
-                        buf = _io.BytesIO()
-                        cropped.save(buf, "PNG", optimize=True)
-                        out_path.write_bytes(buf.getvalue())
-                        src = "NOAA-20" if "NOAA20" in layer else "SNPP"
-                        print(f"  VIIRS ({src}): {_viirs_date_str} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
-                        return _viirs_date_str  # full ISO datetime if CMR succeeded
-                    else:
-                        _err = r.content[:200].decode("utf-8", "replace").replace("\n", " ")
-                        print(f"  VIIRS {layer} {_viirs_date_str}: non-PNG response ({r.status_code}) {_err}")
+                    _cimg = _gibs_getmap(layer, _viirs_date_str)
+                    if _cimg is None:
+                        continue
+                    cropped, _nodata_frac = _crop_and_check(_cimg)
+                    if _nodata_frac > 0.95:
+                        print(f"  VIIRS {layer} {_viirs_date_str}: {_nodata_frac:.0%} no-data — skipping (no satellite pass)")
+                        continue
+                    print(f"  VIIRS {layer} {_viirs_date_str}: {_nodata_frac:.0%} no-data — using")
+                    src = "NOAA-20" if "NOAA20" in layer else "SNPP"
+                    _decorate_and_save(cropped, _viirs_date_str, src)
+                    return _viirs_date_str, src
                 except Exception as e:
                     print(f"  VIIRS {layer} {_viirs_date_str} failed: {e}")
         print("  VIIRS unavailable")
         return None
 
     print("Fetching VIIRS true color…")
-    viirs_date = fetch_viirs_image(img_dir / "viirs.png")
+    _viirs_res = fetch_viirs_image(img_dir / "viirs.png")
+    viirs_date, viirs_sat = _viirs_res if _viirs_res else (None, None)
     # If fetch failed but a previous image exists, carry forward the old date
     if not viirs_date and (img_dir / "viirs.png").exists():
         try:
@@ -1724,6 +1826,7 @@ def main():
                 _prev = _jv.loads(_prev_dj.read_text(encoding="utf-8"))
                 if _prev.get("viirs_date"):
                     viirs_date = _prev["viirs_date"]
+                    viirs_sat = _prev.get("viirs_sat")
                     print(f"  VIIRS: carrying forward previous date {viirs_date}")
         except Exception:
             pass
@@ -2011,6 +2114,7 @@ def main():
         "updated_utc": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "modis_date": modis_date,
         "viirs_date": viirs_date,
+        "viirs_sat": viirs_sat,
         "s2_date": s2_date,
         "weather": weather,
         "total_water_level": total_water_level,

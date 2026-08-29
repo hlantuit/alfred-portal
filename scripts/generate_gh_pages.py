@@ -818,24 +818,52 @@ def fetch_river(station_id, provterr):
     current_m = None
     realtime_rows = []
 
-    # Method 1a: OGC real-time (last ~7 days hourly) — for current reading + recent series
+    # Method 1a: OGC real-time — 30-day rolling window at nominal 5-min cadence,
+    # downsampled to hourly for the dashboard series.
+    # Queryables are CASE-SENSITIVE: "station_number" silently matches nothing
+    # (numberReturned=0, no error). skipGeometry+properties shrink the response
+    # ~3.7x (~0.8 MB for a full window); one request covers the whole window.
     try:
-        r = get_with_retry(
-            "https://api.weather.gc.ca/collections/hydrometric-realtime/items",
-            params={"station_number": station_id, "limit": 720},
-            timeout=30,
-        )
-        features = r.json().get("features", [])
-        for f in features:
+        _rt_url = "https://api.weather.gc.ca/collections/hydrometric-realtime/items"
+        _rt_params = {"STATION_NUMBER": station_id, "limit": 10000, "f": "json",
+                      "skipGeometry": "true", "properties": "DATETIME,LEVEL",
+                      "datetime": f"{(_date.today() - _td(days=31)).isoformat()}T00:00:00Z/.."}
+        r = get_with_retry(_rt_url, params=_rt_params, timeout=60)
+        _jj = r.json()
+        _feats = _jj.get("features", [])
+        # limit=10000 is the server's hard max and responses are UNSORTED, so a
+        # window holding more records would silently drop an arbitrary subset —
+        # possibly the newest. Top up with a short window that always fits.
+        if _jj.get("numberMatched", 0) > len(_feats):
+            print(f"  WSC OGC realtime: truncated for {station_id} "
+                  f"({_jj.get('numberMatched')} matched > {len(_feats)} returned), topping up")
+            _r2 = get_with_retry(_rt_url, params={
+                **_rt_params,
+                "datetime": f"{(_date.today() - _td(days=3)).isoformat()}T00:00:00Z/..",
+            }, timeout=60)
+            _feats = _feats + _r2.json().get("features", [])
+        _raw_map = {}
+        for f in _feats:
             props = f.get("properties", {})
             level = props.get("LEVEL")
             ts = props.get("DATETIME")
             if level is not None and ts:
-                realtime_rows.append({"t": ts, "m": round(float(level), 3)})
-        if realtime_rows:
-            realtime_rows.sort(key=lambda x: x["t"])
-            current_m = realtime_rows[-1]["m"]
-            print(f"  WSC OGC realtime: {len(realtime_rows)} rows for {station_id}, current={current_m}")
+                _raw_map[ts] = float(level)
+        _raw_rt = sorted(_raw_map.items())
+        # Bucket by hour and keep the record nearest the top of the hour —
+        # top-of-hour records are often missing (transmission gaps), so a
+        # simple minute==0 filter would drop many hours entirely.
+        _hbuckets = {}
+        for ts, level in _raw_rt:
+            _hr = ts[:13]  # YYYY-MM-DDTHH
+            _moff = int(ts[14:16]) if len(ts) >= 16 and ts[14:16].isdigit() else 0
+            if _hr not in _hbuckets or _moff < _hbuckets[_hr][0]:
+                _hbuckets[_hr] = (_moff, ts, level)
+        realtime_rows = [{"t": _v[1], "m": round(_v[2], 3)}
+                         for _k, _v in sorted(_hbuckets.items())]
+        if _raw_rt:
+            current_m = round(_raw_rt[-1][1], 3)  # newest raw reading
+            print(f"  WSC OGC realtime: {len(_raw_rt)} raw → {len(realtime_rows)} hourly rows for {station_id}, current={current_m}")
     except Exception as e:
         print(f"  WSC OGC realtime failed for {station_id}: {e}")
 

@@ -1712,7 +1712,11 @@ def main():
             else:
                 _groups.append([_p])
 
-        for _grp in _groups[:6]:
+        # Search deep enough to bridge GIBS ingest backlogs: 16 pass groups
+        # ≈ 24-30 h at this latitude (observed 2026-08-29: a whole UTC day of
+        # granule imagery missing domain-wide, while the previous evening's
+        # passes were fine — blank probes are tiny black PNGs, so this is cheap).
+        for _grp in _groups[:16]:
             _newest_dt, _glayer, _gsrc = _grp[0]
             _ts_str = _newest_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
             try:

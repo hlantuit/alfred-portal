@@ -1626,18 +1626,21 @@ function renderRiverClim(el, clim, riverName) {
 // ── Load data.json ──
 async function loadData(){
   _lastFetch=Date.now();
-  // Cache-bust all local satellite images with today's date so browsers re-fetch after the nightly regeneration
-  const _today=new Date().toISOString().slice(0,10);
-  document.querySelectorAll('img[src^="img/"]').forEach(el=>{const s=el.src.split('?')[0];el.src=s+'?d='+_today;});
   let d;
   try {
-    const r=await fetch('data.json?t='+Date.now());
+    const r=await fetch('data.json?t='+Date.now(),{cache:'no-store'});
     if(!r.ok) throw new Error(r.status);
     d=await r.json();
   } catch(e) {
     document.getElementById('sb-label').textContent='Data unavailable — '+e.message;
     return;
   }
+  // Cache-bust local imagery with the generation stamp: the URL changes on
+  // every hourly regeneration (so plain refreshes and the 30-min auto-refresh
+  // pick up new satellite images) but stays stable between deploys, keeping
+  // the browser cache useful.
+  const _ver=encodeURIComponent(d.updated_utc||Date.now());
+  document.querySelectorAll('img[src^="img/"]').forEach(el=>{const b=el.getAttribute('src').split('?')[0],v=b+'?v='+_ver;if(el.getAttribute('src')!==v)el.setAttribute('src',v);});
 
   const w=d.weather||{};
   const twl=d.total_water_level||null;

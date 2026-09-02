@@ -231,6 +231,7 @@ def wind_dir_label(deg):
 
 
 def get_with_retry(url, params=None, timeout=30, retries=3, headers=None):
+    import time as _time
     for attempt in range(retries):
         try:
             r = requests.get(url, params=params, timeout=timeout, headers=headers)
@@ -240,6 +241,9 @@ def get_with_retry(url, params=None, timeout=30, retries=3, headers=None):
             if attempt == retries - 1:
                 raise
             print(f"  retry {attempt+1}/{retries-1} for {url}: {e}")
+            # Back off before retrying — an immediate retry during an upstream
+            # brownout (e.g. Open-Meteo read timeouts) just fails again.
+            _time.sleep(3 * (attempt + 1))
     raise RuntimeError("unreachable")
 
 
@@ -1161,8 +1165,22 @@ def main():
     img_dir.mkdir(exist_ok=True)
 
     # ── Fetch ──
+    # Weather must not be fatal: it is the first fetch, and an Open-Meteo
+    # brownout would otherwise kill the whole hourly update for the site
+    # (rivers, satellite imagery, everything). Carry the previous run's
+    # weather forward instead; it self-corrects on the next successful run.
     print("Fetching weather…")
-    weather = fetch_weather(lat, lon, tz)
+    try:
+        weather = fetch_weather(lat, lon, tz)
+    except Exception as _we:
+        print(f"  weather fetch failed ({_we}); carrying forward previous weather")
+        weather = None
+        try:
+            _prev_djw = DOCS_DIR / cid / "data.json"
+            if _prev_djw.exists():
+                weather = json.loads(_prev_djw.read_text(encoding="utf-8")).get("weather")
+        except Exception:
+            pass
 
     tide = None
     total_water_level = None

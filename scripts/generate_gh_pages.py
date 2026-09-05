@@ -1925,6 +1925,117 @@ def main():
             pass
 
     # ── Sentinel-2 true color (Sentinel Hub Copernicus) ──
+    def _make_ll_to_utm(utm_epsg):
+        """lat/lon → UTM projector (pyproj when available, manual fallback)."""
+        try:
+            from pyproj import Transformer as _Tr
+            _proj = _Tr.from_crs("EPSG:4326", f"EPSG:{utm_epsg}", always_xy=True)
+            return lambda plat, plon: _proj.transform(plon, plat)
+        except Exception:
+            import math as _pm
+            _K0, _E, _a = 0.9996, 0.0818191908426215, 6378137.0
+            _zone = int(utm_epsg) - 32600
+            _lon0 = _pm.radians((_zone - 1) * 6 - 180 + 3)
+            def _ll_to_utm(plat, plon):
+                lat_r, lon_r = _pm.radians(plat), _pm.radians(plon)
+                N = _a / _pm.sqrt(1 - (_E*_pm.sin(lat_r))**2)
+                T = _pm.tan(lat_r)**2; C = (_E**2/(1-_E**2))*_pm.cos(lat_r)**2
+                A = _pm.cos(lat_r)*(lon_r - _lon0)
+                M = _a*(lat_r*(1-_E**2/4-3*_E**4/64)-_pm.sin(2*lat_r)*(3*_E**2/8+3*_E**4/32)+_pm.sin(4*lat_r)*(15*_E**4/256))
+                x = _K0*N*(A+(1-T+C)*A**3/6) + 500000
+                y = _K0*(M+N*_pm.tan(lat_r)*(A**2/2+(5-T+9*C)*A**4/24))
+                if plat < 0: y += 10000000
+                return x, y
+            return _ll_to_utm
+
+    def _s2_overlay_and_save(s2_img, _ll_to_utm, cx, cy, half_width_m, date_str, out_path, legend=None):
+        """Shared S2-frame finishing: coastline, place labels (red) + hydro
+        stations (teal), optional legend box (top-right), timestamp + scale
+        bar, then save to out_path. cx/cy must be the ACTUAL request centre."""
+        import io as _io4, json as _json_s2, math as _math_s2
+        from PIL import Image as _Img4, ImageDraw as _Draw_s2, ImageFont as _Font_s2
+        _mpp_s2 = (2 * half_width_m) / 1200.0
+        def _utm_to_px(ux, uy):
+            return 600 + (ux - cx) / _mpp_s2, 600 - (uy - cy) / _mpp_s2
+        _coast_path_s2 = COMMUNITIES_DIR / cid / cfg.get("coastline_geojson_path", "coastline_data.geojson")
+        if _coast_path_s2.exists():
+            try:
+                with open(_coast_path_s2) as _cf2:
+                    _coast2 = _json_s2.load(_cf2)
+                _draw_cs = _Draw_s2.Draw(s2_img)
+                for _feat2 in _coast2.get("features", []):
+                    _geom2 = _feat2.get("geometry", {})
+                    if _geom2.get("type") != "LineString":
+                        continue
+                    _prev2 = None
+                    for _clon2, _clat2 in _geom2.get("coordinates", []):
+                        _ux, _uy = _ll_to_utm(_clat2, _clon2)
+                        _ppx, _ppy = _utm_to_px(_ux, _uy)
+                        if _prev2 is not None:
+                            _draw_cs.line([_prev2, (_ppx, _ppy)], fill=(40, 40, 40), width=4)
+                            _draw_cs.line([_prev2, (_ppx, _ppy)], fill=(255, 255, 255), width=2)
+                        _prev2 = (_ppx, _ppy)
+                print(f"  S2: coastline overlay drawn")
+            except Exception as _ce2:
+                print(f"  S2 coastline overlay failed: {_ce2}")
+        # Place-name labels (red) + hydrometric stations (teal, like S1 frames)
+        _pts_s2 = ([(p, (220, 60, 60)) for p in cfg.get("map_points", [])]
+                   + [(p, (42, 157, 143)) for p in _hydro_map_points_gh(cfg)])
+        if _pts_s2:
+            try:
+                _draw_lbl2 = _Draw_s2.Draw(s2_img)
+                _font_s2 = _Font_s2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26) if hasattr(_Font_s2, 'truetype') else _Font_s2.load_default()
+                _MARGIN = 20
+                for _pt2, _dot_fill2 in _pts_s2:
+                    _ux2, _uy2 = _ll_to_utm(_pt2[0], _pt2[1])
+                    _ppx2, _ppy2 = _utm_to_px(_ux2, _uy2)
+                    if not (-_MARGIN <= _ppx2 <= 1200 + _MARGIN and -_MARGIN <= _ppy2 <= 1200 + _MARGIN):
+                        continue
+                    _rdot = 7
+                    _draw_lbl2.ellipse([_ppx2 - _rdot, _ppy2 - _rdot, _ppx2 + _rdot, _ppy2 + _rdot], fill=_dot_fill2, outline="white", width=2)
+                    _lbl2 = _pt2[2] if len(_pt2) > 2 else ""
+                    _dy2 = _pt2[3] if len(_pt2) > 3 else -14
+                    if _lbl2:
+                        try:
+                            _tb2 = _draw_lbl2.textbbox((_ppx2 + 12, _ppy2 + _dy2), _lbl2, font=_font_s2)
+                            _ov2 = _Img4.new("RGBA", s2_img.size, (0, 0, 0, 0))
+                            _Draw_s2.Draw(_ov2).rounded_rectangle([_tb2[0]-3, _tb2[1]-3, _tb2[2]+3, _tb2[3]+3], radius=3, fill=(0, 0, 0, 160))
+                            s2_img = _Img4.alpha_composite(s2_img.convert("RGBA"), _ov2).convert("RGB")
+                            _draw_lbl2 = _Draw_s2.Draw(s2_img)
+                        except Exception:
+                            pass
+                        _draw_lbl2.text((_ppx2 + 12, _ppy2 + _dy2), _lbl2, font=_font_s2, fill=(255, 255, 255))
+            except Exception as _le2:
+                print(f"  S2 place labels failed: {_le2}")
+        # Optional legend box, top-right
+        if legend:
+            try:
+                _dl = _Draw_s2.Draw(s2_img)
+                _lf = _Font_s2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22) if hasattr(_Font_s2, 'truetype') else _Font_s2.load_default()
+                _entries = []
+                _wmax = 0
+                for _txt, _colr in legend:
+                    _tb = _dl.textbbox((0, 0), _txt, font=_lf)
+                    _entries.append((_txt, _colr))
+                    _wmax = max(_wmax, _tb[2] - _tb[0])
+                _bw = 14 + 26 + 8 + _wmax + 14
+                _bh = 12 + len(legend) * 30
+                _lx, _ly = 1200 - 16, 16
+                _ov3 = _Img4.new("RGBA", s2_img.size, (0, 0, 0, 0))
+                _Draw_s2.Draw(_ov3).rounded_rectangle([_lx - _bw, _ly, _lx, _ly + _bh], radius=5, fill=(0, 0, 0, 150))
+                s2_img = _Img4.alpha_composite(s2_img.convert("RGBA"), _ov3).convert("RGB")
+                _dl = _Draw_s2.Draw(s2_img)
+                for _i, (_txt, _colr) in enumerate(_entries):
+                    _yy = _ly + 10 + _i * 30
+                    _dl.rectangle([_lx - _bw + 14, _yy, _lx - _bw + 14 + 26, _yy + 16], fill=_colr, outline=(255, 255, 255))
+                    _dl.text((_lx - _bw + 14 + 26 + 8, _yy - 3), _txt, font=_lf, fill=(255, 255, 255))
+            except Exception as _lge:
+                print(f"  S2 legend failed: {_lge}")
+        s2_img = _annotate_img(s2_img, date_str, _mpp_s2)
+        buf = _io4.BytesIO()
+        s2_img.save(buf, "PNG", optimize=True)
+        out_path.write_bytes(buf.getvalue())
+
     def get_sh_token():
         import os
         cid_val = os.environ.get("SENTINEL_HUB_CLIENT_ID", "")
@@ -1953,26 +2064,7 @@ def main():
             return None
         # lat/lon → UTM, used for an optional centre override and for the
         # coastline/place-label overlays further down
-        try:
-            from pyproj import Transformer as _Tr
-            _proj_s2 = _Tr.from_crs("EPSG:4326", f"EPSG:{utm_epsg}", always_xy=True)
-            def _ll_to_utm(plat, plon):
-                return _proj_s2.transform(plon, plat)
-        except Exception:
-            import math as _pm
-            _K0, _E, _a = 0.9996, 0.0818191908426215, 6378137.0
-            _zone = int(utm_epsg) - 32600
-            _lon0 = _pm.radians((_zone - 1) * 6 - 180 + 3)
-            def _ll_to_utm(plat, plon):
-                lat_r, lon_r = _pm.radians(plat), _pm.radians(plon)
-                N = _a / _pm.sqrt(1 - (_E*_pm.sin(lat_r))**2)
-                T = _pm.tan(lat_r)**2; C = (_E**2/(1-_E**2))*_pm.cos(lat_r)**2
-                A = _pm.cos(lat_r)*(lon_r - _lon0)
-                M = _a*(lat_r*(1-_E**2/4-3*_E**4/64)-_pm.sin(2*lat_r)*(3*_E**2/8+3*_E**4/32)+_pm.sin(4*lat_r)*(15*_E**4/256))
-                x = _K0*N*(A+(1-T+C)*A**3/6) + 500000
-                y = _K0*(M+N*_pm.tan(lat_r)*(A**2/2+(5-T+9*C)*A**4/24))
-                if plat < 0: y += 10000000
-                return x, y
+        _ll_to_utm = _make_ll_to_utm(utm_epsg)
         # The configured utm_center frames the wide view (delta/coast); the
         # zoom is recentred on the community itself so its dot/label are in frame.
         if center_ll and center_ll[0] is not None and center_ll[1] is not None:
@@ -2094,101 +2186,182 @@ def main():
                 return None
             # Use acquisition datetime from catalog pre-fetch
             date_str = _acq_iso or end_dt.strftime("%Y-%m-%d")
-            # Coastline overlay from local OSM GeoJSON
-            import json as _json_s2, math as _math_s2
-            from PIL import ImageDraw as _Draw_s2, ImageFont as _Font_s2
-            # _ll_to_utm is defined at the top of fetch_s2_image; pixel mapping
-            # must use the ACTUAL request centre (cx/cy, possibly the community
-            # override), not cfg's utm_center, or overlays shift on the zoom.
-            _mpp_s2 = (2 * half_width_m) / 1200.0
-            _cx_s2 = cx
-            _cy_s2 = cy
-            def _utm_to_px(ux, uy):
-                _px = 600 + (ux - _cx_s2) / _mpp_s2
-                _py = 600 - (uy - _cy_s2) / _mpp_s2
-                return _px, _py
-            _coast_path_s2 = COMMUNITIES_DIR / cid / cfg.get("coastline_geojson_path", "coastline_data.geojson")
-            if _coast_path_s2.exists():
-                try:
-                    with open(_coast_path_s2) as _cf2:
-                        _coast2 = _json_s2.load(_cf2)
-                    _draw_cs = _Draw_s2.Draw(s2_img)
-                    for _feat2 in _coast2.get("features", []):
-                        _geom2 = _feat2.get("geometry", {})
-                        if _geom2.get("type") != "LineString":
-                            continue
-                        _prev2 = None
-                        for _clon2, _clat2 in _geom2.get("coordinates", []):
-                            _ux, _uy = _ll_to_utm(_clat2, _clon2)
-                            _ppx, _ppy = _utm_to_px(_ux, _uy)
-                            if _prev2 is not None:
-                                _draw_cs.line([_prev2, (_ppx, _ppy)], fill=(40, 40, 40), width=4)
-                                _draw_cs.line([_prev2, (_ppx, _ppy)], fill=(255, 255, 255), width=2)
-                            _prev2 = (_ppx, _ppy)
-                    print(f"  S2: coastline overlay drawn")
-                except Exception as _ce2:
-                    print(f"  S2 coastline overlay failed: {_ce2}")
-            # Place-name labels
-            _pts_s2 = cfg.get("map_points", [])
-            if _pts_s2:
-                try:
-                    _draw_lbl2 = _Draw_s2.Draw(s2_img)
-                    _font_s2 = _Font_s2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26) if hasattr(_Font_s2, 'truetype') else _Font_s2.load_default()
-                    _MARGIN = 20
-                    for _pt2 in _pts_s2:
-                        _ux2, _uy2 = _ll_to_utm(_pt2[0], _pt2[1])
-                        _ppx2, _ppy2 = _utm_to_px(_ux2, _uy2)
-                        if not (-_MARGIN <= _ppx2 <= 1200 + _MARGIN and -_MARGIN <= _ppy2 <= 1200 + _MARGIN):
-                            continue
-                        _rdot = 7
-                        _draw_lbl2.ellipse([_ppx2 - _rdot, _ppy2 - _rdot, _ppx2 + _rdot, _ppy2 + _rdot], fill=(220, 60, 60), outline="white", width=2)
-                        _lbl2 = _pt2[2] if len(_pt2) > 2 else ""
-                        _dy2 = _pt2[3] if len(_pt2) > 3 else -14
-                        if _lbl2:
-                            try:
-                                _tb2 = _draw_lbl2.textbbox((_ppx2 + 12, _ppy2 + _dy2), _lbl2, font=_font_s2)
-                                _ov2 = _Img4.new("RGBA", s2_img.size, (0, 0, 0, 0))
-                                _Draw_s2.Draw(_ov2).rounded_rectangle([_tb2[0]-3, _tb2[1]-3, _tb2[2]+3, _tb2[3]+3], radius=3, fill=(0, 0, 0, 160))
-                                s2_img = _Img4.alpha_composite(s2_img.convert("RGBA"), _ov2).convert("RGB")
-                                _draw_lbl2 = _Draw_s2.Draw(s2_img)
-                            except Exception:
-                                pass
-                            _draw_lbl2.text((_ppx2 + 12, _ppy2 + _dy2), _lbl2, font=_font_s2, fill=(255, 255, 255))
-                except Exception as _le2:
-                    print(f"  S2 place labels failed: {_le2}")
-            # Scale: 2*half_width_m across 1200px
-            _mpp = (2 * half_width_m) / 1200.0
-            s2_img = _annotate_img(s2_img, date_str, _mpp)
-            buf = _io4.BytesIO()
-            s2_img.save(buf, "PNG", optimize=True)
-            out_path.write_bytes(buf.getvalue())
+            # Shared finishing: coastline, labels, hydro dots, timestamp, scale
+            _s2_overlay_and_save(s2_img, _ll_to_utm, cx, cy, half_width_m, date_str, out_path)
             print(f"  S2 {half_width_m//1000}km: {date_str} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
             return date_str
         except Exception as e:
             print(f"  S2 process error: {e}")
         return None
 
-    # Sentinel-2 NDSI snow cover: natural-color background with a cyan-white
-    # tint where NDSI > 0.42 (and green reflectance high enough to exclude
-    # dark water); SCL cloud classes are left untinted so clouds don't read
-    # as snow. 20 m native resolution — far sharper than VIIRS/MODIS NDSI.
-    _snow_evalscript = (
-        "//VERSION=3\n"
-        "function setup(){return{input:[{bands:[\"B02\",\"B03\",\"B04\",\"B11\",\"SCL\",\"dataMask\"]}],"
-        "output:{bands:4,sampleType:\"AUTO\"}};}\n"
-        "function evaluatePixel(s){\n"
-        "  if(!s.dataMask)return[0,0,0,0];\n"
-        "  const g=2.5,C=0.55,gm=1.6;\n"
-        "  function adj(v){var x=v*g;return Math.pow(x/(x+C),1/gm);}\n"
-        "  var r=adj(s.B04),gg=adj(s.B03),b=adj(s.B02);\n"
-        "  var ndsi=(s.B03-s.B11)/(s.B03+s.B11+1e-6);\n"
-        "  var cloud=(s.SCL==8||s.SCL==9||s.SCL==10);\n"
-        "  if(!cloud&&ndsi>0.42&&s.B03>0.2){\n"
-        "    return[0.45*r+0.55*0.30,0.45*gg+0.55*0.80,0.45*b+0.55*1.0,1];\n"
-        "  }\n"
-        "  return[r,gg,b,1];\n"
-        "}"
-    )
+    def fetch_snow_image(token, half_width_m, out_path, center_ll=None, max_days_back=30):
+        """Snow-cover frame: the Copernicus Sentinel-2 quarterly cloudless
+        mosaic (summer quarter, 10 m) as a stable background, with ONLY the
+        snow classification from the newest S2 L2A acquisition drawn on top —
+        snow as icy blue-white, clouds as faint gray (so missing data does
+        not read as snow-free), everything else fully transparent."""
+        import io as _io5
+        from PIL import Image as _Img5
+        utm_epsg = cfg.get("utm_epsg", "32608")
+        cx = cfg.get("utm_center_x")
+        cy = cfg.get("utm_center_y")
+        if not cx or not cy:
+            print("  Snow: no utm_center_x/y in config, skipping")
+            return None
+        _ll_to_utm = _make_ll_to_utm(utm_epsg)
+        if center_ll and center_ll[0] is not None and center_ll[1] is not None:
+            try:
+                cx, cy = _ll_to_utm(center_ll[0], center_ll[1])
+            except Exception:
+                pass
+        bbox = [cx - half_width_m, cy - half_width_m, cx + half_width_m, cy + half_width_m]
+
+        from datetime import timedelta as _td5
+        end_dt = now_utc
+        start_dt = end_dt - _td5(days=max_days_back)
+        # Newest acquisition over the site (same catalog pre-fetch as fetch_s2_image)
+        _acq_iso = None
+        _mask_from = start_dt.strftime("%Y-%m-%dT00:00:00Z")
+        _mask_to = end_dt.strftime("%Y-%m-%dT23:59:59Z")
+        try:
+            _cat_r = requests.post(
+                "https://sh.dataspace.copernicus.eu/api/v1/catalog/1.0.0/search",
+                json={
+                    "bbox": [lon - 0.5, lat - 0.3, lon + 0.5, lat + 0.3],
+                    "datetime": f"{_mask_from}/{_mask_to}",
+                    "collections": ["sentinel-2-l2a"],
+                    "limit": 10,
+                },
+                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                timeout=15,
+            )
+            _feats = _cat_r.json().get("features", [])
+            if _feats:
+                _feats.sort(key=lambda f: f.get("properties", {}).get("datetime", ""), reverse=True)
+                _acq_iso = _feats[0]["properties"]["datetime"]
+                from datetime import datetime as _dtp5
+                _acq_dt = _dtp5.fromisoformat(_acq_iso.replace("Z", "+00:00"))
+                _mask_from = (_acq_dt - _td5(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
+                _mask_to = (_acq_dt + _td5(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except Exception as _cse:
+            print(f"  Snow catalog failed: {_cse}")
+
+        def _proc(collection, t_from, t_to, evalscript):
+            """One Process API request; returns an RGBA PIL image or None."""
+            try:
+                r = requests.post(
+                    "https://sh.dataspace.copernicus.eu/api/v1/process",
+                    json={
+                        "input": {
+                            "bounds": {
+                                "bbox": bbox,
+                                "properties": {"crs": f"http://www.opengis.net/def/crs/EPSG/0/{utm_epsg}"},
+                            },
+                            "data": [{
+                                "dataFilter": {
+                                    "timeRange": {"from": t_from, "to": t_to},
+                                    "mosaickingOrder": "mostRecent",
+                                    "maxCloudCoverage": 100,
+                                },
+                                "type": collection,
+                            }],
+                        },
+                        "output": {
+                            "width": 1200, "height": 1200,
+                            "responses": [{"identifier": "default",
+                                           "format": {"type": "image/png"}}],
+                        },
+                        "evalscript": evalscript,
+                    },
+                    headers={"Authorization": f"Bearer {token}",
+                             "Content-Type": "application/json"},
+                    timeout=90,
+                )
+                ct = r.headers.get("content-type", "")
+                if r.status_code != 200 or "image" not in ct:
+                    print(f"  Snow process {collection} failed: {r.status_code} {r.text[:160]}")
+                    return None
+                return _Img5.open(_io5.BytesIO(r.content)).convert("RGBA")
+            except Exception as _pe:
+                print(f"  Snow process {collection} error: {_pe}")
+                return None
+
+        # Snow/cloud mask from the newest acquisition: transparent unless snow
+        # (NDSI>0.42 with bright green band, or SCL snow class 11, never water
+        # class 6) or cloud (SCL 8/9/10, faint gray).
+        _mask_eval = (
+            "//VERSION=3\n"
+            "function setup(){return{input:[{bands:[\"B03\",\"B11\",\"SCL\",\"dataMask\"]}],"
+            "output:{bands:4,sampleType:\"AUTO\"}};}\n"
+            "function evaluatePixel(s){\n"
+            "  if(!s.dataMask)return[0,0,0,0];\n"
+            "  var scl=s.SCL;\n"
+            "  if(scl==8||scl==9||scl==10)return[0.55,0.56,0.58,0.35];\n"
+            "  var ndsi=(s.B03-s.B11)/(s.B03+s.B11+1e-6);\n"
+            "  if(scl!=6&&((ndsi>0.42&&s.B03>0.2)||scl==11))return[0.62,0.90,1.0,0.85];\n"
+            "  return[0,0,0,0];\n"
+            "}"
+        )
+        _mask = _proc("sentinel-2-l2a", _mask_from, _mask_to, _mask_eval)
+        if _mask is None:
+            return None
+
+        # Background: most recent SUMMER-quarter cloudless mosaic (Jul-Sep) —
+        # bright and snow-free year-round, unlike the newest quarter which is
+        # dark at these latitudes in winter. Mosaic DNs are 0-10000.
+        _mosaic_eval = (
+            "//VERSION=3\n"
+            "function setup(){return{input:[{bands:[\"B04\",\"B03\",\"B02\",\"dataMask\"]}],"
+            "output:{bands:4,sampleType:\"AUTO\"}};}\n"
+            "function evaluatePixel(s){\n"
+            "  if(!s.dataMask)return[0,0,0,0];\n"
+            "  const g=2.5,C=0.55,gm=1.6;\n"
+            "  function adj(v){var x=v/10000*g;return Math.pow(x/(x+C),1/gm);}\n"
+            "  return[adj(s.B04),adj(s.B03),adj(s.B02),1];\n"
+            "}"
+        )
+        _S2_MOSAIC = "byoc-5460de54-082e-473a-b6ea-d5cbe3c17cca"
+
+        def _alpha_frac(img):
+            _a = img.split()[3].getdata()
+            _s = list(_a)[::997]
+            return sum(1 for p in _s if p > 10) / max(1, len(_s))
+
+        _bg = None
+        _yr0 = now_utc.year if (now_utc.month, now_utc.day) >= (11, 1) else now_utc.year - 1
+        for _y in (_yr0, _yr0 - 1):
+            _cand = _proc(_S2_MOSAIC, f"{_y}-07-01T00:00:00Z", f"{_y}-09-30T23:59:59Z", _mosaic_eval)
+            if _cand is not None and _alpha_frac(_cand) > 0.3:
+                _bg = _cand
+                print(f"  Snow: background mosaic Q3 {_y}")
+                break
+        if _bg is None:
+            # Fall back to the live scene as background rather than failing
+            print("  Snow: quarterly mosaic unavailable — falling back to live-scene background")
+            _tc_eval = (
+                "//VERSION=3\n"
+                "function setup(){return{input:[{bands:[\"B04\",\"B03\",\"B02\",\"dataMask\"]}],"
+                "output:{bands:4,sampleType:\"AUTO\"}};}\n"
+                "function evaluatePixel(s){\n"
+                "  if(!s.dataMask)return[0,0,0,0];\n"
+                "  const g=2.5,C=0.55,gm=1.6;\n"
+                "  function adj(v){var x=v*g;return Math.pow(x/(x+C),1/gm);}\n"
+                "  return[adj(s.B04),adj(s.B03),adj(s.B02),1];\n"
+                "}"
+            )
+            _bg = _proc("sentinel-2-l2a", _mask_from, _mask_to, _tc_eval)
+        if _bg is None:
+            return None
+
+        _base = _Img5.new("RGB", (1200, 1200), (10, 15, 26))
+        _base.paste(_bg, mask=_bg.split()[3])
+        _comp = _Img5.alpha_composite(_base.convert("RGBA"), _mask).convert("RGB")
+        date_str = _acq_iso or end_dt.strftime("%Y-%m-%d")
+        _s2_overlay_and_save(_comp, _ll_to_utm, cx, cy, half_width_m, date_str, out_path,
+                             legend=[("snow", (158, 230, 255)),
+                                     ("cloud / no data", (140, 141, 145))])
+        print(f"  Snow {half_width_m//1000}km: {date_str} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
+        return date_str
 
     print("Fetching Sentinel-2 true color…")
     sh_token = get_sh_token()
@@ -2200,12 +2373,10 @@ def main():
             fetch_s2_image(sh_token, 25_000, img_dir / "s2_50.png",
                            center_ll=(cfg.get("lat"), cfg.get("lon")))
         print("Fetching Sentinel-2 NDSI snow cover…")
-        snow_date = fetch_s2_image(sh_token, 150_000, img_dir / "snow_150.png",
-                                   evalscript=_snow_evalscript)
+        snow_date = fetch_snow_image(sh_token, 150_000, img_dir / "snow_150.png")
         if snow_date:
-            fetch_s2_image(sh_token, 25_000, img_dir / "snow_50.png",
-                           center_ll=(cfg.get("lat"), cfg.get("lon")),
-                           evalscript=_snow_evalscript)
+            fetch_snow_image(sh_token, 25_000, img_dir / "snow_50.png",
+                             center_ll=(cfg.get("lat"), cfg.get("lon")))
     else:
         print("  Sentinel-2 skipped (no SH credentials in env)")
     # Carry forward old snow date if fetch failed but image exists

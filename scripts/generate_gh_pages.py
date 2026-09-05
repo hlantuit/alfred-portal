@@ -247,6 +247,44 @@ def get_with_retry(url, params=None, timeout=30, retries=3, headers=None):
     raise RuntimeError("unreachable")
 
 
+_HYDRO_LATLON_CACHE = {}
+
+
+def _hydro_map_points_gh(cfg):
+    """(lat, lon, short_label) for each configured hydrometric station.
+
+    Station coordinates come from the station's own lat/lon keys when
+    present, else from the ECCC hydrometric-stations collection (cached
+    per run). Drawn as teal dots on imagery, matching the S1 frames."""
+    pts = []
+    for st in cfg.get("hydrometric_stations", []):
+        sid_ = st.get("station_id")
+        if not sid_:
+            continue
+        la, lo = st.get("lat"), st.get("lon")
+        if la is None or lo is None:
+            if sid_ in _HYDRO_LATLON_CACHE:
+                la, lo = _HYDRO_LATLON_CACHE[sid_]
+            else:
+                try:
+                    _r = get_with_retry(
+                        "https://api.weather.gc.ca/collections/hydrometric-stations/items",
+                        params={"STATION_NUMBER": sid_, "f": "json"}, timeout=20)
+                    _co = _r.json()["features"][0]["geometry"]["coordinates"]
+                    lo, la = float(_co[0]), float(_co[1])
+                    _HYDRO_LATLON_CACHE[sid_] = (la, lo)
+                except Exception as _he:
+                    print(f"  hydro station {sid_}: no coordinates ({_he})")
+                    continue
+        lbl = st.get("map_label") or st.get("river_name") or sid_
+        for _sep in (" — ", " at ", " near ", ", "):
+            if _sep in lbl:
+                lbl = lbl.split(_sep)[0]
+                break
+        pts.append((float(la), float(lo), lbl))
+    return pts
+
+
 # ── Weather ───────────────────────────────────────────────────────────────
 
 def fetch_weather(lat, lon, tz):
@@ -1379,7 +1417,10 @@ def main():
                             # No clean spot found — return None to signal skip
                             return None, None, None
 
-                        for pt in banner_pts:
+                        # River/hydrometric stations get teal dots, like the S1 frames
+                        _pts_colored = ([(p, (220, 60, 60)) for p in banner_pts]
+                                        + [(p, (42, 157, 143)) for p in _hydro_map_points_gh(cfg)])
+                        for pt, _dot_fill in _pts_colored:
                             pt_lat, pt_lon, pt_label = pt[0], pt[1], pt[2]
                             if not (lon_w < pt_lon < lon_e and lat_s < pt_lat < lat_n):
                                 continue
@@ -1393,7 +1434,7 @@ def main():
                             # Dot
                             r_dot = 7
                             draw.ellipse([px_x-r_dot, px_y-r_dot, px_x+r_dot, px_y+r_dot],
-                                         fill=(220, 60, 60), outline="white", width=2)
+                                         fill=_dot_fill, outline="white", width=2)
                             placed_boxes.append((px_x - r_dot, px_y - r_dot,
                                                  px_x + r_dot, px_y + r_dot))
                             # Find non-overlapping label position
@@ -1640,7 +1681,9 @@ def main():
                 try:
                     _draw_lbl = _Draw.Draw(cropped)
                     _font_pt = _Font.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26) if hasattr(_Font,'truetype') else _Font.load_default()
-                    for _pt in cfg.get("map_points",[]):
+                    _vpts = ([(p, (220, 60, 60)) for p in cfg.get("map_points", [])]
+                             + [(p, (42, 157, 143)) for p in _hydro_map_points_gh(cfg)])
+                    for _pt, _dot_fill in _vpts:
                         _px3, _py3 = _ll_to_ps3413(_pt[0], _pt[1])
                         # Map to 1500×1500 pixels
                         _px15 = (_px3 - _bparts[0]) / (_bparts[2]-_bparts[0]) * 1500
@@ -1654,7 +1697,7 @@ def main():
                         if not (8 <= _cx <= 992 and 8 <= _cy <= 992):
                             continue
                         r_dot = 7
-                        _draw_lbl.ellipse([_cx-r_dot,_cy-r_dot,_cx+r_dot,_cy+r_dot], fill=(220,60,60), outline="white", width=2)
+                        _draw_lbl.ellipse([_cx-r_dot,_cy-r_dot,_cx+r_dot,_cy+r_dot], fill=_dot_fill, outline="white", width=2)
                         _lbl = _pt[2] if len(_pt)>2 else ""
                         if _lbl:
                             try:
@@ -1900,7 +1943,7 @@ def main():
             print(f"  SH token failed: {e}")
             return None
 
-    def fetch_s2_image(token, half_width_m, out_path, max_days_back=30, center_ll=None):
+    def fetch_s2_image(token, half_width_m, out_path, max_days_back=30, center_ll=None, evalscript=None):
         import io as _io
         utm_epsg = cfg.get("utm_epsg", "32608")
         cx = cfg.get("utm_center_x")
@@ -1938,20 +1981,21 @@ def main():
             except Exception as _cle:
                 print(f"  S2 centre override failed, using utm_center: {_cle}")
         bbox = [cx - half_width_m, cy - half_width_m, cx + half_width_m, cy + half_width_m]
-        # Highlight Optimized Natural Color: sigmoid tone-map + gamma, matching Copernicus Browser
-        # adj(v) = (gain*v / (gain*v + C))^(1/gamma)
-        # gain=2.5, C=0.55, gamma=1.6 → lifts dark land/water, compresses clouds without clipping
-        evalscript = (
-            "//VERSION=3\n"
-            "function setup(){return{input:[{bands:[\"B04\",\"B03\",\"B02\",\"dataMask\"]}],"
-            "output:{bands:4,sampleType:\"AUTO\"}};}\n"
-            "function evaluatePixel(s){\n"
-            "  if(!s.dataMask)return[0,0,0,0];\n"
-            "  const g=2.5,C=0.55,gm=1.6;\n"
-            "  function adj(v){var x=v*g;return Math.pow(x/(x+C),1/gm);}\n"
-            "  return[adj(s.B04),adj(s.B03),adj(s.B02),1];\n"
-            "}"
-        )
+        if evalscript is None:
+            # Highlight Optimized Natural Color: sigmoid tone-map + gamma, matching Copernicus Browser
+            # adj(v) = (gain*v / (gain*v + C))^(1/gamma)
+            # gain=2.5, C=0.55, gamma=1.6 → lifts dark land/water, compresses clouds without clipping
+            evalscript = (
+                "//VERSION=3\n"
+                "function setup(){return{input:[{bands:[\"B04\",\"B03\",\"B02\",\"dataMask\"]}],"
+                "output:{bands:4,sampleType:\"AUTO\"}};}\n"
+                "function evaluatePixel(s){\n"
+                "  if(!s.dataMask)return[0,0,0,0];\n"
+                "  const g=2.5,C=0.55,gm=1.6;\n"
+                "  function adj(v){var x=v*g;return Math.pow(x/(x+C),1/gm);}\n"
+                "  return[adj(s.B04),adj(s.B03),adj(s.B02),1];\n"
+                "}"
+            )
         # Find most recent acquisition date from catalog first
         try:
             from datetime import timedelta as _td, datetime as _dtparse
@@ -2124,16 +2168,56 @@ def main():
             print(f"  S2 process error: {e}")
         return None
 
+    # Sentinel-2 NDSI snow cover: natural-color background with a cyan-white
+    # tint where NDSI > 0.42 (and green reflectance high enough to exclude
+    # dark water); SCL cloud classes are left untinted so clouds don't read
+    # as snow. 20 m native resolution — far sharper than VIIRS/MODIS NDSI.
+    _snow_evalscript = (
+        "//VERSION=3\n"
+        "function setup(){return{input:[{bands:[\"B02\",\"B03\",\"B04\",\"B11\",\"SCL\",\"dataMask\"]}],"
+        "output:{bands:4,sampleType:\"AUTO\"}};}\n"
+        "function evaluatePixel(s){\n"
+        "  if(!s.dataMask)return[0,0,0,0];\n"
+        "  const g=2.5,C=0.55,gm=1.6;\n"
+        "  function adj(v){var x=v*g;return Math.pow(x/(x+C),1/gm);}\n"
+        "  var r=adj(s.B04),gg=adj(s.B03),b=adj(s.B02);\n"
+        "  var ndsi=(s.B03-s.B11)/(s.B03+s.B11+1e-6);\n"
+        "  var cloud=(s.SCL==8||s.SCL==9||s.SCL==10);\n"
+        "  if(!cloud&&ndsi>0.42&&s.B03>0.2){\n"
+        "    return[0.45*r+0.55*0.30,0.45*gg+0.55*0.80,0.45*b+0.55*1.0,1];\n"
+        "  }\n"
+        "  return[r,gg,b,1];\n"
+        "}"
+    )
+
     print("Fetching Sentinel-2 true color…")
     sh_token = get_sh_token()
     s2_date = None
+    snow_date = None
     if sh_token:
         s2_date = fetch_s2_image(sh_token, 150_000, img_dir / "s2_150.png")
         if s2_date:
             fetch_s2_image(sh_token, 25_000, img_dir / "s2_50.png",
                            center_ll=(cfg.get("lat"), cfg.get("lon")))
+        print("Fetching Sentinel-2 NDSI snow cover…")
+        snow_date = fetch_s2_image(sh_token, 150_000, img_dir / "snow_150.png",
+                                   evalscript=_snow_evalscript)
+        if snow_date:
+            fetch_s2_image(sh_token, 25_000, img_dir / "snow_50.png",
+                           center_ll=(cfg.get("lat"), cfg.get("lon")),
+                           evalscript=_snow_evalscript)
     else:
         print("  Sentinel-2 skipped (no SH credentials in env)")
+    # Carry forward old snow date if fetch failed but image exists
+    if not snow_date and (img_dir / "snow_150.png").exists():
+        try:
+            _prev_djs = out_dir / "data.json"
+            if _prev_djs.exists():
+                snow_date = json.loads(_prev_djs.read_text(encoding="utf-8")).get("snow_date")
+                if snow_date:
+                    print(f"  Snow: carrying forward previous date {snow_date}")
+        except Exception:
+            pass
     # Carry forward old S2 date if fetch failed but image exists
     if not s2_date and (img_dir / "s2_150.png").exists():
         try:
@@ -2177,6 +2261,7 @@ def main():
         "viirs_date": viirs_date,
         "viirs_sat": viirs_sat,
         "s2_date": s2_date,
+        "snow_date": snow_date,
         "weather": weather,
         "total_water_level": total_water_level,
         "tide": tide,

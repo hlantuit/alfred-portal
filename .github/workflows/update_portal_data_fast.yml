@@ -31,6 +31,17 @@ jobs:
       #     python scripts/generate_dashboards.py \
       #       --skip-blocks sentinel1,sea_ice,sea_ice_zoom,modis
 
+      # Re-renders only when the Sentinel Hub catalog shows a new acquisition
+      # (guarded via s1_acquired in charts/satellite_meta.json), so this is
+      # cheap on quota despite running hourly. gh-pages.yml copies the PNGs
+      # into docs/<community>/img/ on its next run.
+      - name: Refresh Sentinel-1 SAR / sea-ice imagery
+        env:
+          SENTINEL_HUB_CLIENT_ID: ${{ secrets.SENTINEL_HUB_CLIENT_ID }}
+          SENTINEL_HUB_CLIENT_SECRET: ${{ secrets.SENTINEL_HUB_CLIENT_SECRET }}
+          NOTION_TOKEN: "offline-unused"
+        run: python scripts/update_sar_images.py
+
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
@@ -45,6 +56,7 @@ jobs:
 
           find communities -name "coastline_data.geojson" -exec git add {} + 2>/dev/null || true
           find communities -name "water_bodies.geojson"   -exec git add {} + 2>/dev/null || true
+          find communities -path "*/charts/satellite_meta.json" -exec git add {} + 2>/dev/null || true
 
           echo "Staged files:"
           git diff --cached --name-only

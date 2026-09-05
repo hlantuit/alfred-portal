@@ -1353,9 +1353,9 @@ async function renderTddChart(lat, lon) {
     if (cvEl) cvEl.textContent = curTdd;
 
     // SVG layout
-    const W = el.offsetWidth || 700;
-    const ML = 72, MR = 20, MT = 20, MB = 44;
-    const cW = W - ML - MR, H = Math.max(180, Math.round(W * 0.3)), cH = H - MT - MB;
+    const W = 1000;  // fixed viewBox: scales with the card, no overlap at narrow widths
+    const ML = 100, MR = 24, MT = 34, MB = 56;
+    const cW = W - ML - MR, H = 300, cH = H - MT - MB;
     const maxV = Math.max(...years.map(y => tddY[y])) * 1.08;
     const yS = v => (MT + cH - (v / maxV) * cH).toFixed(1);
     const nY = years.length;
@@ -1368,7 +1368,7 @@ async function renderTddChart(lat, lon) {
     let grid = '';
     for (let v = 0; v <= maxV; v += step) {
       grid += `<line x1="${ML}" y1="${yS(v)}" x2="${ML+cW}" y2="${yS(v)}" stroke="var(--border)" stroke-width="1"/>`;
-      grid += `<text x="${ML-5}" y="${parseFloat(yS(v))+4}" text-anchor="end" font-size="13" fill="var(--muted)">${v}</text>`;
+      grid += `<text x="${ML-8}" y="${parseFloat(yS(v))+8}" text-anchor="end" font-size="24" fill="var(--muted)">${v}</text>`;
     }
 
     // Bars
@@ -1380,8 +1380,8 @@ async function renderTddChart(lat, lon) {
       const by = yS(tdd);
       const fill = y === curYear ? '#E07070' : '#F0A830';
       bars += `<rect class="tdd-bar" data-y="${y}" data-v="${Math.round(tdd)}" x="${bx}" y="${by}" width="${bW.toFixed(1)}" height="${bh}" fill="${fill}" rx="1.5"/>`;
-      if (y % 5 === 1 || y === curYear || y === years[0]) {
-        xlabels += `<text x="${xC(i)}" y="${(MT + cH + 16).toFixed(1)}" text-anchor="middle" font-size="13" fill="var(--muted)">${y}</text>`;
+      if (y % 5 === 1 || (y === curYear && curYear % 5 > 2) || y === years[0]) {
+        xlabels += `<text x="${xC(i)}" y="${(MT + cH + 30).toFixed(1)}" text-anchor="middle" font-size="24" fill="var(--muted)">${y}</text>`;
       }
     });
 
@@ -1389,15 +1389,15 @@ async function renderTddChart(lat, lon) {
     const avgY = parseFloat(yS(avg25));
     const avgLine =
       `<line x1="${ML}" y1="${avgY.toFixed(1)}" x2="${ML+cW}" y2="${avgY.toFixed(1)}" stroke="#C0392B" stroke-width="1.5" stroke-dasharray="5,3"/>` +
-      `<text x="${(ML+cW-4).toFixed(1)}" y="${(avgY-5).toFixed(1)}" text-anchor="end" font-size="12" fill="#C0392B">25yr avg ${Math.round(avg25)}</text>`;
+      `<text x="${(ML+cW-4).toFixed(1)}" y="${(avgY-8).toFixed(1)}" text-anchor="end" font-size="22" fill="#C0392B">25yr avg ${Math.round(avg25)}</text>`;
 
     const uid = 'tddTip_h';
-    const tip = `<g id="${uid}" style="pointer-events:none;display:none"><rect id="${uid}bg" rx="4" fill="rgba(0,0,0,0.82)" stroke="rgba(255,255,255,0.25)" stroke-width="1"/><text id="${uid}tx" font-size="12" fill="white" font-family="system-ui,sans-serif"></text></g>`;
+    const tip = `<g id="${uid}" style="pointer-events:none;display:none"><rect id="${uid}bg" rx="4" fill="rgba(0,0,0,0.82)" stroke="rgba(255,255,255,0.25)" stroke-width="1"/><text id="${uid}tx" font-size="22" fill="white" font-family="system-ui,sans-serif"></text></g>`;
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
     svg.style.cssText = 'width:100%;display:block';
-    svg.innerHTML = `<text x="${ML}" y="${MT-5}" font-size="12" fill="var(--muted)">°C·days</text>${grid}${bars}${avgLine}${xlabels}${tip}`;
+    svg.innerHTML = `<text x="${ML}" y="${MT-10}" font-size="22" fill="var(--muted)">°C·days</text>${grid}${bars}${avgLine}${xlabels}${tip}`;
     el.innerHTML = '';
     el.appendChild(svg);
 
@@ -1412,10 +1412,10 @@ async function renderTddChart(lat, lon) {
         if (!tipEl || !bg || !tx) return;
         tx.textContent = lbl; tipEl.style.display = '';
         const bx = parseFloat(bar.getAttribute('x')), by = parseFloat(bar.getAttribute('y'));
-        const tw = lbl.length * 7.5 + 16;
-        const tx2 = Math.min(bx, W - tw - 6), ty2 = Math.max(MT, by - 28);
-        bg.setAttribute('x', tx2); bg.setAttribute('y', ty2); bg.setAttribute('width', tw); bg.setAttribute('height', 22);
-        tx.setAttribute('x', tx2 + 8); tx.setAttribute('y', ty2 + 15);
+        const tw = lbl.length * 12.5 + 20;
+        const tx2 = Math.min(bx, W - tw - 6), ty2 = Math.max(MT, by - 42);
+        bg.setAttribute('x', tx2); bg.setAttribute('y', ty2); bg.setAttribute('width', tw); bg.setAttribute('height', 34);
+        tx.setAttribute('x', tx2 + 10); tx.setAttribute('y', ty2 + 24);
       });
       bar.addEventListener('mouseleave', () => { const tipEl = svg.querySelector('#'+uid); if (tipEl) tipEl.style.display = 'none'; });
     });

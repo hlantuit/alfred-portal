@@ -2430,6 +2430,178 @@ def main():
         print(f"  Snow {half_width_m//1000}km: {date_str} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
         return date_str
 
+    def fetch_ims_snow_image(token, half_width_m, out_path, prev_date=None):
+        """All-weather snow/ice frame from the NOAA/NSIDC IMS daily 1 km
+        analysis (G02156) — analysts blend microwave, optical and station
+        data, so it is never blocked by cloud (1-2 days behind real time).
+        Rendered over the quarterly cloudless mosaic like the S2 snow frames:
+        snow = icy blue, sea ice = steel blue, everything else transparent.
+
+        Facts verified against the live files 2026-09-06: gzipped GeoTIFFs at
+        noaadata.apps.nsidc.org (~2.4 MB for 1 km), posted ~13:10 UTC for the
+        PREVIOUS day; North Polar Stereographic variant B, lat_ts 60N,
+        lon0 -80, ellipsoid a=6378137 b=6356257 (NOT WGS84 — that is ~0.6 km
+        off), UL corner -12288000/+12288000, pixel-is-area; values 0 outside,
+        1 sea, 2 snow-free land, 3 sea ice, 4 snow (round-tripped to <4 m
+        against NOAA's own geolocation grids)."""
+        import gzip as _gz
+        import io as _io6
+        import math
+        import numpy as _np6
+        from datetime import timedelta as _td6
+        from PIL import Image as _Img6
+        utm_epsg = cfg.get("utm_epsg", "32608")
+        cx = cfg.get("utm_center_x")
+        cy = cfg.get("utm_center_y")
+        if not cx or not cy:
+            print("  IMS: no utm_center_x/y in config, skipping")
+            return None
+
+        # 1) Latest available file: DOY(today) then -1, -2 (posted next day ~13:10 UTC)
+        _blob = None
+        _valid = None
+        for _back in (0, 1, 2):
+            _d = now_utc - _td6(days=_back)
+            _url = (f"https://noaadata.apps.nsidc.org/NOAA/G02156/GIS/1km/{_d.year}/"
+                    f"ims{_d.year}{_d.timetuple().tm_yday:03d}_1km_GIS_v1.3.tif.gz")
+            _ds = _d.strftime("%Y-%m-%d")
+            if prev_date and prev_date == _ds and out_path.exists():
+                print(f"  IMS: analysis {_ds} already rendered — skipping")
+                return _ds
+            try:
+                _r = requests.get(_url, timeout=60)
+                if _r.status_code == 200:
+                    _blob = _gz.decompress(_r.content)
+                    _valid = _ds
+                    break
+            except Exception as _ie:
+                print(f"  IMS fetch {_url.rsplit('/', 1)[-1]} failed: {_ie}")
+        if _blob is None:
+            print("  IMS: no file available in the last 3 days")
+            return None
+        print(f"  IMS: analysis {_valid} ({len(_blob)//(1024*1024)} MB decompressed)")
+
+        # 2) Per-output-pixel lat/lon via inverse UTM (Snyder series, WGS84)
+        _SZ = 1200  # 1 km source over a 300 km frame — 1200 px is already 4x oversampled
+        _a, _e2 = 6378137.0, 0.00669437999014
+        _ep2 = _e2 / (1 - _e2)
+        _k0, _fe = 0.9996, 500000.0
+        _zone = int(utm_epsg) - 32600
+        _lon0 = math.radians((_zone - 1) * 6 - 180 + 3)
+        _mpp6 = (2 * half_width_m) / float(_SZ)
+        _cols6 = _np6.arange(_SZ) + 0.5
+        _E6 = cx - half_width_m + _cols6 * _mpp6
+        _N6 = cy + half_width_m - _cols6 * _mpp6
+        _EE, _NN = _np6.meshgrid(_E6, _N6)
+        _x6 = _EE - _fe
+        _M = _NN / _k0
+        _mu = _M / (_a * (1 - _e2 / 4 - 3 * _e2**2 / 64 - 5 * _e2**3 / 256))
+        _e1 = (1 - math.sqrt(1 - _e2)) / (1 + math.sqrt(1 - _e2))
+        _phi1 = (_mu
+                 + (3 * _e1 / 2 - 27 * _e1**3 / 32) * _np6.sin(2 * _mu)
+                 + (21 * _e1**2 / 16 - 55 * _e1**4 / 32) * _np6.sin(4 * _mu)
+                 + (151 * _e1**3 / 96) * _np6.sin(6 * _mu)
+                 + (1097 * _e1**4 / 512) * _np6.sin(8 * _mu))
+        _sp, _cp, _tp = _np6.sin(_phi1), _np6.cos(_phi1), _np6.tan(_phi1)
+        _C1 = _ep2 * _cp**2
+        _T1 = _tp**2
+        _N1 = _a / _np6.sqrt(1 - _e2 * _sp**2)
+        _R1 = _a * (1 - _e2) / (1 - _e2 * _sp**2)**1.5
+        _D = _x6 / (_N1 * _k0)
+        _lat6 = (_phi1 - (_N1 * _tp / _R1) * (
+            _D**2 / 2
+            - (5 + 3 * _T1 + 10 * _C1 - 4 * _C1**2 - 9 * _ep2) * _D**4 / 24
+            + (61 + 90 * _T1 + 298 * _C1 + 45 * _T1**2 - 252 * _ep2 - 3 * _C1**2) * _D**6 / 720))
+        _lon6 = _lon0 + (_D - (1 + 2 * _T1 + _C1) * _D**3 / 6
+                         + (5 - 2 * _C1 + 28 * _T1 - 3 * _C1**2 + 8 * _ep2 + 24 * _T1**2) * _D**5 / 120) / _cp
+
+        # 3) lat/lon → IMS 1 km row/col (verified projection, custom ellipsoid)
+        _IA, _IB = 6378137.0, 6356257.0
+        _IE2 = 1.0 - (_IB / _IA)**2
+        _IE = math.sqrt(_IE2)
+        _tf = lambda p: _np6.tan(_np6.pi / 4 - p / 2) * ((1 + _IE * _np6.sin(p)) / (1 - _IE * _np6.sin(p)))**(_IE / 2)
+        _latc = math.radians(60.0)
+        _mc = math.cos(_latc) / math.sqrt(1 - _IE2 * math.sin(_latc)**2)
+        _rho = _IA * _mc / float(_tf(_np6.array(_latc))) * _tf(_lat6)
+        _lam = _lon6 - math.radians(-80.0)
+        _ix = _rho * _np6.sin(_lam)
+        _iy = -_rho * _np6.cos(_lam)
+        _col = _np6.floor((_ix - (-12288000.0)) / 1000.0).astype(_np6.int64)
+        _row = _np6.floor((12288000.0 - _iy) / 1000.0).astype(_np6.int64)
+
+        # 4) Lazy-crop the site window out of the 604 MB virtual array
+        _Img6.MAX_IMAGE_PIXELS = None
+        _tif = _Img6.open(_io6.BytesIO(_blob))
+        _r0, _r1 = int(_row.min()) - 2, int(_row.max()) + 3
+        _c0, _c1 = int(_col.min()) - 2, int(_col.max()) + 3
+        _win = _np6.array(_tif.crop((_c0, _r0, _c1, _r1)))
+        _vals = _win[_row - _r0, _col - _c0]
+
+        # 5) Overlay: snow icy blue, sea ice steel blue, rest transparent
+        _ov6 = _np6.zeros((_SZ, _SZ, 4), dtype=_np6.uint8)
+        _ov6[_vals == 4] = (158, 230, 255, 217)
+        _ov6[_vals == 3] = (168, 192, 210, 205)
+        _mask6 = _Img6.fromarray(_ov6)
+
+        # 6) Background: quarterly cloudless mosaic when SH creds exist,
+        #    else the dark-ocean base (frame still works without them)
+        _bg6 = None
+        if token:
+            _mosaic_eval6 = (
+                "//VERSION=3\n"
+                "function setup(){return{input:[{bands:[\"B04\",\"B03\",\"B02\",\"dataMask\"]}],"
+                "output:{bands:4,sampleType:\"AUTO\"}};}\n"
+                "function evaluatePixel(s){\n"
+                "  if(!s.dataMask)return[0,0,0,0];\n"
+                "  const g=2.5,C=0.55,gm=1.6;\n"
+                "  function adj(v){var x=v/10000*g;return Math.pow(x/(x+C),1/gm);}\n"
+                "  return[adj(s.B04),adj(s.B03),adj(s.B02),1];\n"
+                "}"
+            )
+            _yr6 = now_utc.year if (now_utc.month, now_utc.day) >= (11, 1) else now_utc.year - 1
+            _bbox6 = [cx - half_width_m, cy - half_width_m, cx + half_width_m, cy + half_width_m]
+            for _y6 in (_yr6, _yr6 - 1):
+                try:
+                    _pr = requests.post(
+                        "https://sh.dataspace.copernicus.eu/api/v1/process",
+                        json={
+                            "input": {
+                                "bounds": {"bbox": _bbox6,
+                                           "properties": {"crs": f"http://www.opengis.net/def/crs/EPSG/0/{utm_epsg}"}},
+                                "data": [{"dataFilter": {"timeRange": {"from": f"{_y6}-07-01T00:00:00Z",
+                                                                       "to": f"{_y6}-09-30T23:59:59Z"},
+                                                         "mosaickingOrder": "mostRecent",
+                                                         "maxCloudCoverage": 100},
+                                          "type": "byoc-5460de54-082e-473a-b6ea-d5cbe3c17cca"}],
+                            },
+                            "output": {"width": _SZ, "height": _SZ,
+                                       "responses": [{"identifier": "default",
+                                                      "format": {"type": "image/png"}}]},
+                            "evalscript": _mosaic_eval6,
+                        },
+                        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                        timeout=120,
+                    )
+                    if _pr.status_code == 200 and "image" in _pr.headers.get("content-type", ""):
+                        _cand6 = _Img6.open(_io6.BytesIO(_pr.content)).convert("RGBA")
+                        _al = list(_cand6.split()[3].getdata())[::997]
+                        if sum(1 for p in _al if p > 10) / max(1, len(_al)) > 0.3:
+                            _bg6 = _cand6
+                            break
+                except Exception as _me6:
+                    print(f"  IMS mosaic background failed: {_me6}")
+        _base6 = _Img6.new("RGB", (_SZ, _SZ), (10, 15, 26))
+        if _bg6 is not None:
+            _base6.paste(_bg6, mask=_bg6.split()[3])
+        _comp6 = _Img6.alpha_composite(_base6.convert("RGBA"), _mask6).convert("RGB")
+
+        _ll_to_utm6 = _make_ll_to_utm(utm_epsg)
+        _s2_overlay_and_save(_comp6, _ll_to_utm6, cx, cy, half_width_m, _valid, out_path,
+                             legend=[("snow", (158, 230, 255)),
+                                     ("sea ice", (168, 192, 210))])
+        print(f"  IMS {half_width_m//1000}km: {_valid} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
+        return _valid
+
     print("Fetching Sentinel-2 true color…")
     sh_token = get_sh_token()
     s2_date = None
@@ -2456,6 +2628,18 @@ def main():
                              prev_date=_prev_sat.get("snow_date"))
     else:
         print("  Sentinel-2 skipped (no SH credentials in env)")
+
+    print("Fetching IMS snow/ice analysis…")
+    ims_date = None
+    try:
+        ims_date = fetch_ims_snow_image(sh_token, 150_000, img_dir / "ims_150.png",
+                                        prev_date=_prev_sat.get("ims_date"))
+    except Exception as _imse:
+        print(f"  IMS frame failed: {_imse}")
+    if not ims_date and (img_dir / "ims_150.png").exists():
+        ims_date = _prev_sat.get("ims_date")
+        if ims_date:
+            print(f"  IMS: carrying forward previous date {ims_date}")
     # Carry forward old snow date if fetch failed but image exists
     if not snow_date and (img_dir / "snow_150.png").exists():
         try:
@@ -2549,6 +2733,7 @@ def main():
         "viirs_sat": viirs_sat,
         "s2_date": s2_date,
         "snow_date": snow_date,
+        "ims_date": ims_date,
         "weather": weather,
         "total_water_level": total_water_level,
         "tide": tide,

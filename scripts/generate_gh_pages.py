@@ -2640,18 +2640,11 @@ def main():
     else:
         print("  Sentinel-2 skipped (no SH credentials in env)")
 
-    print("Fetching IMS snow/ice analysis…")
-    ims_date = None
-    try:
-        ims_date = fetch_ims_snow_image(sh_token, 150_000, img_dir / "ims_150.png",
-                                        prev_date=_prev_sat.get("ims_date"),
-                                        prev_style=_prev_sat.get("ims_style"))
-    except Exception as _imse:
-        print(f"  IMS frame failed: {_imse}")
-    if not ims_date and (img_dir / "ims_150.png").exists():
-        ims_date = _prev_sat.get("ims_date")
-        if ims_date:
-            print(f"  IMS: carrying forward previous date {ims_date}")
+    # IMS frame retired 2026-09-06 (PI: 1 km analysis too coarse next to the
+    # 20 m S2 frames). fetch_ims_snow_image is kept above — its verified
+    # IMS projection/sampling machinery is the template for a future
+    # VNP10A1F (375 m cloud-gap-filled VIIRS) frame once an Earthdata
+    # token is available as a repo secret.
     # Carry forward old snow date if fetch failed but image exists
     if not snow_date and (img_dir / "snow_150.png").exists():
         try:
@@ -2745,8 +2738,6 @@ def main():
         "viirs_sat": viirs_sat,
         "s2_date": s2_date,
         "snow_date": snow_date,
-        "ims_date": ims_date,
-        "ims_style": 2,
         "weather": weather,
         "total_water_level": total_water_level,
         "tide": tide,

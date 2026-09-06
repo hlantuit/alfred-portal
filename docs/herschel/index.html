@@ -609,10 +609,6 @@ svg.sp{width:100%;height:auto;display:block}
       <img src="img/snow_50.png" alt="Snow cover 50 km frame" onerror="this.closest('.img-card').style.display='none'">
       <div class="img-cap">Snow cover · 50 km frame · click to zoom</div>
     </div>
-    <div class="img-card" onclick="openLb(this.querySelector('img'))">
-      <img src="img/ims_150.png" alt="IMS snow and ice analysis 150 km frame" onerror="this.closest('.img-card').style.display='none'">
-      <div class="img-cap">Snow &amp; ice · IMS 1 km all-weather analysis · 150 km frame · click to zoom</div>
-    </div>
   </div>
 
 
@@ -678,10 +674,6 @@ svg.sp{width:100%;height:auto;display:block}
     <a class="lk" href="https://marine.copernicus.eu" target="_blank" rel="noopener">
       <span class="lk-ico">🌊</span>
       <div><div class="lk-label">Total water level — tide + surge</div><div class="lk-src">TOPAZ6 (Copernicus Marine) · GDSPS (ECCC)</div></div>
-    </a>
-    <a class="lk" href="https://nsidc.org/data/g02156" target="_blank" rel="noopener">
-      <span class="lk-ico">🧊</span>
-      <div><div class="lk-label">Snow &amp; ice analysis — IMS 1 km</div><div class="lk-src">NOAA/NESDIS · NSIDC G02156 · all-weather daily</div></div>
     </a>
     <a class="lk" href="https://github.com/hlantuit/alfred-portal" target="_blank" rel="noopener">
       <span class="lk-ico">💻</span>
@@ -1755,7 +1747,7 @@ async function loadData(){
         'viirs.png':_wv('Coastlines_15m,'+_vsat+'_CorrectedReflectance_TrueColor_Granule,'+_vsat+'_CorrectedReflectance_TrueColor',(d.viirs_date||'').slice(0,10)),
         's2_150.png':_cb,'s2_50.png':_cb,
         'sentinel1.png':_cb,'sea_ice.png':_cb,'sea_ice_zoom.png':_cb,'lake_ice.png':_cb,
-        'snow_150.png':_cb,'snow_50.png':_cb,'ims_150.png':'https://nsidc.org/data/g02156'
+        'snow_150.png':_cb,'snow_50.png':_cb
       };
       document.querySelectorAll('.img-card').forEach(card=>{
         const im=card.querySelector('img[src^="img/"]');if(!im)return;

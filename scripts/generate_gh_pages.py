@@ -2430,7 +2430,9 @@ def main():
         print(f"  Snow {half_width_m//1000}km: {date_str} → {out_path.name} ({out_path.stat().st_size//1024} kB)")
         return date_str
 
-    def fetch_ims_snow_image(token, half_width_m, out_path, prev_date=None):
+    _IMS_STYLE = 2  # bump to force a one-off re-render after overlay-style changes
+
+    def fetch_ims_snow_image(token, half_width_m, out_path, prev_date=None, prev_style=None):
         """All-weather snow/ice frame from the NOAA/NSIDC IMS daily 1 km
         analysis (G02156) — analysts blend microwave, optical and station
         data, so it is never blocked by cloud (1-2 days behind real time).
@@ -2465,7 +2467,8 @@ def main():
             _url = (f"https://noaadata.apps.nsidc.org/NOAA/G02156/GIS/1km/{_d.year}/"
                     f"ims{_d.year}{_d.timetuple().tm_yday:03d}_1km_GIS_v1.3.tif.gz")
             _ds = _d.strftime("%Y-%m-%d")
-            if prev_date and prev_date == _ds and out_path.exists():
+            if (prev_date and prev_date == _ds and out_path.exists()
+                    and prev_style == _IMS_STYLE):
                 print(f"  IMS: analysis {_ds} already rendered — skipping")
                 return _ds
             try:
@@ -2537,10 +2540,18 @@ def main():
         _win = _np6.array(_tif.crop((_c0, _r0, _c1, _r1)))
         _vals = _win[_row - _r0, _col - _c0]
 
-        # 5) Overlay: snow icy blue, sea ice steel blue, rest transparent
+        # 5) Overlay: the information is a BOUNDARY (snowline / ice edge), so
+        # draw a light translucent wash with a strong edge line instead of an
+        # opaque slab — the mosaic terrain stays readable underneath.
         _ov6 = _np6.zeros((_SZ, _SZ, 4), dtype=_np6.uint8)
-        _ov6[_vals == 4] = (158, 230, 255, 217)
-        _ov6[_vals == 3] = (168, 192, 210, 205)
+        for _v6, _c6 in ((4, (158, 230, 255)), (3, (168, 192, 210))):
+            _m6 = _vals == _v6
+            _ov6[_m6] = (_c6[0], _c6[1], _c6[2], 96)
+            _er6 = _m6.copy()
+            _er6[1:-1, 1:-1] = (_m6[1:-1, 1:-1] & _m6[:-2, 1:-1] & _m6[2:, 1:-1]
+                                & _m6[1:-1, :-2] & _m6[1:-1, 2:])
+            _edge6 = _m6 & ~_er6
+            _ov6[_edge6] = (_c6[0], _c6[1], _c6[2], 240)
         _mask6 = _Img6.fromarray(_ov6)
 
         # 6) Background: quarterly cloudless mosaic when SH creds exist,
@@ -2633,7 +2644,8 @@ def main():
     ims_date = None
     try:
         ims_date = fetch_ims_snow_image(sh_token, 150_000, img_dir / "ims_150.png",
-                                        prev_date=_prev_sat.get("ims_date"))
+                                        prev_date=_prev_sat.get("ims_date"),
+                                        prev_style=_prev_sat.get("ims_style"))
     except Exception as _imse:
         print(f"  IMS frame failed: {_imse}")
     if not ims_date and (img_dir / "ims_150.png").exists():
@@ -2734,6 +2746,7 @@ def main():
         "s2_date": s2_date,
         "snow_date": snow_date,
         "ims_date": ims_date,
+        "ims_style": 2,
         "weather": weather,
         "total_water_level": total_water_level,
         "tide": tide,

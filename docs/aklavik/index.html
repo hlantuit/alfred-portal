@@ -669,6 +669,10 @@ svg.sp{width:100%;height:auto;display:block}
       <span class="lk-ico">📈</span>
       <div><div class="lk-label">River water level — Peel Channel</div><div class="lk-src">Water Survey of Canada (ECCC) · Stn 10MC003</div></div>
     </a>
+    <a class="lk" href="https://weathercams.faa.gov" target="_blank" rel="noopener">
+      <span class="lk-ico">📷</span>
+      <div><div class="lk-label">Airport webcam</div><div class="lk-src">FAA Weather Camera Service</div></div>
+    </a>
     <a class="lk" href="https://github.com/hlantuit/alfred-portal" target="_blank" rel="noopener">
       <span class="lk-ico">💻</span>
       <div><div class="lk-label">Dashboard source code</div><div class="lk-src">Alfred Wegener Institute · GitHub</div></div>
@@ -1923,7 +1927,11 @@ async function loadData(){
   const blocks=d.community?.blocks||[];
   if(d.community?.webcam_url && blocks.includes('webcam')){
     const hasRiver=rivers.length>0;
-    const url=d.community.webcam_url+'?t='+Date.now();
+    // Prefer the server-fetched local frame: the FAA images API rejects
+    // browser requests (Origin check), which silently hid the card.
+    const url=(d.community.webcam_img
+      ? d.community.webcam_img+'?v='+encodeURIComponent(d.updated_utc||Date.now())
+      : d.community.webcam_url+'?t='+Date.now());
     const pageUrl=d.community.webcam_page_url||d.community.webcam_url;
     const label=d.community.webcam_label||'Webcam';
     if(hasRiver){
@@ -2008,7 +2016,9 @@ async function loadData(){
     const _cleanMarine=s=>_dec(s).replace(/<br\s*\/?>/gi,' ').replace(/\n/g,' ').replace(/\s{2,}/g,' ').trim();
     mt.innerHTML=marine.map(e=>`<div class="m-period">${_cleanMarine(e.title)}</div><div style="margin-bottom:8px">${_cleanMarine(e.text)}</div>`).join('');
   } else {
-    mt.innerHTML='<span style="color:var(--muted)">Marine forecast unavailable — check Environment Canada directly.</span>';
+    const _mz=d.community?.marine_zone_id;
+    const _mzUrl=_mz?`https://weather.gc.ca/marine/forecast_e.html?mapID=02&siteID=${_mz}`:'https://weather.gc.ca/marine/index_e.html';
+    mt.innerHTML=`<span style="color:var(--muted)">Marine forecast unavailable — <a href="${_mzUrl}" target="_blank" rel="noopener">check Environment Canada directly ↗</a>.</span>`;
   }
   initExpandButtons();
 

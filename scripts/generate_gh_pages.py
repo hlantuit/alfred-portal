@@ -2503,6 +2503,8 @@ def main():
             "webcam_url": cfg.get("webcam_url", ""),
             "webcam_label": cfg.get("webcam_label", ""),
             "webcam_page_url": cfg.get("webcam_page_url", ""),
+            "webcam_img": "img/webcam.jpg" if webcam_ok else "",
+            "marine_zone_id": cfg.get("marine_zone_id", ""),
         },
         "updated_utc": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "modis_date": modis_date,
@@ -2523,6 +2525,43 @@ def main():
     data_path = out_dir / "data.json"
     data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
     print(f"Wrote {data_path}")
+
+    # ── Webcam (fetched server-side each run: the FAA images API requires
+    #    Origin/Referer headers a browser <img> cannot send — the card was
+    #    silently hiding itself via onerror — and CDN hotlinking is
+    #    unreliable, so the frame is stored locally like other imagery) ──
+    webcam_ok = False
+    if cfg.get("webcam_url"):
+        print("Fetching webcam…")
+        try:
+            _wc_url = cfg["webcam_url"]
+            if "weathercams.faa.gov/api/cameras" in _wc_url and _wc_url.endswith("/images"):
+                _wr = requests.get(_wc_url, timeout=15, headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; alfred-portal/1.0)",
+                    "Origin": "https://weathercams.faa.gov",
+                    "Referer": "https://weathercams.faa.gov/",
+                })
+                _wr.raise_for_status()
+                _payload = _wr.json().get("payload") or []
+                _wc_url = (_payload[0].get("imageUri") or "") if _payload else ""
+                if _wc_url.startswith("/"):
+                    _wc_url = "https://weathercams.faa.gov" + _wc_url
+            if _wc_url:
+                _wi = get_with_retry(_wc_url, timeout=30, headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; alfred-portal/1.0)",
+                    "Referer": "https://weathercams.faa.gov/",
+                })
+                if _wi.content[:3] == b"\xff\xd8\xff" or _wi.content[:8] == b"\x89PNG\r\n\x1a\n":
+                    (img_dir / "webcam.jpg").write_bytes(_wi.content)
+                    webcam_ok = True
+                    print(f"  Webcam: {len(_wi.content)//1024} kB")
+                else:
+                    print("  Webcam: response was not an image")
+        except Exception as _wce:
+            print(f"  Webcam fetch failed: {_wce}")
+        if not webcam_ok and (img_dir / "webcam.jpg").exists():
+            webcam_ok = True
+            print("  Webcam: keeping previous frame")
 
     # ── Copy chart PNGs ──
     charts_src = COMMUNITIES_DIR / cid / "charts"

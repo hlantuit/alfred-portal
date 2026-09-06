@@ -3532,7 +3532,8 @@ def _rects_overlap(ax, ay, aw, ah, bx, by, bw, bh, pad=3):
 def _draw_clamped_label(draw, x_px, y_px, text_dx, text_dy,
                         label_text, font, width_px, height_px,
                         text_color=(255, 255, 255), shadow_color=(0, 0, 0),
-                        max_line_px=160, avoid_dots=None, placed_labels=None):
+                        max_line_px=160, avoid_dots=None, placed_labels=None,
+                        pill_img=None, pill_pad=3):
     """
     Draw a label near (x_px, y_px) with (text_dx, text_dy) offset, but:
     - wraps the label onto two lines if it is wider than max_line_px
@@ -3617,11 +3618,29 @@ def _draw_clamped_label(draw, x_px, y_px, text_dx, text_dy,
     if placed_labels is not None:
         placed_labels.append((text_x, text_y, tw, th))
 
+    if pill_img is not None:
+        # S2-frame style: translucent dark pill behind plain white text
+        # (matches _s2_overlay_and_save in generate_gh_pages). Returns the
+        # new composited image; caller must rebind img/draw.
+        from PIL import Image as _PImg, ImageDraw as _PDraw
+        _pp = max(3, int(pill_pad))
+        _ov = _PImg.new("RGBA", pill_img.size, (0, 0, 0, 0))
+        _PDraw.Draw(_ov).rounded_rectangle(
+            [text_x - _pp, text_y - _pp, text_x + tw + _pp, text_y + th + _pp],
+            radius=_pp, fill=(0, 0, 0, 160))
+        pill_img = _PImg.alpha_composite(pill_img.convert("RGBA"), _ov).convert("RGB")
+        _d2 = _PDraw.Draw(pill_img)
+        for line_idx, line in enumerate(lines):
+            ly = text_y + line_idx * (th // len(lines) + 2)
+            _d2.text((text_x, ly), line, font=font, fill=text_color)
+        return pill_img
+
     for line_idx, line in enumerate(lines):
         ly = text_y + line_idx * (th // len(lines) + 2)
         for tdx, tdy in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
             draw.text((text_x + tdx, ly + tdy), line, font=font, fill=shadow_color)
         draw.text((text_x, ly), line, font=font, fill=text_color)
+    return None
 
 
 def annotate_modis_image(png_bytes, points, center_x, center_y, rotation_deg,
@@ -3836,8 +3855,10 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
         # proportionally so the annotations look identical at display size.
         _asc = width_px / 1200.0
 
+        # S2-frame style: plain (non-bold) labels on translucent pills, same
+        # face and size as _s2_overlay_and_save in generate_gh_pages.
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", max(14, int(20 * _asc)))
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", max(14, int(26 * _asc)))
         except Exception:
             font = ImageFont.load_default()
 
@@ -3933,7 +3954,7 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
                 print("WATER BODIES OVERLAY FAILED (continuing without it):", e)
 
         # --- Label markers ---
-        marker_radius = max(4, int(6 * _asc))
+        marker_radius = max(5, int(7 * _asc))
         _dot_positions = []
         _placed_labels = []
         _FRAME_MARGIN = 20 * _asc  # px — skip dots/labels projected this far outside the frame
@@ -3973,10 +3994,15 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
                 fill=fill_color, outline=(255, 255, 255), width=max(2, int(2 * _asc)),
             )
 
-            _draw_clamped_label(draw, x_px, y_px, text_dx * _asc, text_dy * _asc,
-                                label_text, font, width_px, height_px,
-                                avoid_dots=_dot_positions,
-                                placed_labels=_placed_labels)
+            _new_img = _draw_clamped_label(draw, x_px, y_px, text_dx * _asc, text_dy * _asc,
+                                           label_text, font, width_px, height_px,
+                                           max_line_px=160 * _asc,
+                                           avoid_dots=_dot_positions,
+                                           placed_labels=_placed_labels,
+                                           pill_img=img, pill_pad=3 * _asc)
+            if _new_img is not None:
+                img = _new_img
+                draw = ImageDraw.Draw(img)
 
         # --- Optional reference lines (e.g. an international border) ---
         for line in (reference_lines or []):
@@ -4036,20 +4062,42 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
             except Exception as _ae:
                 print(f"ARROW ANNOTATION '{ann_label}' FAILED: {_ae}")
 
-        # --- Scale bar (bottom-left corner) ---
-        px_per_km = 1000 / meters_per_px
-        bar_px = scale_km * px_per_km
-        margin = 30 * _asc
-        bar_x0 = margin
-        bar_y0 = height_px - margin - 10 * _asc
-        bar_x1 = bar_x0 + bar_px
-        _bw2 = max(2, int(4 * _asc))
-        _tick = 6 * _asc
-
-        draw.line([(bar_x0, bar_y0), (bar_x1, bar_y0)], fill=(255, 255, 255), width=_bw2)
-        draw.line([(bar_x0, bar_y0 - _tick), (bar_x0, bar_y0 + _tick)], fill=(255, 255, 255), width=_bw2)
-        draw.line([(bar_x1, bar_y0 - _tick), (bar_x1, bar_y0 + _tick)], fill=(255, 255, 255), width=_bw2)
-        draw.text((bar_x0, bar_y0 + 8 * _asc), f"{scale_km} km", font=font, fill=(255, 255, 255))
+        # --- Scale bar (bottom-right, S2-frame pill style — mirrors
+        # _annotate_img in generate_gh_pages so all imagery matches) ---
+        try:
+            _fsb = max(16, int(20 * width_px / 1000))
+            try:
+                _font_bar = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", max(14, _fsb - 2))
+            except Exception:
+                _font_bar = font
+            target_m = (width_px // 4) * meters_per_px
+            for nice in [200000, 100000, 50000, 25000, 20000, 10000, 5000, 2000, 1000, 500]:
+                if nice <= target_m:
+                    scale_m = nice
+                    break
+            else:
+                scale_m = max(1, int(target_m))
+            bar_px2 = max(10, int(scale_m / meters_per_px))
+            bar_label = f"{scale_m // 1000} km" if scale_m >= 1000 else f"{scale_m} m"
+            _bmargin = 18
+            bar_y = height_px - _bmargin - 16
+            bar_x2 = width_px - _bmargin
+            bar_x1 = bar_x2 - bar_px2
+            tb2 = draw.textbbox((0, 0), bar_label, font=_font_bar)
+            _btw, _bth = tb2[2] - tb2[0], tb2[3] - tb2[1]
+            _ovb = Image.new("RGBA", img.size, (0, 0, 0, 0))
+            ImageDraw.Draw(_ovb).rounded_rectangle(
+                [bar_x1 - 6, bar_y - _bth - 18, bar_x2 + 6, height_px - _bmargin + 6],
+                radius=5, fill=(0, 0, 0, 160))
+            img = Image.alpha_composite(img.convert("RGBA"), _ovb).convert("RGB")
+            draw = ImageDraw.Draw(img)
+            draw.line([(bar_x1, bar_y - 5), (bar_x1, bar_y + 5)], fill="white", width=2)
+            draw.line([(bar_x2, bar_y - 5), (bar_x2, bar_y + 5)], fill="white", width=2)
+            draw.line([(bar_x1, bar_y), (bar_x2, bar_y)], fill="white", width=3)
+            _blx = (bar_x1 + bar_x2 - _btw) // 2
+            draw.text((_blx, bar_y - _bth - 14), bar_label, font=_font_bar, fill=(255, 255, 255))
+        except Exception as _sbe:
+            print("SCALE BAR FAILED:", _sbe)
 
         out_buf = _io.BytesIO()
         img.save(out_buf, format="PNG")
@@ -4074,23 +4122,29 @@ def stamp_timestamp(png_bytes, dt_local, label="Acquired"):
         img = Image.open(_io.BytesIO(png_bytes)).convert("RGB")
         draw = ImageDraw.Draw(img)
         width_px, height_px = img.size
-        _tsc = width_px / 1200.0  # constants tuned for 1200 px frames
 
+        # S2-frame style: date pill top-left, identical to _annotate_img in
+        # generate_gh_pages (same font sizing, format, pill geometry).
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", max(16, int(22 * _tsc)))
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                                      max(16, int(20 * width_px / 1000)))
         except Exception:
             font = ImageFont.load_default()
 
-        text = f"{label}: {dt_local.strftime('%Y-%m-%d %H:%M %Z')}"
-        bbox = draw.textbbox((0, 0), text, font=font)
-        text_w = bbox[2] - bbox[0]
-        margin = int(18 * _tsc)
-        text_x = width_px - text_w - margin
-        text_y = margin
-
-        for tdx, tdy in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
-            draw.text((text_x + tdx, text_y + tdy), text, font=font, fill=(0, 0, 0))
-        draw.text((text_x, text_y), text, font=font, fill=(255, 255, 255))
+        try:
+            text = dt_local.strftime("%-d %b %Y · %H:%M %Z")
+        except Exception:
+            text = dt_local.strftime("%d %b %Y · %H:%M %Z")
+        pad = 6
+        tb = draw.textbbox((0, 0), text, font=font)
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        ImageDraw.Draw(overlay).rounded_rectangle(
+            [10 - pad, 10 - pad, tb[2] + 10 + pad, tb[3] + 10 + pad],
+            radius=5, fill=(0, 0, 0, 170))
+        img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+        draw = ImageDraw.Draw(img)
+        draw.text((11, 11), text, font=font, fill=(0, 0, 0))
+        draw.text((10, 10), text, font=font, fill=(255, 255, 255))
 
         out_buf = _io.BytesIO()
         img.save(out_buf, format="PNG")
@@ -4686,14 +4740,17 @@ def add_ice_classification_legend(png_bytes, ice_label="Sea ice"):
         panel_w = min(max(total_swatches_w, title_w) + 2 * pad, W - 2 * margin)
         panel_h = pad + title_h + pad + bar_h + pad + label_h + pad
 
-        # Semi-transparent dark panel
+        # Semi-transparent dark panel — top-RIGHT, so it never collides with
+        # the S2-style date pill that now sits top-left (matches the snow
+        # frames' legend placement).
+        _lx0 = max(margin, W - panel_w - margin)
         panel = Image.new("RGBA", (panel_w, panel_h), (20, 20, 20, 170))
         img_rgba = img.convert("RGBA")
-        img_rgba.paste(panel, (margin, margin), panel)
+        img_rgba.paste(panel, (_lx0, margin), panel)
         img = img_rgba.convert("RGB")
         draw = ImageDraw.Draw(img)
 
-        px0 = margin + pad
+        px0 = _lx0 + pad
         py0 = margin + pad
 
         # Title

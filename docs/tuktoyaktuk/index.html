@@ -177,9 +177,9 @@ svg.sp{width:100%;height:auto;display:block}
 .img-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;padding:14px 20px 0}
 
 /* ── Fog forecast ── */
-:root{--fog-0:#d8eeed;--fog-1:#82c4c3;--fog-2:#3b8fa3;--fog-3:#1c4258}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--fog-0:#152c2e;--fog-1:#1f5566;--fog-2:#2f8aa0;--fog-3:#7fe0e6}}
-:root[data-theme="dark"]{--fog-0:#152c2e;--fog-1:#1f5566;--fog-2:#2f8aa0;--fog-3:#7fe0e6}
+:root{--fog-0:#e7ebee;--fog-1:#b4bfc7;--fog-2:#78868f;--fog-3:#333f48}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--fog-0:#333a41;--fog-1:#5b6871;--fog-2:#94a4ae;--fog-3:#e6edf2}}
+:root[data-theme="dark"]{--fog-0:#333a41;--fog-1:#5b6871;--fog-2:#94a4ae;--fog-3:#e6edf2}
 .ffw-scroll{overflow-x:auto;padding-bottom:4px;margin:0 -14px;padding-left:14px;padding-right:14px}
 .ffw-days{display:flex;gap:0;flex-wrap:wrap}
 .ffw-day{flex-shrink:0;padding-left:8px;border-left:1px solid var(--bdr2)}
@@ -465,6 +465,10 @@ svg.sp{width:100%;height:auto;display:block}
         <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-1)"></span>Possible (&le;20%)</span>
         <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-2)"></span>Likely (&le;40%)</span>
         <span class="ffw-legend-item"><span class="ffw-legend-dot" style="background:var(--fog-3)"></span>Dense risk (&gt;40%)</span>
+      </div>
+      <div class="expand-btn" id="fogToggle" onclick="toggleFogDetail()" style="margin:6px 0 2px">
+        <i class="chev" id="fogToggleIcon">+</i>
+        <span>2-hourly detail</span>
       </div>
       <div class="ffw-scroll"><div class="ffw-days" id="fogDays"><span style="color:var(--muted);font-size:12px">Loading…</span></div></div>
       <div style="font-size:10px;color:var(--muted);margin-top:8px">Derived from Open-Meteo GEM seamless visibility forecast. Even "Possible" represents a real, non-trivial risk. · Generated <span id="fogGenTime">—</span></div>
@@ -2108,13 +2112,23 @@ if ('serviceWorker' in navigator) {
 const FOG_BANDS=[{max:0.08,label:'Clear',tok:'--fog-0'},{max:0.20,label:'Possible',tok:'--fog-1'},{max:0.40,label:'Likely',tok:'--fog-2'},{max:1.01,label:'Dense risk',tok:'--fog-3'}];
 const CONF_OP={high:1,medium:0.72,low:0.46};
 function fogBand(p){return FOG_BANDS.find(b=>p<=b.max)||FOG_BANDS[3];}
+let _fogDetail=false;
+function toggleFogDetail(){
+  _fogDetail=!_fogDetail;
+  const t=document.getElementById('fogToggle');if(t)t.classList.toggle('open',_fogDetail);
+  const ic=document.getElementById('fogToggleIcon');if(ic)ic.textContent=_fogDetail?'−':'+';
+  if(window._fogData)renderFogBlock(window._fogData.fog,window._fogData.tz);
+}
 function renderFogBlock(fog,tz){
+  window._fogData={fog,tz};
   const _nowH=new Date(); _nowH.setMinutes(0,0,0);
   const pts=(fog.points||[]).map(p=>({...p,_loc:new Date(p.valid_time_utc+'Z')})).filter(p=>p._loc>=_nowH);
   const days=[]; let ck=null,cd=null;
   pts.forEach(p=>{const k=p._loc.toDateString();if(k!==ck){ck=k;cd={date:p._loc,pts:[]};days.push(cd);}cd.pts.push(p);});
   document.getElementById('fogDays').innerHTML=days.map(d=>{
-    const slots=d.pts.map(p=>{
+    // Default: every 3rd 2-hourly slot (= 6-hourly); expander shows the full grid
+    const _dp=_fogDetail?d.pts:d.pts.filter((_,i)=>i%3===0);
+    const slots=_dp.map(p=>{
       const band=fogBand(p.p_fog);
       const tick=p._loc.getHours()%6===0;
       return `<div class="ffw-slot"><div class="ffw-glyph" style="background:var(${band.tok})" data-pi="${pts.indexOf(p)}" tabindex="0"></div><span class="ffw-hour${tick?' tick':''}">${String(p._loc.getHours()).padStart(2,'0')}</span></div>`;

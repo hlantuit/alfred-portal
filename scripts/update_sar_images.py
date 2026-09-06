@@ -35,6 +35,7 @@ import dashboard_lib as lib  # noqa: E402
 S1_BLOCKS = {"sentinel1", "sea_ice", "sea_ice_zoom", "lake_river_ice"}
 S1PX = 2400  # render size; S1 EW GRD is 40 m native, so 2400 px over a
              # 300 km frame (125 m/px) still undersamples the data
+S1_STYLE = 2  # bump to force a one-off re-render after annotation-style changes
 
 
 def refresh_community(cdir, force=False):
@@ -78,7 +79,8 @@ def refresh_community(cdir, force=False):
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
         except Exception:
             meta = {}
-    if not force and meta.get("s1_acquired") == s1_full_dt and meta.get("s1_px") == S1PX:
+    if (not force and meta.get("s1_acquired") == s1_full_dt
+            and meta.get("s1_px") == S1PX and meta.get("s1_style") == S1_STYLE):
         print(f"{cdir.name}: acquisition {s1_full_dt} already rendered — skipping")
         return
     print(f"{cdir.name}: rendering acquisition {s1_full_dt} ({acq_mode}/{band})")
@@ -150,6 +152,7 @@ def refresh_community(cdir, force=False):
     if ok:
         meta["s1_acquired"] = s1_full_dt
         meta["s1_px"] = S1PX
+        meta["s1_style"] = S1_STYLE
         meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 

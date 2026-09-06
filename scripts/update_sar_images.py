@@ -33,6 +33,8 @@ os.environ.setdefault("NOTION_TOKEN", "offline-unused")
 import dashboard_lib as lib  # noqa: E402
 
 S1_BLOCKS = {"sentinel1", "sea_ice", "sea_ice_zoom", "lake_river_ice"}
+S1PX = 2400  # render size; S1 EW GRD is 40 m native, so 2400 px over a
+             # 300 km frame (125 m/px) still undersamples the data
 
 
 def refresh_community(cdir, force=False):
@@ -76,7 +78,7 @@ def refresh_community(cdir, force=False):
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
         except Exception:
             meta = {}
-    if not force and meta.get("s1_acquired") == s1_full_dt:
+    if not force and meta.get("s1_acquired") == s1_full_dt and meta.get("s1_px") == S1PX:
         print(f"{cdir.name}: acquisition {s1_full_dt} already rendered — skipping")
         return
     print(f"{cdir.name}: rendering acquisition {s1_full_dt} ({acq_mode}/{band})")
@@ -106,7 +108,7 @@ def refresh_community(cdir, force=False):
             utm_zone=utm_zone, utm_epsg=utm_epsg, center_x=cx, center_y=cy,
             points=map_pts, tz_name=tz_name, reference_lines=ref_lines,
             coastline_geojson_path=coastline, now_utc=now_utc,
-            lookback_days=lookback)
+            lookback_days=lookback, output_size_px=S1PX)
         ok |= _save("sentinel1.png", b, cap)
     if "sea_ice" in blocks:
         b, cap = lib.fetch_and_process_sentinel1_ice(
@@ -115,7 +117,8 @@ def refresh_community(cdir, force=False):
             points=map_pts, tz_name=tz_name, half_width_m=150_000,
             reference_lines=ref_lines, coastline_geojson_path=coastline,
             now_utc=now_utc, lookback_days=lookback,
-            sea_seed_from=sea_seed_from, sea_seed_points=sea_seed_points)
+            sea_seed_from=sea_seed_from, sea_seed_points=sea_seed_points,
+            output_size_px=S1PX)
         ok |= _save("sea_ice.png", b, cap)
     if "sea_ice_zoom" in blocks:
         _ssdc_lat, _ssdc_lon = cfg.get("ssdc_lat"), cfg.get("ssdc_lon")
@@ -130,7 +133,7 @@ def refresh_community(cdir, force=False):
             reference_lines=ref_lines, coastline_geojson_path=coastline,
             now_utc=now_utc, arrow_annotations=_arrows,
             lookback_days=lookback, sea_seed_from=sea_seed_from,
-            sea_seed_points=sea_seed_points)
+            sea_seed_points=sea_seed_points, output_size_px=S1PX)
         ok |= _save("sea_ice_zoom.png", b, cap)
     if "lake_river_ice" in blocks:
         # Plain SAR frame at 50 km half-width. The lake/river-ice
@@ -141,11 +144,12 @@ def refresh_community(cdir, force=False):
             utm_zone=utm_zone, utm_epsg=utm_epsg, center_x=cx, center_y=cy,
             points=map_pts, tz_name=tz_name, half_width_m=50_000,
             reference_lines=ref_lines, coastline_geojson_path=coastline,
-            now_utc=now_utc, lookback_days=lookback)
+            now_utc=now_utc, lookback_days=lookback, output_size_px=S1PX)
         ok |= _save("lake_ice.png", b, cap)
 
     if ok:
         meta["s1_acquired"] = s1_full_dt
+        meta["s1_px"] = S1PX
         meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 

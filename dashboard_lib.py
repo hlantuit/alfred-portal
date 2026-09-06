@@ -3669,8 +3669,11 @@ def annotate_modis_image(png_bytes, points, center_x, center_y, rotation_deg,
 
         rotation_rad = math.radians(rotation_deg)
 
+        # Annotation scale, tuned for 1200 px frames (see annotate_plain_image)
+        _asc = final_size_px / 1200.0
+
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", max(14, int(20 * _asc)))
         except Exception:
             font = ImageFont.load_default()
 
@@ -3701,7 +3704,7 @@ def annotate_modis_image(png_bytes, points, center_x, center_y, rotation_deg,
                     for coord_lon, coord_lat in coords:
                         px = project_point(coord_lat, coord_lon)
                         if prev_px is not None:
-                            draw.line([prev_px, px], fill=(255, 255, 255), width=2)
+                            draw.line([prev_px, px], fill=(255, 255, 255), width=max(2, int(2 * _asc)))
                             segments_drawn += 1
                         prev_px = px
                 print(f"MODIS COASTLINE OVERLAY: drew {segments_drawn} segments")
@@ -3709,7 +3712,7 @@ def annotate_modis_image(png_bytes, points, center_x, center_y, rotation_deg,
                 print(f"MODIS COASTLINE OVERLAY FAILED: {e}")
 
         # --- Label markers ---
-        marker_radius = 6
+        marker_radius = max(4, int(6 * _asc))
         _dot_positions = []
         for point in points:
             lat, lon = point[0], point[1]
@@ -3738,10 +3741,10 @@ def annotate_modis_image(png_bytes, points, center_x, center_y, rotation_deg,
 
             draw.ellipse(
                 [x_px - marker_radius, y_px - marker_radius, x_px + marker_radius, y_px + marker_radius],
-                fill=fill_color, outline=(255, 255, 255), width=2,
+                fill=fill_color, outline=(255, 255, 255), width=max(2, int(2 * _asc)),
             )
 
-            _draw_clamped_label(draw, x_px, y_px, text_dx, text_dy,
+            _draw_clamped_label(draw, x_px, y_px, text_dx * _asc, text_dy * _asc,
                                 label_text, font, width_px, height_px,
                                 avoid_dots=_dot_positions,
                                 placed_labels=_placed_labels)
@@ -3758,20 +3761,22 @@ def annotate_modis_image(png_bytes, points, center_x, center_y, rotation_deg,
                 t0, t1 = i / num_dashes, (i + 1) / num_dashes
                 seg_p1 = (p1[0] + (p2[0] - p1[0]) * t0, p1[1] + (p2[1] - p1[1]) * t0)
                 seg_p2 = (p1[0] + (p2[0] - p1[0]) * t1, p1[1] + (p2[1] - p1[1]) * t1)
-                draw.line([seg_p1, seg_p2], fill=(180, 200, 210), width=1)
+                draw.line([seg_p1, seg_p2], fill=(180, 200, 210), width=max(1, int(_asc)))
 
         # --- Scale bar (bottom-left corner) ---
         px_per_km = 1000 / meters_per_px
         bar_px = scale_km * px_per_km
-        margin = 30
+        margin = 30 * _asc
         bar_x0 = margin
-        bar_y0 = height_px - margin - 10
+        bar_y0 = height_px - margin - 10 * _asc
         bar_x1 = bar_x0 + bar_px
+        _bw2 = max(2, int(4 * _asc))
+        _tick = 6 * _asc
 
-        draw.line([(bar_x0, bar_y0), (bar_x1, bar_y0)], fill=(255, 255, 255), width=4)
-        draw.line([(bar_x0, bar_y0 - 6), (bar_x0, bar_y0 + 6)], fill=(255, 255, 255), width=4)
-        draw.line([(bar_x1, bar_y0 - 6), (bar_x1, bar_y0 + 6)], fill=(255, 255, 255), width=4)
-        draw.text((bar_x0, bar_y0 + 8), f"{scale_km} km", font=font, fill=(255, 255, 255))
+        draw.line([(bar_x0, bar_y0), (bar_x1, bar_y0)], fill=(255, 255, 255), width=_bw2)
+        draw.line([(bar_x0, bar_y0 - _tick), (bar_x0, bar_y0 + _tick)], fill=(255, 255, 255), width=_bw2)
+        draw.line([(bar_x1, bar_y0 - _tick), (bar_x1, bar_y0 + _tick)], fill=(255, 255, 255), width=_bw2)
+        draw.text((bar_x0, bar_y0 + 8 * _asc), f"{scale_km} km", font=font, fill=(255, 255, 255))
 
         out_buf = _io.BytesIO()
         img.save(out_buf, format="PNG")
@@ -3826,9 +3831,13 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
         width_px, height_px = img.size
 
         meters_per_px = (half_width_m * 2) / width_px
+        # Annotation scale: every pixel constant below is tuned for a 1200 px
+        # frame; larger renders (e.g. 2400 px lightbox-zoom frames) scale
+        # proportionally so the annotations look identical at display size.
+        _asc = width_px / 1200.0
 
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", max(14, int(20 * _asc)))
         except Exception:
             font = ImageFont.load_default()
 
@@ -3870,7 +3879,7 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
                     for coord_lon, coord_lat in coords:
                         px = project_point(coord_lat, coord_lon)
                         if prev_px is not None:
-                            draw.line([prev_px, px], fill=(255, 255, 255), width=2)
+                            draw.line([prev_px, px], fill=(255, 255, 255), width=max(2, int(2 * _asc)))
                             segments_drawn += 1
                         prev_px = px
 
@@ -3914,7 +3923,7 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
                                     and -margin <= p[1] <= height_px + margin
                                 )
                                 if in_frame(px) or in_frame(prev_px):
-                                    wb_draw.line([prev_px, px], fill=(160, 195, 215, 100), width=1)
+                                    wb_draw.line([prev_px, px], fill=(160, 195, 215, 100), width=max(1, int(_asc)))
                                     wb_segments += 1
                             prev_px = px
                 img = Image.alpha_composite(img.convert("RGBA"), wb_overlay).convert("RGB")
@@ -3924,10 +3933,10 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
                 print("WATER BODIES OVERLAY FAILED (continuing without it):", e)
 
         # --- Label markers ---
-        marker_radius = 6
+        marker_radius = max(4, int(6 * _asc))
         _dot_positions = []
         _placed_labels = []
-        _FRAME_MARGIN = 20  # px — skip dots/labels projected this far outside the frame
+        _FRAME_MARGIN = 20 * _asc  # px — skip dots/labels projected this far outside the frame
         for point in points:
             plat, plon = point[0], point[1]
             px, py = project_point(plat, plon)
@@ -3961,10 +3970,10 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
 
             draw.ellipse(
                 [x_px - marker_radius, y_px - marker_radius, x_px + marker_radius, y_px + marker_radius],
-                fill=fill_color, outline=(255, 255, 255), width=2,
+                fill=fill_color, outline=(255, 255, 255), width=max(2, int(2 * _asc)),
             )
 
-            _draw_clamped_label(draw, x_px, y_px, text_dx, text_dy,
+            _draw_clamped_label(draw, x_px, y_px, text_dx * _asc, text_dy * _asc,
                                 label_text, font, width_px, height_px,
                                 avoid_dots=_dot_positions,
                                 placed_labels=_placed_labels)
@@ -3981,7 +3990,7 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
                 t0, t1 = i / num_dashes, (i + 1) / num_dashes
                 seg_p1 = (p1[0] + (p2[0] - p1[0]) * t0, p1[1] + (p2[1] - p1[1]) * t0)
                 seg_p2 = (p1[0] + (p2[0] - p1[0]) * t1, p1[1] + (p2[1] - p1[1]) * t1)
-                draw.line([seg_p1, seg_p2], fill=(180, 200, 210), width=1)
+                draw.line([seg_p1, seg_p2], fill=(180, 200, 210), width=max(1, int(_asc)))
 
         # --- Arrow annotations (white labelled arrows pointing to named spots) ---
         # Format: (lat, lon, label [, tail_dx [, tail_dy [, tip_offset]]])
@@ -3991,9 +4000,9 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
         # tip_offset: stop the arrowhead this many pixels short of the target.
         for ann in (arrow_annotations or []):
             ann_lat, ann_lon, ann_label = ann[0], ann[1], ann[2]
-            ann_dx  = ann[3] if len(ann) > 3 else -55
-            ann_dy  = ann[4] if len(ann) > 4 else -55
-            ann_tip = ann[5] if len(ann) > 5 else 0
+            ann_dx  = (ann[3] if len(ann) > 3 else -55) * _asc
+            ann_dy  = (ann[4] if len(ann) > 4 else -55) * _asc
+            ann_tip = (ann[5] if len(ann) > 5 else 0) * _asc
             try:
                 import math as _math
                 tx, ty = project_point(ann_lat, ann_lon)
@@ -4010,13 +4019,13 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
                         tip_x, tip_y = tx, ty
                 else:
                     tip_x, tip_y = tx, ty
-                draw.line([(lx, ly), (tip_x, tip_y)], fill=(255, 255, 255), width=3)
+                draw.line([(lx, ly), (tip_x, tip_y)], fill=(255, 255, 255), width=max(2, int(3 * _asc)))
                 angle = _math.atan2(tip_y - ly, tip_x - lx)
-                head_len, head_angle = 14, _math.radians(28)
+                head_len, head_angle = 14 * _asc, _math.radians(28)
                 for side in (+head_angle, -head_angle):
                     bx = tip_x - head_len * _math.cos(angle - side)
                     by = tip_y - head_len * _math.sin(angle - side)
-                    draw.line([(tip_x, tip_y), (bx, by)], fill=(255, 255, 255), width=3)
+                    draw.line([(tip_x, tip_y), (bx, by)], fill=(255, 255, 255), width=max(2, int(3 * _asc)))
                 bb = draw.textbbox((0, 0), ann_label, font=font)
                 lw, lh = bb[2] - bb[0], bb[3] - bb[1]
                 text_x = (lx - lw) if ann_dx < 0 else lx
@@ -4030,15 +4039,17 @@ def annotate_plain_image(png_bytes, points, center_x, center_y, project_fn,
         # --- Scale bar (bottom-left corner) ---
         px_per_km = 1000 / meters_per_px
         bar_px = scale_km * px_per_km
-        margin = 30
+        margin = 30 * _asc
         bar_x0 = margin
-        bar_y0 = height_px - margin - 10
+        bar_y0 = height_px - margin - 10 * _asc
         bar_x1 = bar_x0 + bar_px
+        _bw2 = max(2, int(4 * _asc))
+        _tick = 6 * _asc
 
-        draw.line([(bar_x0, bar_y0), (bar_x1, bar_y0)], fill=(255, 255, 255), width=4)
-        draw.line([(bar_x0, bar_y0 - 6), (bar_x0, bar_y0 + 6)], fill=(255, 255, 255), width=4)
-        draw.line([(bar_x1, bar_y0 - 6), (bar_x1, bar_y0 + 6)], fill=(255, 255, 255), width=4)
-        draw.text((bar_x0, bar_y0 + 8), f"{scale_km} km", font=font, fill=(255, 255, 255))
+        draw.line([(bar_x0, bar_y0), (bar_x1, bar_y0)], fill=(255, 255, 255), width=_bw2)
+        draw.line([(bar_x0, bar_y0 - _tick), (bar_x0, bar_y0 + _tick)], fill=(255, 255, 255), width=_bw2)
+        draw.line([(bar_x1, bar_y0 - _tick), (bar_x1, bar_y0 + _tick)], fill=(255, 255, 255), width=_bw2)
+        draw.text((bar_x0, bar_y0 + 8 * _asc), f"{scale_km} km", font=font, fill=(255, 255, 255))
 
         out_buf = _io.BytesIO()
         img.save(out_buf, format="PNG")
@@ -4063,16 +4074,17 @@ def stamp_timestamp(png_bytes, dt_local, label="Acquired"):
         img = Image.open(_io.BytesIO(png_bytes)).convert("RGB")
         draw = ImageDraw.Draw(img)
         width_px, height_px = img.size
+        _tsc = width_px / 1200.0  # constants tuned for 1200 px frames
 
         try:
-            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 22)
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", max(16, int(22 * _tsc)))
         except Exception:
             font = ImageFont.load_default()
 
         text = f"{label}: {dt_local.strftime('%Y-%m-%d %H:%M %Z')}"
         bbox = draw.textbbox((0, 0), text, font=font)
         text_w = bbox[2] - bbox[0]
-        margin = 18
+        margin = int(18 * _tsc)
         text_x = width_px - text_w - margin
         text_y = margin
 
@@ -4424,7 +4436,7 @@ def fetch_and_process_sentinel1(lat, lon, site_label, utm_zone, utm_epsg,
                                  center_x, center_y, points, tz_name,
                                  half_width_m=150_000, reference_lines=None,
                                  coastline_geojson_path=None, now_utc=None,
-                                 lookback_days=10):
+                                 lookback_days=10, output_size_px=MODIS_FINAL_SIZE_PX):
     """
     Wraps the full Sentinel-1 token-catalog-image-annotate-stamp chain as
     a single function, for the same concurrent-top-level-fetch reason as
@@ -4447,6 +4459,7 @@ def fetch_and_process_sentinel1(lat, lon, site_label, utm_zone, utm_epsg,
         if s1_date:
             s1_raw = fetch_sentinel1_image(
                 sh_token, s1_date, center_x, center_y, utm_epsg, half_width_m,
+                output_size_px=output_size_px,
                 acq_mode=acq_mode, band=band, pol_filter=pol_filter,
             )
             if s1_raw:
@@ -4639,12 +4652,13 @@ def add_ice_classification_legend(png_bytes, ice_label="Sea ice"):
         img = Image.open(_io.BytesIO(png_bytes)).convert("RGB")
         draw = ImageDraw.Draw(img)
         W, H = img.size
+        _lsc = W / 1200.0  # legend constants tuned for 1200 px frames
 
         try:
             font_title = ImageFont.truetype(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", max(14, int(20 * _lsc)))
             font_label = ImageFont.truetype(
-                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 15)
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", max(11, int(15 * _lsc)))
         except Exception:
             font_title = font_label = ImageFont.load_default()
 
@@ -4659,16 +4673,16 @@ def add_ice_classification_legend(png_bytes, ice_label="Sea ice"):
         _tmp_draw = ImageDraw.Draw(Image.new("RGB", (10, 10)))
         title_w = _tmp_draw.textbbox((0, 0), title, font=font_title)[2]
         label_widths = [_tmp_draw.textbbox((0, 0), lbl, font=font_label)[2] for _, lbl in categories]
-        swatch_min_w = 18   # minimum swatch width regardless of label
-        gap = 10
-        swatch_ws = [max(swatch_min_w, lw + 8) for lw in label_widths]
+        swatch_min_w = int(18 * _lsc)   # minimum swatch width regardless of label
+        gap = int(10 * _lsc)
+        swatch_ws = [max(swatch_min_w, lw + int(8 * _lsc)) for lw in label_widths]
         total_swatches_w = sum(swatch_ws) + gap * (len(categories) - 1)
 
-        margin = 18
-        pad = 8
-        bar_h = 18
-        title_h = 26
-        label_h = 20
+        margin = int(18 * _lsc)
+        pad = int(8 * _lsc)
+        bar_h = int(18 * _lsc)
+        title_h = int(26 * _lsc)
+        label_h = int(20 * _lsc)
         panel_w = min(max(total_swatches_w, title_w) + 2 * pad, W - 2 * margin)
         panel_h = pad + title_h + pad + bar_h + pad + label_h + pad
 
@@ -4694,7 +4708,7 @@ def add_ice_classification_legend(png_bytes, ice_label="Sea ice"):
         for ci, ((color, lbl), sw) in enumerate(zip(categories, swatch_ws)):
             draw.rectangle([sx, bar_y, sx + sw - 1, bar_y + bar_h - 1], fill=color)
             draw.rectangle([sx - 1, bar_y - 1, sx + sw, bar_y + bar_h],
-                           outline=(180, 180, 180), width=1)
+                           outline=(180, 180, 180), width=max(1, int(_lsc)))
             lw = label_widths[ci]
             tx = sx + (sw - lw) // 2
             for dx, dy in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
@@ -4854,7 +4868,8 @@ def fetch_and_process_sentinel1_ice(lat, lon, site_label, utm_zone, utm_epsg,
                                      half_width_m=150_000, reference_lines=None,
                                      coastline_geojson_path=None, now_utc=None,
                                      arrow_annotations=None, lookback_days=10,
-                                     sea_seed_from="top", sea_seed_points=None):
+                                     sea_seed_from="top", sea_seed_points=None,
+                                     output_size_px=MODIS_FINAL_SIZE_PX):
     """
     Fetches a Sentinel-1 sea-ice classification image for the same scene
     as fetch_and_process_sentinel1, using a colour-ramp evalscript instead
@@ -4894,11 +4909,13 @@ def fetch_and_process_sentinel1_ice(lat, lon, site_label, utm_zone, utm_epsg,
         _color_f = _ex.submit(
             fetch_sentinel1_ice_image,
             sh_token, s1_date, center_x, center_y, utm_epsg, half_width_m,
+            output_size_px=output_size_px,
             acq_mode=acq_mode, band=band, pol_filter=pol_filter,
         )
         _gray_f = _ex.submit(
             fetch_sentinel1_image,
             sh_token, s1_date, center_x, center_y, utm_epsg, half_width_m,
+            output_size_px=output_size_px,
             acq_mode=acq_mode, band=band, pol_filter=pol_filter,
         )
         raw_color = _color_f.result()
@@ -4910,7 +4927,7 @@ def fetch_and_process_sentinel1_ice(lat, lon, site_label, utm_zone, utm_epsg,
     # Composite: sea pixels → colour ramp, land pixels → SAR grayscale
     sea_mask = _make_sea_mask(
         coastline_geojson_path, center_x, center_y, utm_zone, half_width_m,
-        MODIS_FINAL_SIZE_PX, sea_seed_from=sea_seed_from,
+        output_size_px, sea_seed_from=sea_seed_from,
         sea_seed_points=sea_seed_points,
     )
     if raw_gray is not None and sea_mask is not None:

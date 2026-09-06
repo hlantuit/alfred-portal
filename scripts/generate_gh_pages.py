@@ -2328,11 +2328,13 @@ def main():
             return sum(1 for p in _s if p > 10) / max(1, len(_s))
 
         _bg = None
+        _bg_year = None
         _yr0 = now_utc.year if (now_utc.month, now_utc.day) >= (11, 1) else now_utc.year - 1
         for _y in (_yr0, _yr0 - 1):
             _cand = _proc(_S2_MOSAIC, f"{_y}-07-01T00:00:00Z", f"{_y}-09-30T23:59:59Z", _mosaic_eval)
             if _cand is not None and _alpha_frac(_cand) > 0.3:
                 _bg = _cand
+                _bg_year = _y
                 print(f"  Snow: background mosaic Q3 {_y}")
                 break
         if _bg is None:
@@ -2352,6 +2354,40 @@ def main():
             _bg = _proc("sentinel-2-l2a", _mask_from, _mask_to, _tc_eval)
         if _bg is None:
             return None
+
+        # Sea/water mask from the SAME summer mosaic (pixel-perfect registration):
+        # NDWI-positive, NIR-dark pixels are open water in the ice-free season,
+        # i.e. sea and lakes. Snow is never drawn there — sea ice must not read
+        # as snow cover — while clouds still show over water.
+        if _bg_year is not None:
+            _water_eval = (
+                "//VERSION=3\n"
+                "function setup(){return{input:[{bands:[\"B03\",\"B08\",\"dataMask\"]}],"
+                "output:{bands:4,sampleType:\"AUTO\"}};}\n"
+                "function evaluatePixel(s){\n"
+                "  if(!s.dataMask)return[0,0,0,1];\n"
+                "  var g=s.B03/10000.0,n=s.B08/10000.0;\n"
+                "  var ndwi=(g-n)/(g+n+1e-6);\n"
+                "  var water=(ndwi>0.0&&n<0.12);\n"
+                "  return water?[1,1,1,1]:[0,0,0,1];\n"
+                "}"
+            )
+            _water = _proc(_S2_MOSAIC, f"{_bg_year}-07-01T00:00:00Z",
+                           f"{_bg_year}-09-30T23:59:59Z", _water_eval)
+            if _water is not None:
+                try:
+                    import numpy as _np5
+                    _ma = _np5.array(_mask)
+                    _wa = _np5.array(_water.convert("L")) > 128
+                    _snowpx = _ma[:, :, 3] > 150  # snow overlay pixels (cloud alpha is lower)
+                    _kill = _snowpx & _wa
+                    _ma[_kill] = 0
+                    _mask = _Img5.fromarray(_ma)
+                    print(f"  Snow: sea/water mask applied ({_kill.mean():.1%} of frame suppressed)")
+                except Exception as _wme:
+                    print(f"  Snow: water mask failed ({_wme})")
+            else:
+                print("  Snow: water-mask request failed — snow shown unmasked")
 
         _base = _Img5.new("RGB", (1200, 1200), (10, 15, 26))
         _base.paste(_bg, mask=_bg.split()[3])

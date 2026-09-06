@@ -2489,43 +2489,6 @@ def main():
     print("Fetching EC alerts…")
     alerts = fetch_ec_alerts()
 
-    # ── Write data.json ──
-    data = {
-        "community": {
-            "id": cid,
-            "name": cfg.get("site_display_name", cfg.get("name", cid)),
-            "name_alt": cfg.get("name_alt", ""),
-            "lat": lat,
-            "lon": lon,
-            "tz": tz,
-            "institution": cfg.get("institution_text", ""),
-            "blocks": cfg.get("blocks", []),
-            "webcam_url": cfg.get("webcam_url", ""),
-            "webcam_label": cfg.get("webcam_label", ""),
-            "webcam_page_url": cfg.get("webcam_page_url", ""),
-            "webcam_img": "img/webcam.jpg" if webcam_ok else "",
-            "marine_zone_id": cfg.get("marine_zone_id", ""),
-        },
-        "updated_utc": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "modis_date": modis_date,
-        "viirs_date": viirs_date,
-        "viirs_sat": viirs_sat,
-        "s2_date": s2_date,
-        "snow_date": snow_date,
-        "weather": weather,
-        "total_water_level": total_water_level,
-        "tide": tide,
-        "rivers": rivers,
-        "wave": wave,
-        "marine": marine,
-        "alerts": {"weather": alerts},
-        "external_links": cfg.get("external_links", []),
-    }
-
-    data_path = out_dir / "data.json"
-    data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
-    print(f"Wrote {data_path}")
-
     # ── Webcam (fetched server-side each run: the FAA images API requires
     #    Origin/Referer headers a browser <img> cannot send — the card was
     #    silently hiding itself via onerror — and CDN hotlinking is
@@ -2562,6 +2525,43 @@ def main():
         if not webcam_ok and (img_dir / "webcam.jpg").exists():
             webcam_ok = True
             print("  Webcam: keeping previous frame")
+
+    # ── Write data.json ──
+    data = {
+        "community": {
+            "id": cid,
+            "name": cfg.get("site_display_name", cfg.get("name", cid)),
+            "name_alt": cfg.get("name_alt", ""),
+            "lat": lat,
+            "lon": lon,
+            "tz": tz,
+            "institution": cfg.get("institution_text", ""),
+            "blocks": cfg.get("blocks", []),
+            "webcam_url": cfg.get("webcam_url", ""),
+            "webcam_label": cfg.get("webcam_label", ""),
+            "webcam_page_url": cfg.get("webcam_page_url", ""),
+            "webcam_img": "img/webcam.jpg" if webcam_ok else "",
+            "marine_zone_id": cfg.get("marine_zone_id", ""),
+        },
+        "updated_utc": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "modis_date": modis_date,
+        "viirs_date": viirs_date,
+        "viirs_sat": viirs_sat,
+        "s2_date": s2_date,
+        "snow_date": snow_date,
+        "weather": weather,
+        "total_water_level": total_water_level,
+        "tide": tide,
+        "rivers": rivers,
+        "wave": wave,
+        "marine": marine,
+        "alerts": {"weather": alerts},
+        "external_links": cfg.get("external_links", []),
+    }
+
+    data_path = out_dir / "data.json"
+    data_path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    print(f"Wrote {data_path}")
 
     # ── Copy chart PNGs ──
     charts_src = COMMUNITIES_DIR / cid / "charts"

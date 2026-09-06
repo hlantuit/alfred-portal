@@ -1951,12 +1951,16 @@ def main():
     def _s2_overlay_and_save(s2_img, _ll_to_utm, cx, cy, half_width_m, date_str, out_path, legend=None):
         """Shared S2-frame finishing: coastline, place labels (red) + hydro
         stations (teal), optional legend box (top-right), timestamp + scale
-        bar, then save to out_path. cx/cy must be the ACTUAL request centre."""
+        bar, then save to out_path. cx/cy must be the ACTUAL request centre.
+        All overlay geometry scales with the image size (1200 px reference)."""
         import io as _io4, json as _json_s2, math as _math_s2
         from PIL import Image as _Img4, ImageDraw as _Draw_s2, ImageFont as _Font_s2
-        _mpp_s2 = (2 * half_width_m) / 1200.0
+        _size = s2_img.size[0]
+        _sc = _size / 1200.0
+        _half = _size / 2.0
+        _mpp_s2 = (2 * half_width_m) / float(_size)
         def _utm_to_px(ux, uy):
-            return 600 + (ux - cx) / _mpp_s2, 600 - (uy - cy) / _mpp_s2
+            return _half + (ux - cx) / _mpp_s2, _half - (uy - cy) / _mpp_s2
         _coast_path_s2 = COMMUNITIES_DIR / cid / cfg.get("coastline_geojson_path", "coastline_data.geojson")
         if _coast_path_s2.exists():
             try:
@@ -1972,8 +1976,8 @@ def main():
                         _ux, _uy = _ll_to_utm(_clat2, _clon2)
                         _ppx, _ppy = _utm_to_px(_ux, _uy)
                         if _prev2 is not None:
-                            _draw_cs.line([_prev2, (_ppx, _ppy)], fill=(40, 40, 40), width=4)
-                            _draw_cs.line([_prev2, (_ppx, _ppy)], fill=(255, 255, 255), width=2)
+                            _draw_cs.line([_prev2, (_ppx, _ppy)], fill=(40, 40, 40), width=max(2, int(4 * _sc)))
+                            _draw_cs.line([_prev2, (_ppx, _ppy)], fill=(255, 255, 255), width=max(1, int(2 * _sc)))
                         _prev2 = (_ppx, _ppy)
                 print(f"  S2: coastline overlay drawn")
             except Exception as _ce2:
@@ -1984,51 +1988,54 @@ def main():
         if _pts_s2:
             try:
                 _draw_lbl2 = _Draw_s2.Draw(s2_img)
-                _font_s2 = _Font_s2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 26) if hasattr(_Font_s2, 'truetype') else _Font_s2.load_default()
-                _MARGIN = 20
+                _font_s2 = _Font_s2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", int(26 * _sc)) if hasattr(_Font_s2, 'truetype') else _Font_s2.load_default()
+                _MARGIN = 20 * _sc
                 for _pt2, _dot_fill2 in _pts_s2:
                     _ux2, _uy2 = _ll_to_utm(_pt2[0], _pt2[1])
                     _ppx2, _ppy2 = _utm_to_px(_ux2, _uy2)
-                    if not (-_MARGIN <= _ppx2 <= 1200 + _MARGIN and -_MARGIN <= _ppy2 <= 1200 + _MARGIN):
+                    if not (-_MARGIN <= _ppx2 <= _size + _MARGIN and -_MARGIN <= _ppy2 <= _size + _MARGIN):
                         continue
-                    _rdot = 7
-                    _draw_lbl2.ellipse([_ppx2 - _rdot, _ppy2 - _rdot, _ppx2 + _rdot, _ppy2 + _rdot], fill=_dot_fill2, outline="white", width=2)
+                    _rdot = max(5, int(7 * _sc))
+                    _draw_lbl2.ellipse([_ppx2 - _rdot, _ppy2 - _rdot, _ppx2 + _rdot, _ppy2 + _rdot], fill=_dot_fill2, outline="white", width=max(2, int(2 * _sc)))
                     _lbl2 = _pt2[2] if len(_pt2) > 2 else ""
-                    _dy2 = _pt2[3] if len(_pt2) > 3 else -14
+                    _dy2 = (_pt2[3] if len(_pt2) > 3 else -14) * _sc
                     if _lbl2:
+                        _lox = 12 * _sc
                         try:
-                            _tb2 = _draw_lbl2.textbbox((_ppx2 + 12, _ppy2 + _dy2), _lbl2, font=_font_s2)
+                            _tb2 = _draw_lbl2.textbbox((_ppx2 + _lox, _ppy2 + _dy2), _lbl2, font=_font_s2)
                             _ov2 = _Img4.new("RGBA", s2_img.size, (0, 0, 0, 0))
-                            _Draw_s2.Draw(_ov2).rounded_rectangle([_tb2[0]-3, _tb2[1]-3, _tb2[2]+3, _tb2[3]+3], radius=3, fill=(0, 0, 0, 160))
+                            _pad2 = max(3, int(3 * _sc))
+                            _Draw_s2.Draw(_ov2).rounded_rectangle([_tb2[0]-_pad2, _tb2[1]-_pad2, _tb2[2]+_pad2, _tb2[3]+_pad2], radius=int(3 * _sc) or 3, fill=(0, 0, 0, 160))
                             s2_img = _Img4.alpha_composite(s2_img.convert("RGBA"), _ov2).convert("RGB")
                             _draw_lbl2 = _Draw_s2.Draw(s2_img)
                         except Exception:
                             pass
-                        _draw_lbl2.text((_ppx2 + 12, _ppy2 + _dy2), _lbl2, font=_font_s2, fill=(255, 255, 255))
+                        _draw_lbl2.text((_ppx2 + _lox, _ppy2 + _dy2), _lbl2, font=_font_s2, fill=(255, 255, 255))
             except Exception as _le2:
                 print(f"  S2 place labels failed: {_le2}")
         # Optional legend box, top-right
         if legend:
             try:
                 _dl = _Draw_s2.Draw(s2_img)
-                _lf = _Font_s2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 22) if hasattr(_Font_s2, 'truetype') else _Font_s2.load_default()
+                _lf = _Font_s2.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", int(22 * _sc)) if hasattr(_Font_s2, 'truetype') else _Font_s2.load_default()
                 _entries = []
                 _wmax = 0
                 for _txt, _colr in legend:
                     _tb = _dl.textbbox((0, 0), _txt, font=_lf)
                     _entries.append((_txt, _colr))
                     _wmax = max(_wmax, _tb[2] - _tb[0])
-                _bw = 14 + 26 + 8 + _wmax + 14
-                _bh = 12 + len(legend) * 30
-                _lx, _ly = 1200 - 16, 16
+                _bw = (14 + 26 + 8 + 14) * _sc + _wmax
+                _bh = (12 + len(legend) * 30) * _sc
+                _lx, _ly = _size - 16 * _sc, 16 * _sc
                 _ov3 = _Img4.new("RGBA", s2_img.size, (0, 0, 0, 0))
-                _Draw_s2.Draw(_ov3).rounded_rectangle([_lx - _bw, _ly, _lx, _ly + _bh], radius=5, fill=(0, 0, 0, 150))
+                _Draw_s2.Draw(_ov3).rounded_rectangle([_lx - _bw, _ly, _lx, _ly + _bh], radius=int(5 * _sc) or 5, fill=(0, 0, 0, 150))
                 s2_img = _Img4.alpha_composite(s2_img.convert("RGBA"), _ov3).convert("RGB")
                 _dl = _Draw_s2.Draw(s2_img)
                 for _i, (_txt, _colr) in enumerate(_entries):
-                    _yy = _ly + 10 + _i * 30
-                    _dl.rectangle([_lx - _bw + 14, _yy, _lx - _bw + 14 + 26, _yy + 16], fill=_colr, outline=(255, 255, 255))
-                    _dl.text((_lx - _bw + 14 + 26 + 8, _yy - 3), _txt, font=_lf, fill=(255, 255, 255))
+                    _yy = _ly + (10 + _i * 30) * _sc
+                    _sw = 26 * _sc
+                    _dl.rectangle([_lx - _bw + 14 * _sc, _yy, _lx - _bw + 14 * _sc + _sw, _yy + 16 * _sc], fill=_colr, outline=(255, 255, 255))
+                    _dl.text((_lx - _bw + (14 + 26 + 8) * _sc, _yy - 3 * _sc), _txt, font=_lf, fill=(255, 255, 255))
             except Exception as _lge:
                 print(f"  S2 legend failed: {_lge}")
         s2_img = _annotate_img(s2_img, date_str, _mpp_s2)
@@ -2054,7 +2061,10 @@ def main():
             print(f"  SH token failed: {e}")
             return None
 
-    def fetch_s2_image(token, half_width_m, out_path, max_days_back=30, center_ll=None, evalscript=None):
+    _S2PX = 2400  # rendered frame size; S2 L2A is 10-20 m native, so 2400 px
+                  # over a 300 km frame (125 m/px) still undersamples the data
+
+    def fetch_s2_image(token, half_width_m, out_path, max_days_back=30, center_ll=None, evalscript=None, prev_date=None):
         import io as _io
         utm_epsg = cfg.get("utm_epsg", "32608")
         cx = cfg.get("utm_center_x")
@@ -2125,6 +2135,17 @@ def main():
             _proc_from = start_dt.strftime("%Y-%m-%dT00:00:00Z")
             _proc_to   = end_dt.strftime("%Y-%m-%dT23:59:59Z")
 
+        # Acquisition guard: skip the (Sentinel Hub PU-costly) render when the
+        # newest acquisition is already on disk at the current resolution.
+        if prev_date and _acq_iso and prev_date == _acq_iso and out_path.exists():
+            try:
+                from PIL import Image as _ImgChk
+                if _ImgChk.open(out_path).size[0] == _S2PX:
+                    print(f"  S2 {half_width_m//1000}km: acquisition {_acq_iso} already rendered — skipping")
+                    return _acq_iso
+            except Exception:
+                pass
+
         # Fetch via Process API using the specific acquisition date window
         try:
             proc_r = requests.post(
@@ -2148,7 +2169,7 @@ def main():
                         }],
                     },
                     "output": {
-                        "width": 1200, "height": 1200,
+                        "width": _S2PX, "height": _S2PX,
                         "responses": [{"identifier": "default",
                                        "format": {"type": "image/png"}}],
                     },
@@ -2156,7 +2177,7 @@ def main():
                 },
                 headers={"Authorization": f"Bearer {token}",
                          "Content-Type": "application/json"},
-                timeout=60,
+                timeout=120,
             )
             ct = proc_r.headers.get("content-type", "")
             if proc_r.status_code != 200 or "image" not in ct:
@@ -2194,7 +2215,7 @@ def main():
             print(f"  S2 process error: {e}")
         return None
 
-    def fetch_snow_image(token, half_width_m, out_path, center_ll=None, max_days_back=30):
+    def fetch_snow_image(token, half_width_m, out_path, center_ll=None, max_days_back=30, prev_date=None):
         """Snow-cover frame: the Copernicus Sentinel-2 quarterly cloudless
         mosaic (summer quarter, 10 m) as a stable background, with ONLY the
         snow classification from the newest S2 L2A acquisition drawn on top —
@@ -2246,6 +2267,16 @@ def main():
         except Exception as _cse:
             print(f"  Snow catalog failed: {_cse}")
 
+        # Acquisition guard, same rationale as fetch_s2_image
+        if prev_date and _acq_iso and prev_date == _acq_iso and out_path.exists():
+            try:
+                from PIL import Image as _ImgChk2
+                if _ImgChk2.open(out_path).size[0] == _S2PX:
+                    print(f"  Snow {half_width_m//1000}km: acquisition {_acq_iso} already rendered — skipping")
+                    return _acq_iso
+            except Exception:
+                pass
+
         def _proc(collection, t_from, t_to, evalscript):
             """One Process API request; returns an RGBA PIL image or None."""
             try:
@@ -2267,7 +2298,7 @@ def main():
                             }],
                         },
                         "output": {
-                            "width": 1200, "height": 1200,
+                            "width": _S2PX, "height": _S2PX,
                             "responses": [{"identifier": "default",
                                            "format": {"type": "image/png"}}],
                         },
@@ -2275,7 +2306,7 @@ def main():
                     },
                     headers={"Authorization": f"Bearer {token}",
                              "Content-Type": "application/json"},
-                    timeout=90,
+                    timeout=150,
                 )
                 ct = r.headers.get("content-type", "")
                 if r.status_code != 200 or "image" not in ct:
@@ -2389,7 +2420,7 @@ def main():
             else:
                 print("  Snow: water-mask request failed — snow shown unmasked")
 
-        _base = _Img5.new("RGB", (1200, 1200), (10, 15, 26))
+        _base = _Img5.new("RGB", _bg.size, (10, 15, 26))
         _base.paste(_bg, mask=_bg.split()[3])
         _comp = _Img5.alpha_composite(_base.convert("RGBA"), _mask).convert("RGB")
         date_str = _acq_iso or end_dt.strftime("%Y-%m-%d")
@@ -2403,16 +2434,26 @@ def main():
     sh_token = get_sh_token()
     s2_date = None
     snow_date = None
+    _prev_sat = {}
+    try:
+        if (out_dir / "data.json").exists():
+            _prev_sat = json.loads((out_dir / "data.json").read_text(encoding="utf-8"))
+    except Exception:
+        _prev_sat = {}
     if sh_token:
-        s2_date = fetch_s2_image(sh_token, 150_000, img_dir / "s2_150.png")
+        s2_date = fetch_s2_image(sh_token, 150_000, img_dir / "s2_150.png",
+                                 prev_date=_prev_sat.get("s2_date"))
         if s2_date:
             fetch_s2_image(sh_token, 25_000, img_dir / "s2_50.png",
-                           center_ll=(cfg.get("lat"), cfg.get("lon")))
+                           center_ll=(cfg.get("lat"), cfg.get("lon")),
+                           prev_date=_prev_sat.get("s2_date"))
         print("Fetching Sentinel-2 NDSI snow cover…")
-        snow_date = fetch_snow_image(sh_token, 150_000, img_dir / "snow_150.png")
+        snow_date = fetch_snow_image(sh_token, 150_000, img_dir / "snow_150.png",
+                                     prev_date=_prev_sat.get("snow_date"))
         if snow_date:
             fetch_snow_image(sh_token, 25_000, img_dir / "snow_50.png",
-                             center_ll=(cfg.get("lat"), cfg.get("lon")))
+                             center_ll=(cfg.get("lat"), cfg.get("lon")),
+                             prev_date=_prev_sat.get("snow_date"))
     else:
         print("  Sentinel-2 skipped (no SH credentials in env)")
     # Carry forward old snow date if fetch failed but image exists

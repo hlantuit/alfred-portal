@@ -1933,7 +1933,7 @@ async function loadData(){
       const _rcStepH=(_rc1-_rc0)/36e5/(_rvSeries.length-1);
       _rvCap.textContent='Water Survey of Canada · '+(_rcStepH<=3?'hourly':'daily mean')+' · '+_rcDays+'-day';
     }
-    if(rv.current_m!=null) document.getElementById('cv-river').textContent=rv.current_m;
+    if(rv.current_m!=null) document.getElementById('cv-river').textContent=(+rv.current_m).toFixed(2);
     const short=(rv.river_name||'River').split(',')[0];
     document.getElementById('river-title').textContent=short;
     // Annual river climate chart in climate section

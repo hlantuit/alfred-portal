@@ -27,22 +27,22 @@
     "webcam_img": "",
     "marine_zone_id": ""
   },
-  "updated_utc": "2026-09-06T19:32:30Z",
+  "updated_utc": "2026-09-06T21:45:27Z",
   "modis_date": "2026-09-05",
-  "viirs_date": "2026-09-05T22:18:00Z",
+  "viirs_date": "2026-09-06T17:00:00Z",
   "viirs_sat": "NOAA-20",
   "s2_date": "2026-09-05T20:36:04.109Z",
   "snow_date": "2026-09-05T20:36:04.109Z",
   "weather": {
-    "temperature": 8.3,
-    "feels_like": 6.2,
-    "humidity": 85,
-    "wind_speed": 8,
-    "wind_direction": 168,
-    "wind_dir_label": "SSE",
+    "temperature": 9.0,
+    "feels_like": 7.4,
+    "humidity": 82,
+    "wind_speed": 5,
+    "wind_direction": 207,
+    "wind_dir_label": "SSW",
     "weathercode": 3,
     "condition": "Overcast",
-    "pressure": 1011,
+    "pressure": 1010,
     "cloudcover": 100,
     "forecast": [
       {
@@ -289,8 +289,6 @@
       "2026-09-15"
     ],
     "hourly_pressure": [
-      1014.2,
-      1014.1,
       1014.1,
       1014.1,
       1014.0,
@@ -336,11 +334,11 @@
       1004.1,
       1003.5,
       1002.8,
-      1002.1
+      1002.1,
+      1001.6,
+      1001.3
     ],
     "hourly_cloud": [
-      100,
-      100,
       100,
       100,
       100,
@@ -386,6 +384,8 @@
       92,
       86,
       17,
+      0,
+      0,
       0
     ],
     "daily_pressure": [
@@ -413,7 +413,6 @@
       45.7
     ],
     "hourly_times_10d": [
-      "2026-09-06T19:00",
       "2026-09-06T21:00",
       "2026-09-06T23:00",
       "2026-09-07T01:00",
@@ -526,7 +525,6 @@
       "2026-09-15T23:00"
     ],
     "hourly_temperature_10d": [
-      9.7,
       9.6,
       8.9,
       8.6,
@@ -639,7 +637,6 @@
       7.7
     ],
     "hourly_wind_10d": [
-      6.1,
       8.3,
       7.9,
       6.5,
@@ -752,7 +749,6 @@
       14.0
     ],
     "hourly_winddir_10d": [
-      271,
       304,
       296,
       281,
@@ -865,7 +861,6 @@
       118
     ],
     "hourly_pressure_10d": [
-      1014.2,
       1014.1,
       1014.0,
       1014.2,
@@ -978,7 +973,6 @@
       1013.8
     ],
     "hourly_cloud_10d": [
-      100,
       100,
       100,
       100,
@@ -1108,7 +1102,6 @@
       0.0,
       0.0,
       0.0,
-      0.0,
       1.1,
       0.0,
       0.1,
@@ -1204,7 +1197,6 @@
       0.0
     ],
     "hourly_rain_10d": [
-      0.0,
       0.0,
       0.0,
       0.0,
@@ -1426,7 +1418,6 @@
       0.0,
       0.0,
       0.0,
-      0.0,
       0.0
     ],
     "snow_depth_cm": [
@@ -1539,26 +1530,14 @@
       0.0,
       0.0,
       0.0,
-      0.0,
       0.0
     ],
     "fog": {
-      "generated_at_utc": "2026-09-06T19:00:00+00:00",
+      "generated_at_utc": "2026-09-06T21:00:00+00:00",
       "source": "open-meteo gem_seamless · visibility",
       "points": [
         {
           "lead_hour": 0,
-          "valid_time_utc": "2026-09-06T19:00",
-          "p_fog": 0.0,
-          "confidence": "high",
-          "source": "gem_seamless",
-          "t2m_c": 9.7,
-          "rh_pct": 82,
-          "wind_ms": 1.7,
-          "visibility_m": 65760
-        },
-        {
-          "lead_hour": 2,
           "valid_time_utc": "2026-09-06T21:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1569,7 +1548,7 @@
           "visibility_m": 61460
         },
         {
-          "lead_hour": 4,
+          "lead_hour": 2,
           "valid_time_utc": "2026-09-06T23:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1580,7 +1559,7 @@
           "visibility_m": 43180
         },
         {
-          "lead_hour": 6,
+          "lead_hour": 4,
           "valid_time_utc": "2026-09-07T01:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1591,7 +1570,7 @@
           "visibility_m": 50220
         },
         {
-          "lead_hour": 8,
+          "lead_hour": 6,
           "valid_time_utc": "2026-09-07T03:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1602,7 +1581,7 @@
           "visibility_m": 39080
         },
         {
-          "lead_hour": 10,
+          "lead_hour": 8,
           "valid_time_utc": "2026-09-07T05:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1613,7 +1592,7 @@
           "visibility_m": 57180
         },
         {
-          "lead_hour": 12,
+          "lead_hour": 10,
           "valid_time_utc": "2026-09-07T07:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1624,7 +1603,7 @@
           "visibility_m": 47640
         },
         {
-          "lead_hour": 14,
+          "lead_hour": 12,
           "valid_time_utc": "2026-09-07T09:00",
           "p_fog": 0.093,
           "confidence": "high",
@@ -1635,7 +1614,7 @@
           "visibility_m": 3720
         },
         {
-          "lead_hour": 16,
+          "lead_hour": 14,
           "valid_time_utc": "2026-09-07T11:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1646,7 +1625,7 @@
           "visibility_m": 63300
         },
         {
-          "lead_hour": 18,
+          "lead_hour": 16,
           "valid_time_utc": "2026-09-07T13:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1657,7 +1636,7 @@
           "visibility_m": 70140
         },
         {
-          "lead_hour": 20,
+          "lead_hour": 18,
           "valid_time_utc": "2026-09-07T15:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1668,7 +1647,7 @@
           "visibility_m": 70220
         },
         {
-          "lead_hour": 22,
+          "lead_hour": 20,
           "valid_time_utc": "2026-09-07T17:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1679,7 +1658,7 @@
           "visibility_m": 73100
         },
         {
-          "lead_hour": 24,
+          "lead_hour": 22,
           "valid_time_utc": "2026-09-07T19:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1690,7 +1669,7 @@
           "visibility_m": 73180
         },
         {
-          "lead_hour": 26,
+          "lead_hour": 24,
           "valid_time_utc": "2026-09-07T21:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1701,7 +1680,7 @@
           "visibility_m": 70440
         },
         {
-          "lead_hour": 28,
+          "lead_hour": 26,
           "valid_time_utc": "2026-09-07T23:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1712,7 +1691,7 @@
           "visibility_m": 66860
         },
         {
-          "lead_hour": 30,
+          "lead_hour": 28,
           "valid_time_utc": "2026-09-08T01:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1723,7 +1702,7 @@
           "visibility_m": 70600
         },
         {
-          "lead_hour": 32,
+          "lead_hour": 30,
           "valid_time_utc": "2026-09-08T03:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1734,7 +1713,7 @@
           "visibility_m": 67040
         },
         {
-          "lead_hour": 34,
+          "lead_hour": 32,
           "valid_time_utc": "2026-09-08T05:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1745,7 +1724,7 @@
           "visibility_m": 59360
         },
         {
-          "lead_hour": 36,
+          "lead_hour": 34,
           "valid_time_utc": "2026-09-08T07:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1756,7 +1735,7 @@
           "visibility_m": 64120
         },
         {
-          "lead_hour": 38,
+          "lead_hour": 36,
           "valid_time_utc": "2026-09-08T09:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1767,7 +1746,7 @@
           "visibility_m": 61820
         },
         {
-          "lead_hour": 40,
+          "lead_hour": 38,
           "valid_time_utc": "2026-09-08T11:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1778,7 +1757,7 @@
           "visibility_m": 28720
         },
         {
-          "lead_hour": 42,
+          "lead_hour": 40,
           "valid_time_utc": "2026-09-08T13:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1789,7 +1768,7 @@
           "visibility_m": 35640
         },
         {
-          "lead_hour": 44,
+          "lead_hour": 42,
           "valid_time_utc": "2026-09-08T15:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1800,7 +1779,7 @@
           "visibility_m": 71180
         },
         {
-          "lead_hour": 46,
+          "lead_hour": 44,
           "valid_time_utc": "2026-09-08T17:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1811,7 +1790,7 @@
           "visibility_m": 74040
         },
         {
-          "lead_hour": 48,
+          "lead_hour": 46,
           "valid_time_utc": "2026-09-08T19:00",
           "p_fog": 0.0,
           "confidence": "high",
@@ -1822,10 +1801,10 @@
           "visibility_m": 74120
         },
         {
-          "lead_hour": 50,
+          "lead_hour": 48,
           "valid_time_utc": "2026-09-08T21:00",
           "p_fog": 0.0,
-          "confidence": "medium",
+          "confidence": "high",
           "source": "gem_seamless",
           "t2m_c": 13.6,
           "rh_pct": 88,
@@ -1833,7 +1812,7 @@
           "visibility_m": 71420
         },
         {
-          "lead_hour": 52,
+          "lead_hour": 50,
           "valid_time_utc": "2026-09-08T23:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -1844,7 +1823,7 @@
           "visibility_m": 67840
         },
         {
-          "lead_hour": 54,
+          "lead_hour": 52,
           "valid_time_utc": "2026-09-09T01:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -1855,7 +1834,7 @@
           "visibility_m": 67920
         },
         {
-          "lead_hour": 56,
+          "lead_hour": 54,
           "valid_time_utc": "2026-09-09T03:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -1866,7 +1845,7 @@
           "visibility_m": 64940
         },
         {
-          "lead_hour": 58,
+          "lead_hour": 56,
           "valid_time_utc": "2026-09-09T05:00",
           "p_fog": 0.607,
           "confidence": "medium",
@@ -1877,7 +1856,7 @@
           "visibility_m": 340
         },
         {
-          "lead_hour": 60,
+          "lead_hour": 58,
           "valid_time_utc": "2026-09-09T07:00",
           "p_fog": 0.73,
           "confidence": "medium",
@@ -1888,7 +1867,7 @@
           "visibility_m": 180
         },
         {
-          "lead_hour": 62,
+          "lead_hour": 60,
           "valid_time_utc": "2026-09-09T09:00",
           "p_fog": 0.647,
           "confidence": "medium",
@@ -1899,7 +1878,7 @@
           "visibility_m": 280
         },
         {
-          "lead_hour": 64,
+          "lead_hour": 62,
           "valid_time_utc": "2026-09-09T11:00",
           "p_fog": 0.108,
           "confidence": "medium",
@@ -1910,7 +1889,7 @@
           "visibility_m": 3260
         },
         {
-          "lead_hour": 66,
+          "lead_hour": 64,
           "valid_time_utc": "2026-09-09T13:00",
           "p_fog": 0.056,
           "confidence": "medium",
@@ -1921,7 +1900,7 @@
           "visibility_m": 4820
         },
         {
-          "lead_hour": 68,
+          "lead_hour": 66,
           "valid_time_utc": "2026-09-09T15:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -1932,7 +1911,7 @@
           "visibility_m": 16240
         },
         {
-          "lead_hour": 70,
+          "lead_hour": 68,
           "valid_time_utc": "2026-09-09T17:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -1943,7 +1922,7 @@
           "visibility_m": 10180
         },
         {
-          "lead_hour": 72,
+          "lead_hour": 70,
           "valid_time_utc": "2026-09-09T19:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -1954,7 +1933,7 @@
           "visibility_m": 13760
         },
         {
-          "lead_hour": 74,
+          "lead_hour": 72,
           "valid_time_utc": "2026-09-09T21:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -1965,7 +1944,7 @@
           "visibility_m": 18900
         },
         {
-          "lead_hour": 76,
+          "lead_hour": 74,
           "valid_time_utc": "2026-09-09T23:00",
           "p_fog": 0.036,
           "confidence": "medium",
@@ -1976,7 +1955,7 @@
           "visibility_m": 7380
         },
         {
-          "lead_hour": 78,
+          "lead_hour": 76,
           "valid_time_utc": "2026-09-10T01:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -1987,7 +1966,7 @@
           "visibility_m": 11920
         },
         {
-          "lead_hour": 80,
+          "lead_hour": 78,
           "valid_time_utc": "2026-09-10T03:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -1998,7 +1977,7 @@
           "visibility_m": 25340
         },
         {
-          "lead_hour": 82,
+          "lead_hour": 80,
           "valid_time_utc": "2026-09-10T05:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2009,7 +1988,7 @@
           "visibility_m": 32840
         },
         {
-          "lead_hour": 84,
+          "lead_hour": 82,
           "valid_time_utc": "2026-09-10T07:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2020,7 +1999,7 @@
           "visibility_m": 47480
         },
         {
-          "lead_hour": 86,
+          "lead_hour": 84,
           "valid_time_utc": "2026-09-10T09:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2031,7 +2010,7 @@
           "visibility_m": 69280
         },
         {
-          "lead_hour": 88,
+          "lead_hour": 86,
           "valid_time_utc": "2026-09-10T11:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2042,7 +2021,7 @@
           "visibility_m": 71780
         },
         {
-          "lead_hour": 90,
+          "lead_hour": 88,
           "valid_time_utc": "2026-09-10T13:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2053,7 +2032,7 @@
           "visibility_m": 74760
         },
         {
-          "lead_hour": 92,
+          "lead_hour": 90,
           "valid_time_utc": "2026-09-10T15:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2064,7 +2043,7 @@
           "visibility_m": 78200
         },
         {
-          "lead_hour": 94,
+          "lead_hour": 92,
           "valid_time_utc": "2026-09-10T17:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2075,7 +2054,7 @@
           "visibility_m": 78300
         },
         {
-          "lead_hour": 96,
+          "lead_hour": 94,
           "valid_time_utc": "2026-09-10T19:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2086,7 +2065,7 @@
           "visibility_m": 76700
         },
         {
-          "lead_hour": 98,
+          "lead_hour": 96,
           "valid_time_utc": "2026-09-10T21:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2097,7 +2076,7 @@
           "visibility_m": 73420
         },
         {
-          "lead_hour": 100,
+          "lead_hour": 98,
           "valid_time_utc": "2026-09-10T23:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2108,7 +2087,7 @@
           "visibility_m": 30840
         },
         {
-          "lead_hour": 102,
+          "lead_hour": 100,
           "valid_time_utc": "2026-09-11T01:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2119,7 +2098,7 @@
           "visibility_m": 10740
         },
         {
-          "lead_hour": 104,
+          "lead_hour": 102,
           "valid_time_utc": "2026-09-11T03:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2130,7 +2109,7 @@
           "visibility_m": 13120
         },
         {
-          "lead_hour": 106,
+          "lead_hour": 104,
           "valid_time_utc": "2026-09-11T05:00",
           "p_fog": 0.025,
           "confidence": "medium",
@@ -2141,7 +2120,7 @@
           "visibility_m": 9140
         },
         {
-          "lead_hour": 108,
+          "lead_hour": 106,
           "valid_time_utc": "2026-09-11T07:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2152,7 +2131,7 @@
           "visibility_m": 10860
         },
         {
-          "lead_hour": 110,
+          "lead_hour": 108,
           "valid_time_utc": "2026-09-11T09:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2163,7 +2142,7 @@
           "visibility_m": 18260
         },
         {
-          "lead_hour": 112,
+          "lead_hour": 110,
           "valid_time_utc": "2026-09-11T11:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2174,7 +2153,7 @@
           "visibility_m": 57280
         },
         {
-          "lead_hour": 114,
+          "lead_hour": 112,
           "valid_time_utc": "2026-09-11T13:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2185,7 +2164,7 @@
           "visibility_m": 76840
         },
         {
-          "lead_hour": 116,
+          "lead_hour": 114,
           "valid_time_utc": "2026-09-11T15:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2196,7 +2175,7 @@
           "visibility_m": 76920
         },
         {
-          "lead_hour": 118,
+          "lead_hour": 116,
           "valid_time_utc": "2026-09-11T17:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2207,7 +2186,7 @@
           "visibility_m": 77020
         },
         {
-          "lead_hour": 120,
+          "lead_hour": 118,
           "valid_time_utc": "2026-09-11T19:00",
           "p_fog": 0.0,
           "confidence": "medium",
@@ -2218,10 +2197,10 @@
           "visibility_m": 77100
         },
         {
-          "lead_hour": 122,
+          "lead_hour": 120,
           "valid_time_utc": "2026-09-11T21:00",
           "p_fog": 0.0,
-          "confidence": "low",
+          "confidence": "medium",
           "source": "gem_seamless",
           "t2m_c": 12.9,
           "rh_pct": 62,
@@ -2229,7 +2208,7 @@
           "visibility_m": 77180
         },
         {
-          "lead_hour": 124,
+          "lead_hour": 122,
           "valid_time_utc": "2026-09-11T23:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2240,7 +2219,7 @@
           "visibility_m": 75480
         },
         {
-          "lead_hour": 126,
+          "lead_hour": 124,
           "valid_time_utc": "2026-09-12T01:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2251,7 +2230,7 @@
           "visibility_m": 74660
         },
         {
-          "lead_hour": 128,
+          "lead_hour": 126,
           "valid_time_utc": "2026-09-12T03:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2262,7 +2241,7 @@
           "visibility_m": 74740
         },
         {
-          "lead_hour": 130,
+          "lead_hour": 128,
           "valid_time_utc": "2026-09-12T05:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2273,7 +2252,7 @@
           "visibility_m": 74840
         },
         {
-          "lead_hour": 132,
+          "lead_hour": 130,
           "valid_time_utc": "2026-09-12T07:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2284,7 +2263,7 @@
           "visibility_m": 73880
         },
         {
-          "lead_hour": 134,
+          "lead_hour": 132,
           "valid_time_utc": "2026-09-12T09:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2295,7 +2274,7 @@
           "visibility_m": 71860
         },
         {
-          "lead_hour": 136,
+          "lead_hour": 134,
           "valid_time_utc": "2026-09-12T11:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2306,7 +2285,7 @@
           "visibility_m": 69840
         },
         {
-          "lead_hour": 138,
+          "lead_hour": 136,
           "valid_time_utc": "2026-09-12T13:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2317,7 +2296,7 @@
           "visibility_m": 63540
         },
         {
-          "lead_hour": 140,
+          "lead_hour": 138,
           "valid_time_utc": "2026-09-12T15:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2328,7 +2307,7 @@
           "visibility_m": 52960
         },
         {
-          "lead_hour": 142,
+          "lead_hour": 140,
           "valid_time_utc": "2026-09-12T17:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2339,7 +2318,7 @@
           "visibility_m": 42380
         },
         {
-          "lead_hour": 144,
+          "lead_hour": 142,
           "valid_time_utc": "2026-09-12T19:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2350,7 +2329,7 @@
           "visibility_m": 38860
         },
         {
-          "lead_hour": 146,
+          "lead_hour": 144,
           "valid_time_utc": "2026-09-12T21:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2361,7 +2340,7 @@
           "visibility_m": 42380
         },
         {
-          "lead_hour": 148,
+          "lead_hour": 146,
           "valid_time_utc": "2026-09-12T23:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2372,7 +2351,7 @@
           "visibility_m": 45900
         },
         {
-          "lead_hour": 150,
+          "lead_hour": 148,
           "valid_time_utc": "2026-09-13T01:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2383,7 +2362,7 @@
           "visibility_m": 41240
         },
         {
-          "lead_hour": 152,
+          "lead_hour": 150,
           "valid_time_utc": "2026-09-13T03:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2394,7 +2373,7 @@
           "visibility_m": 28420
         },
         {
-          "lead_hour": 154,
+          "lead_hour": 152,
           "valid_time_utc": "2026-09-13T05:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2405,7 +2384,7 @@
           "visibility_m": 15580
         },
         {
-          "lead_hour": 156,
+          "lead_hour": 154,
           "valid_time_utc": "2026-09-13T07:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2416,7 +2395,7 @@
           "visibility_m": 19240
         },
         {
-          "lead_hour": 158,
+          "lead_hour": 156,
           "valid_time_utc": "2026-09-13T09:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2427,7 +2406,7 @@
           "visibility_m": 39420
         },
         {
-          "lead_hour": 160,
+          "lead_hour": 158,
           "valid_time_utc": "2026-09-13T11:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2438,7 +2417,7 @@
           "visibility_m": 59600
         },
         {
-          "lead_hour": 162,
+          "lead_hour": 160,
           "valid_time_utc": "2026-09-13T13:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2449,7 +2428,7 @@
           "visibility_m": 70820
         },
         {
-          "lead_hour": 164,
+          "lead_hour": 162,
           "valid_time_utc": "2026-09-13T15:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2460,7 +2439,7 @@
           "visibility_m": 73120
         },
         {
-          "lead_hour": 166,
+          "lead_hour": 164,
           "valid_time_utc": "2026-09-13T17:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2471,7 +2450,7 @@
           "visibility_m": 75400
         },
         {
-          "lead_hour": 168,
+          "lead_hour": 166,
           "valid_time_utc": "2026-09-13T19:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2482,7 +2461,7 @@
           "visibility_m": 77020
         },
         {
-          "lead_hour": 170,
+          "lead_hour": 168,
           "valid_time_utc": "2026-09-13T21:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2493,7 +2472,7 @@
           "visibility_m": 78000
         },
         {
-          "lead_hour": 172,
+          "lead_hour": 170,
           "valid_time_utc": "2026-09-13T23:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2504,7 +2483,7 @@
           "visibility_m": 78960
         },
         {
-          "lead_hour": 174,
+          "lead_hour": 172,
           "valid_time_utc": "2026-09-14T01:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2515,7 +2494,7 @@
           "visibility_m": 79480
         },
         {
-          "lead_hour": 176,
+          "lead_hour": 174,
           "valid_time_utc": "2026-09-14T03:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2526,7 +2505,7 @@
           "visibility_m": 79580
         },
         {
-          "lead_hour": 178,
+          "lead_hour": 176,
           "valid_time_utc": "2026-09-14T05:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2537,7 +2516,7 @@
           "visibility_m": 79680
         },
         {
-          "lead_hour": 180,
+          "lead_hour": 178,
           "valid_time_utc": "2026-09-14T07:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2548,7 +2527,7 @@
           "visibility_m": 68020
         },
         {
-          "lead_hour": 182,
+          "lead_hour": 180,
           "valid_time_utc": "2026-09-14T09:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2559,7 +2538,7 @@
           "visibility_m": 44640
         },
         {
-          "lead_hour": 184,
+          "lead_hour": 182,
           "valid_time_utc": "2026-09-14T11:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2570,7 +2549,7 @@
           "visibility_m": 21260
         },
         {
-          "lead_hour": 186,
+          "lead_hour": 184,
           "valid_time_utc": "2026-09-14T13:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2581,7 +2560,7 @@
           "visibility_m": 10320
         },
         {
-          "lead_hour": 188,
+          "lead_hour": 186,
           "valid_time_utc": "2026-09-14T15:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2592,7 +2571,7 @@
           "visibility_m": 11820
         },
         {
-          "lead_hour": 190,
+          "lead_hour": 188,
           "valid_time_utc": "2026-09-14T17:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2603,7 +2582,7 @@
           "visibility_m": 13320
         },
         {
-          "lead_hour": 192,
+          "lead_hour": 190,
           "valid_time_utc": "2026-09-14T19:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2614,7 +2593,7 @@
           "visibility_m": 15860
         },
         {
-          "lead_hour": 194,
+          "lead_hour": 192,
           "valid_time_utc": "2026-09-14T21:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2625,7 +2604,7 @@
           "visibility_m": 19460
         },
         {
-          "lead_hour": 196,
+          "lead_hour": 194,
           "valid_time_utc": "2026-09-14T23:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2636,7 +2615,7 @@
           "visibility_m": 23060
         },
         {
-          "lead_hour": 198,
+          "lead_hour": 196,
           "valid_time_utc": "2026-09-15T01:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2647,7 +2626,7 @@
           "visibility_m": 26820
         },
         {
-          "lead_hour": 200,
+          "lead_hour": 198,
           "valid_time_utc": "2026-09-15T03:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2658,7 +2637,7 @@
           "visibility_m": 30740
         },
         {
-          "lead_hour": 202,
+          "lead_hour": 200,
           "valid_time_utc": "2026-09-15T05:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2669,7 +2648,7 @@
           "visibility_m": 34640
         },
         {
-          "lead_hour": 204,
+          "lead_hour": 202,
           "valid_time_utc": "2026-09-15T07:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2680,7 +2659,7 @@
           "visibility_m": 43600
         },
         {
-          "lead_hour": 206,
+          "lead_hour": 204,
           "valid_time_utc": "2026-09-15T09:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2691,7 +2670,7 @@
           "visibility_m": 57580
         },
         {
-          "lead_hour": 208,
+          "lead_hour": 206,
           "valid_time_utc": "2026-09-15T11:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2702,7 +2681,7 @@
           "visibility_m": 71560
         },
         {
-          "lead_hour": 210,
+          "lead_hour": 208,
           "valid_time_utc": "2026-09-15T13:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2713,7 +2692,7 @@
           "visibility_m": 79380
         },
         {
-          "lead_hour": 212,
+          "lead_hour": 210,
           "valid_time_utc": "2026-09-15T15:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2724,7 +2703,7 @@
           "visibility_m": 81020
         },
         {
-          "lead_hour": 214,
+          "lead_hour": 212,
           "valid_time_utc": "2026-09-15T17:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2735,7 +2714,7 @@
           "visibility_m": 82660
         },
         {
-          "lead_hour": 216,
+          "lead_hour": 214,
           "valid_time_utc": "2026-09-15T19:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2746,7 +2725,7 @@
           "visibility_m": 83140
         },
         {
-          "lead_hour": 218,
+          "lead_hour": 216,
           "valid_time_utc": "2026-09-15T21:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2757,7 +2736,7 @@
           "visibility_m": 82480
         },
         {
-          "lead_hour": 220,
+          "lead_hour": 218,
           "valid_time_utc": "2026-09-15T23:00",
           "p_fog": 0.0,
           "confidence": "low",
@@ -2774,7 +2753,7 @@
   "tide": null,
   "rivers": [
     {
-      "current_m": 11.746,
+      "current_m": 11.741,
       "series": [
         {
           "t": "2026-08-07T07:00:00Z",
@@ -5703,6 +5682,14 @@
         {
           "t": "2026-09-06T18:00:00Z",
           "m": 11.748
+        },
+        {
+          "t": "2026-09-06T19:00:00Z",
+          "m": 11.746
+        },
+        {
+          "t": "2026-09-06T20:00:00Z",
+          "m": 11.742
         }
       ],
       "realtime_series": [
@@ -8633,6 +8620,14 @@
         {
           "t": "2026-09-06T18:00:00Z",
           "m": 11.748
+        },
+        {
+          "t": "2026-09-06T19:00:00Z",
+          "m": 11.746
+        },
+        {
+          "t": "2026-09-06T20:00:00Z",
+          "m": 11.742
         }
       ],
       "station_id": "10LC002",
@@ -12408,7 +12403,7 @@
           ],
           [
             249,
-            11.770249999999999
+            11.766499999999999
           ]
         ],
         "unit": "level",

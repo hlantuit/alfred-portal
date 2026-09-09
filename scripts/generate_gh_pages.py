@@ -1315,7 +1315,7 @@ def main():
         lat_s, lat_n = lat - 2.5, lat + 2.5
         bbox = f"{lon_w},{lat_s},{lon_e},{lat_n}"
         # Shingle Point fraction from left: (lon - lon_w) / (lon_e - lon_w)
-        for delta in [1, 2, 3, 4]:
+        for delta in [1, 2, 3, 4, 5, 6]:
             d = _date.today() - timedelta(days=delta)
             try:
                 r = get_with_retry(
@@ -1342,6 +1342,18 @@ def main():
                             top = (ih - target_h) // 2
                             img = img.crop((0, top, iw, top + target_h))
                         iw, ih = img.size
+
+                        # Skip days GIBS hasn't ingested: a valid JPEG that is
+                        # (nearly) all black is an EMPTY composite, not night —
+                        # this backlog served black banners on 2026-09-08/09
+                        # while Sep 7 was fine. Threshold leaves room for the
+                        # white coastline/label pixels baked into the request;
+                        # JPEG noise makes "black" ≤ 8, not exactly 0.
+                        import numpy as _np_b
+                        _bfrac = float((_np_b.array(img).max(axis=2) <= 8).mean())
+                        if _bfrac > 0.85:
+                            print(f"  MODIS banner {d}: {_bfrac:.0%} black — not ingested yet, trying previous day")
+                            continue
 
                         # Draw place labels — current community's map_points PLUS
                         # all other communities whose lat/lon falls in the banner extent
